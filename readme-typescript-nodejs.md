@@ -1,4 +1,4 @@
-# typescript-nodejs 
+# typescript-nodejs
 
 Requirements: node.js >= 18.15.0 ( LTS )
 
