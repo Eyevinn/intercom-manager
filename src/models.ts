@@ -1,19 +1,22 @@
 import { Type } from '@sinclair/typebox';
 
-//Webrtc
-export const SdpOffer = Type.String();
-export const SdpAnswer = Type.String();
-
-//Allocation Models
-export const NewProduction = Type.Object({
-  name: Type.String(),
-  lines: Type.Array(
-    Type.Object({
-      name: Type.String()
-    })
+export const Audio = Type.Object({
+  'relay-type': Type.Array(
+    Type.Union([
+      Type.Literal('forwarder'),
+      Type.Literal('mixed'),
+      Type.Literal('ssrc-rewrite')
+    ])
   )
 });
+export const Video = Type.Object({
+  'relay-type': Type.Union([
+    Type.Literal('forwarder'),
+    Type.Literal('ssrc-rewrite')
+  ])
+});
 
+//Allocation Models
 export const AllocateConference = Type.Object({
   'last-n': Type.Integer(),
   'global-port': Type.Boolean()
@@ -27,34 +30,37 @@ export const AllocateEndpoint = Type.Object({
     dtls: Type.Boolean(),
     sdes: Type.Boolean()
   }),
-  audio: Type.Object({
-    'relay-type': Type.Array(
-      Type.Union([
-        Type.Literal('forwarder'),
-        Type.Literal('mixed'),
-        Type.Literal('ssrc-rewrite')
-      ])
-    )
-  }),
-  video: Type.Object({
-    'relay-type': Type.Union([
-      Type.Literal('forwarder'),
-      Type.Literal('ssrc-rewrite')
-    ])
-  }),
+  audio: Audio,
+  video: Video,
   data: Type.Object({}),
   idleTimeout: Type.Integer()
 });
 
 //Production
-export const Production = Type.Object({
-  id: Type.String(),
+export const NewProduction = Type.Object({
   name: Type.String(),
   lines: Type.Array(
     Type.Object({
       name: Type.String()
     })
   )
+});
+
+export const Production = Type.Object({
+  id: Type.String(),
+  name: Type.String(),
+  lines: Type.Array(
+    Type.Object({
+      name: Type.String(),
+      id: Type.String()
+    })
+  )
+});
+
+//Line
+export const Line = Type.Object({
+  name: Type.String(),
+  id: Type.String()
 });
 
 //Conference

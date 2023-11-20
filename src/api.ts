@@ -5,6 +5,7 @@ import swaggerUI from '@fastify/swagger-ui';
 import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import { Static, Type } from '@sinclair/typebox';
 import { FastifyPluginCallback } from 'fastify';
+import apiProductions from './api_productions';
 
 const HelloWorld = Type.String({
   description: 'The magical words!'
@@ -64,6 +65,7 @@ export default (opts: ApiOptions) => {
 
   api.register(healthcheck, { title: opts.title });
   // register other API routes here
+  api.register(apiProductions);
 
   return api;
 };
