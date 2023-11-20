@@ -3,12 +3,12 @@ import { EventEmitter } from 'events';
 import { SessionDescription } from 'sdp-transform';
 
 import { SfuEndpointDescription } from './sfu/interface';
-import { MediaStreamsInfo } from './mediaStreamsInfo';
+import { MediaStreamsInfo } from './media_streams_info';
 
-export class Participant extends EventEmitter {
+export class Connection extends EventEmitter {
   private resourceId: string;
-  private participantId: string;
-  private nextMid: number = 0;
+  private connectionId: string;
+  private nextMid = 0;
   private usedMids: string[] = [];
 
   protected mediaStreams?: MediaStreamsInfo;
@@ -21,14 +21,14 @@ export class Participant extends EventEmitter {
   ) {
     super();
     this.resourceId = resourceId;
-    this.participantId = uuidv4();
+    this.connectionId = uuidv4();
     this.mediaStreams = mediaStreams;
     this.endpointDescription = endpointDescription;
     this.log(`Create, sfuResourceId ${resourceId}`);
   }
 
   getId(): string {
-    return this.participantId;
+    return this.connectionId;
   }
 
   getResourceId(): string {
@@ -36,15 +36,15 @@ export class Participant extends EventEmitter {
   }
 
   protected log(...args: any[]) {
-    console.log(`[participant ${this.participantId}]`, ...args);
+    console.log(`[connection ${this.connectionId}]`, ...args);
   }
 
   protected error(...args: any[]) {
-    console.error(`[participant ${this.participantId}]`, ...args);
+    console.error(`[connection ${this.connectionId}]`, ...args);
   }
 
   createOffer(): SessionDescription {
-    let offer: SessionDescription = {
+    const offer: SessionDescription = {
       version: 0,
       origin: {
         username: '-',
@@ -172,7 +172,7 @@ export class Participant extends EventEmitter {
     const audioPayloadType = audio['payload-type'];
 
     for (let element of this.mediaStreams.audio.ssrcs) {
-      let audioDescription = this.makeMediaDescription('audio');
+      const audioDescription = this.makeMediaDescription('audio');
       audioDescription.payloads = audioPayloadType.id.toString();
       audioDescription.rtp = [
         {
@@ -323,7 +323,7 @@ export class Participant extends EventEmitter {
     // ];
     // offer.media.push(videoDescription);
 
-    let dataDescription = this.makeMediaDescription('application');
+    const dataDescription = this.makeMediaDescription('application');
     dataDescription.protocol = 'UDP/DTLS/SCTP';
     dataDescription.payloads = 'webrtc-datachannel';
     dataDescription.sctpmap = {

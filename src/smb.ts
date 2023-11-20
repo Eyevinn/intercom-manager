@@ -88,7 +88,9 @@ export class SmbProtocol {
 
     if (!allocateResponse.ok) {
       throw new Error(
-        'Failed to allocate resource: ' + JSON.stringify(allocateResponse)
+        `Failed to allocate conference: ${JSON.stringify(
+          allocateResponse
+        )}, responds with: ${allocateResponse.statusText}`
       );
     }
 
@@ -126,6 +128,7 @@ export class SmbProtocol {
     console.log(request);
 
     const url = smbUrl + conferenceId + '/' + endpointId;
+    console.log(url);
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -135,8 +138,11 @@ export class SmbProtocol {
     });
 
     if (!response.ok) {
-      console.log(JSON.stringify(request));
-      throw new Error('Failed to allocate endpoint');
+      throw new Error(
+        `Failed to allocate endpoint:  ${JSON.stringify(
+          request
+        )}, responds with: ${response.statusText}`
+      );
     }
 
     const smbEndpointDescription: any = await response.json();

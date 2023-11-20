@@ -2,66 +2,57 @@ import { Type, Static } from '@sinclair/typebox';
 import { FastifyPluginCallback } from 'fastify';
 import { NewProduction, Production, Line } from './models';
 import { SmbProtocol, SmbEndpointDescription } from './smb';
-import { Participant } from './participant';
+import { ProductionManager } from './production_manager';
+import { Connection } from './connection';
 import { write, parse } from 'sdp-transform';
 
 type NewProduction = Static<typeof NewProduction>;
 type Production = Static<typeof Production>;
 type Line = Static<typeof Line>;
 
-let participants: { [id: string]: SmbEndpointDescription } = {};
+const productionManager = new ProductionManager();
+const ENDPOINT_IDLE_TIMEOUT_S = 600;
 
-async function createProduction(
-  smb: SmbProtocol,
-  smbServerUrl: string,
-  newProduction: NewProduction
-): Promise<Production | undefined> {
-  let production: Production;
-  let newProductionLines = [];
-
-  for (const line of newProduction.lines) {
-    const id = await smb.allocateConference(smbServerUrl);
-    let newProductionLine: Line = { name: line.name, id: id };
-    newProductionLines.push(newProductionLine);
-  }
-  production = {
-    name: newProduction.name,
-    lines: newProductionLines,
-    id: 'MyProductionId'
-  };
-  if (production) {
-    return production;
-  } else {
-    return;
-  }
-}
-
-function generateOffer(endpoint: SmbEndpointDescription, name: string): string {
+function generateOffer(
+  endpoint: SmbEndpointDescription,
+  productionName: string,
+  lineName: string,
+  username: string
+): string {
   if (!endpoint.audio) {
     throw new Error('Missing audio when creating offer');
   }
 
-  let ssrcs: any = [];
+  const ssrcs: object[] = [];
   endpoint.audio.ssrcs.forEach((ssrcsNr) => {
     ssrcs.push({
       ssrc: ssrcsNr,
-      cname: `${name}_audioCName`,
-      mslabel: `${name}_audioMSLabel`,
-      label: `${name}_audioLabel`
+      cname: `${username}_audioCName`,
+      mslabel: `${username}_audioMSLabel`,
+      label: `${username}_audioLabel`
     });
   });
 
-  let endpointMediaStreamInfo = {
+  const endpointMediaStreamInfo = {
     audio: {
       ssrcs: ssrcs
     }
   };
 
-  const participant = new Participant(name, endpointMediaStreamInfo, endpoint);
-  participants[name] = endpoint;
+  const connection = new Connection(
+    username,
+    endpointMediaStreamInfo,
+    endpoint
+  );
 
-  let offer = participant.createOffer();
-  //participant.emit("connect");
+  productionManager.addConnectionToLine(
+    productionName,
+    lineName,
+    username,
+    endpoint
+  );
+
+  const offer = connection.createOffer();
   const sdp = write(offer);
   return sdp;
 }
@@ -70,17 +61,17 @@ async function createEndpoint(
   smb: SmbProtocol,
   smbServerUrl: string,
   lineId: string,
-  clientName: string,
+  endpointId: string,
   audio: boolean,
   data: boolean
 ): Promise<SmbEndpointDescription> {
   const endpoint: SmbEndpointDescription = await smb.allocateEndpoint(
     smbServerUrl,
     lineId,
-    clientName,
+    endpointId,
     audio,
     data,
-    6000
+    ENDPOINT_IDLE_TIMEOUT_S
   );
   return endpoint;
 }
@@ -88,8 +79,8 @@ async function createEndpoint(
 async function handleAnswerRequest(
   smb: SmbProtocol,
   smbServerUrl: string,
-  lineId: string,
-  name: string,
+  lineName: string,
+  endpointId: string,
   endpointDescription: SmbEndpointDescription,
   answer: string
 ): Promise<void> {
@@ -109,7 +100,7 @@ async function handleAnswerRequest(
   const parsedAnswer = parse(answer);
   const answerMediaDescription = parsedAnswer.media[0];
 
-  let transport = endpointDescription['bundle-transport'];
+  const transport = endpointDescription['bundle-transport'];
   if (!transport) {
     throw new Error(
       'Missing endpointDescription when handling sdp answer from endpoint'
@@ -155,18 +146,38 @@ async function handleAnswerRequest(
 
   return await smb.configureEndpoint(
     smbServerUrl,
-    lineId,
-    name,
+    lineName,
+    endpointId,
     endpointDescription
   );
 }
 
-async function getProductions(
+async function getActiveLines(
   smb: SmbProtocol,
   smbServerUrl: string
 ): Promise<string[]> {
   const productions: string[] = await smb.getConferences(smbServerUrl);
   return productions;
+}
+
+function getProduction(name: string): Production {
+  const production: Production | undefined =
+    productionManager.getProduction(name);
+  if (!production) {
+    throw new Error('Trying to join production that does not exist');
+  }
+  return production;
+}
+
+function getLine(productionLines: Line[], name: string): Line {
+  const line: Line | undefined = productionManager.getLine(
+    productionLines,
+    name
+  );
+  if (!line) {
+    throw new Error('Trying to join production that does not exist');
+  }
+  return line;
 }
 
 const apiProductions: FastifyPluginCallback = (fastify, opts, next) => {
@@ -189,11 +200,8 @@ const apiProductions: FastifyPluginCallback = (fastify, opts, next) => {
     },
     async (request, reply) => {
       try {
-        const production: Production | undefined = await createProduction(
-          smb,
-          smbServerUrl,
-          request.body
-        );
+        const production: Production | undefined =
+          await productionManager.createProduction(request.body);
         if (production) {
           reply.code(200).send(production);
         } else {
@@ -208,99 +216,94 @@ const apiProductions: FastifyPluginCallback = (fastify, opts, next) => {
   );
 
   fastify.get<{
-    Reply: any;
+    Reply: string[] | string;
   }>(
-    '/productions',
+    '/productions/lines',
     {
       schema: {
-        // description: 'Retrieves all Production resources.',
+        // description: 'Retrieves all active Production lines.',
         response: {
-          200: Type.Array(Production)
+          200: Type.Array(Type.String())
         }
       }
     },
     async (request, reply) => {
       try {
-        const productions = await getProductions(smb, smbServerUrl);
-        if (productions) {
-          console.log(productions);
-          reply.code(200).send(productions);
+        const productionsSavedInManager = productionManager.getProductions();
+        console.log(productionsSavedInManager);
+        const lines = await getActiveLines(smb, smbServerUrl);
+        if (lines) {
+          console.log(lines);
+          reply.code(200).send(lines);
         }
       } catch (err) {
-        //error handling
+        reply
+          .code(500)
+          .send(
+            'Exception thrown when trying to get active production lines: ' +
+              err
+          );
       }
     }
   );
 
   fastify.get<{
-    Params: { id: string };
-    Reply: any;
+    Params: { name: string; lineName: string };
+    Reply: Line | string;
   }>(
-    '/productions/:id',
+    '/productions/:name/lines/:lineName',
     {
       schema: {
-        // description: 'Retrieves a Production resource.',
+        // description: 'Retrieves an active Production line.',
         response: {
-          200: Production
+          200: Type.Object({ Line })
         }
       }
     },
     async (request, reply) => {
       try {
-        //request logic
+        const production: Production = getProduction(request.params.name);
+        const line: Line = getLine(production.lines, request.params.lineName);
+        reply.code(200).send(line);
       } catch (err) {
-        //error handling
-      }
-    }
-  );
-
-  fastify.delete<{
-    Params: { id: string };
-    Reply: string;
-  }>(
-    '/productions/:id',
-    {
-      schema: {
-        // description: 'Delete a Production resource.',
-        response: {
-          200: Type.Object({
-            message: Type.Literal('removed')
-          })
-        }
-      }
-    },
-    async (request, reply) => {
-      try {
-        //request logic
-      } catch (err) {
-        //error handling
+        reply
+          .code(500)
+          .send('Exception thrown when trying to get line: ' + err);
       }
     }
   );
 
   fastify.post<{
-    Params: { id: string; name: string };
-    Reply: { [key: string]: any } | string;
+    Params: { name: string; lineName: string; username: string };
+    Reply: { [key: string]: string | string[] } | string;
   }>(
-    '/productions/:id/lines/:name',
+    '/productions/:name/lines/:lineName/:username',
     {
       schema: {
-        // description: 'Join a Production line.',
+        // description: 'Join a Production.',
         response: {
           200: Type.Object({
-            sdp: Type.String(),
-            participants: Type.Array(Type.String())
+            sdp: Type.String()
           })
         }
       }
     },
     async (request, reply) => {
       try {
+        const production: Production = getProduction(request.params.name);
+        const line: Line = getLine(production.lines, request.params.lineName);
+
+        const activeLines = await getActiveLines(smb, smbServerUrl);
+        if (!activeLines.includes(line.id)) {
+          const newLineId = await smb.allocateConference(smbServerUrl);
+          productionManager.setLineId(production.name, line.name, newLineId);
+        }
+
         const endpoint = await createEndpoint(
           smb,
           smbServerUrl,
-          request.params.id,
-          request.params.name,
+          line.id,
+          request.params.username,
           true,
           false
         );
@@ -310,33 +313,35 @@ const apiProductions: FastifyPluginCallback = (fastify, opts, next) => {
         if (!endpoint.audio.ssrcs) {
           throw new Error('Missing ssrcs when creating sdp offer for endpoint');
         }
-        if (request.params.name in participants) {
-          throw new Error(`Participant ${request.params.name} already exists`);
+        if (request.params.name in line.connections) {
+          throw new Error(`Connection ${request.params.name} already exists`);
         }
-        let sdpOffer = generateOffer(endpoint, request.params.name); //should respond with current participants
+        const sdpOffer = generateOffer(
+          endpoint,
+          production.name,
+          line.name,
+          request.params.username
+        );
 
         if (sdpOffer) {
           console.log(sdpOffer);
-          reply
-            .code(200)
-            .send({ sdp: sdpOffer, participants: ['name1', 'name2'] });
+          reply.code(200).send({ sdp: sdpOffer });
         } else {
           reply.code(500).send('Failed to generate sdp offer for endpoint');
         }
       } catch (err) {
         reply
           .code(500)
-          .send('Exception thrown when trying to create production: ' + err);
+          .send('Exception thrown when trying to create endpoint: ' + err);
       }
     }
   );
 
   fastify.patch<{
-    Params: { id: string; name: string };
+    Params: { name: string; lineName: string; username: string };
     Body: string;
-    Reply: any;
   }>(
-    '/productions/:id/lines/:name',
+    '/productions/:name/lines/:lineName/:username',
     {
       schema: {
         //description: 'Join a Production line.',
@@ -347,17 +352,25 @@ const apiProductions: FastifyPluginCallback = (fastify, opts, next) => {
     },
     async (request, reply) => {
       try {
-        const participantEndpointDescription =
-          participants[request.params.name];
+        const production: Production = getProduction(request.params.name);
+        const line: Line = getLine(production.lines, request.params.lineName);
+
+        const connectionEndpointDescription =
+          line.connections[request.params.username];
+
+        if (!connectionEndpointDescription) {
+          throw new Error('Could not get connection endpoint description');
+        }
+
         await handleAnswerRequest(
           smb,
           smbServerUrl,
-          request.params.id,
-          request.params.name,
-          participantEndpointDescription,
+          line.id,
+          request.params.username,
+          connectionEndpointDescription,
           request.body
         );
-        reply.code(200).send({});
+        reply.code(200);
       } catch (err) {
         reply
           .code(500)
