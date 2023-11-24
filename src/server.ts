@@ -2,7 +2,7 @@ import api from './api';
 
 const server = api({ title: '@eyevinn/typescript-nodejs' });
 
-const PORT = process.env.PORT ? Number(process.env.PORT) : 8000;
+const PORT = process.env.PORT ? Number(process.env.PORT) : 8001;
 
 server.listen({ port: PORT, host: '0.0.0.0' }, (err, address) => {
   if (err) {
