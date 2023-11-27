@@ -99,6 +99,14 @@ async function handleAnswerRequest(
 
   const parsedAnswer = parse(answer);
   const answerMediaDescription = parsedAnswer.media[0];
+  if(parsedAnswer.media[1].ssrcs) {
+    let parsedSsrcs = parsedAnswer.media[1].ssrcs[0].id;
+    if (typeof parsedSsrcs === "string"){
+      parsedSsrcs = parseInt(parsedSsrcs, 10);
+    }
+    endpointDescription.audio.ssrcs.push(parsedSsrcs) 
+  }
+  
 
   const transport = endpointDescription['bundle-transport'];
   if (!transport) {

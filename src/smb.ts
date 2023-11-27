@@ -166,6 +166,8 @@ export class SmbProtocol {
       body: JSON.stringify(request)
     });
 
+    console.log(request);
+
     if (!response.ok) {
       console.log(JSON.stringify(request));
       throw new Error('Failed to configure endpoint');
