@@ -13,9 +13,6 @@ type Production = Static<typeof Production>;
 type Line = Static<typeof Line>;
 
 const productionManager = new ProductionManager();
-const ENDPOINT_IDLE_TIMEOUT_S: string =
-  process.env.ENDPOINT_IDLE_TIMEOUT_S ?? '180';
-const SMB_ADDRESS: string = process.env.SMB_ADDRESS ?? 'http://localhost:8080';
 
 function generateOffer(
   endpoint: SmbEndpointDescription,
@@ -67,7 +64,8 @@ async function createEndpoint(
   lineId: string,
   endpointId: string,
   audio: boolean,
-  data: boolean
+  data: boolean,
+  endpointIdleTimeout: number
 ): Promise<SmbEndpointDescription> {
   const endpoint: SmbEndpointDescription = await smb.allocateEndpoint(
     smbServerUrl,
@@ -75,7 +73,7 @@ async function createEndpoint(
     endpointId,
     audio,
     data,
-    parseInt(ENDPOINT_IDLE_TIMEOUT_S, 10)
+    endpointIdleTimeout
   );
   return endpoint;
 }
@@ -196,8 +194,20 @@ function getLine(productionLines: Line[], name: string): Line {
   return line;
 }
 
-const apiProductions: FastifyPluginCallback = (fastify, opts, next) => {
-  const smbServerUrl = SMB_ADDRESS + '/conferences/';
+export interface ApiProductionsOptions {
+  smbServerBaseUrl: string;
+  endpointIdleTimeout: string;
+}
+
+const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
+  fastify,
+  opts,
+  next
+) => {
+  const smbServerUrl = new URL(
+    '/conferences',
+    opts.smbServerBaseUrl
+  ).toString();
   const smb = new SmbProtocol();
 
   fastify.post<{
@@ -234,13 +244,14 @@ const apiProductions: FastifyPluginCallback = (fastify, opts, next) => {
   fastify.get<{
     Reply: string[] | string;
   }>(
-    '/productions/lines',
+    '/lines',
     {
       schema: {
-        // description: 'Retrieves all active Production lines.',
+        // description: 'Retrieves all active lines.',
         response: {
           200: Type.Array(Type.String())
-        }
+        },
+        hide: true
       }
     },
     async (request, reply) => {
@@ -259,6 +270,31 @@ const apiProductions: FastifyPluginCallback = (fastify, opts, next) => {
             'Exception thrown when trying to get active production lines: ' +
               err
           );
+      }
+    }
+  );
+
+  fastify.get<{
+    Params: { name: string };
+    Reply: Line[] | string;
+  }>(
+    '/productions/:name/lines',
+    {
+      schema: {
+        // description: 'Retrieves lines for a Production.',
+        response: {
+          200: Type.Object({ Line })
+        }
+      }
+    },
+    async (request, reply) => {
+      try {
+        const production: Production = getProduction(request.params.name);
+        reply.code(200).send(production.lines);
+      } catch (err) {
+        reply
+          .code(500)
+          .send('Exception thrown when trying to get line: ' + err);
       }
     }
   );
@@ -321,7 +357,8 @@ const apiProductions: FastifyPluginCallback = (fastify, opts, next) => {
           line.id,
           request.params.username,
           true,
-          false
+          false,
+          parseInt(opts.endpointIdleTimeout, 10)
         );
         if (!endpoint.audio) {
           throw new Error('Missing audio when creating sdp offer for endpoint');
