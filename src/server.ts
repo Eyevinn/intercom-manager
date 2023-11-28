@@ -1,8 +1,8 @@
 import api from './api';
 
-const server = api({ title: '@eyevinn/typescript-nodejs' });
+const server = api({ title: 'intercom-manager' });
 
-const PORT = process.env.PORT ? Number(process.env.PORT) : 8001;
+const PORT = process.env.PORT ? Number(process.env.PORT) : 8000;
 
 server.listen({ port: PORT, host: '0.0.0.0' }, (err, address) => {
   if (err) {
