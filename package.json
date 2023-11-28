@@ -21,6 +21,7 @@
     "@fastify/swagger-ui": "^1.5.0",
     "@fastify/type-provider-typebox": "^2.4.0",
     "@sinclair/typebox": "^0.25.24",
+    "dotenv": "^16.3.1",
     "fastify": "4.23.2",
     "nodemon": "^2.0.20",
     "sdp-transform": "^2.14.1",

@@ -5,13 +5,17 @@ import { SmbProtocol, SmbEndpointDescription } from './smb';
 import { ProductionManager } from './production_manager';
 import { Connection } from './connection';
 import { write, parse } from 'sdp-transform';
+import dotenv from 'dotenv';
+dotenv.config();
 
 type NewProduction = Static<typeof NewProduction>;
 type Production = Static<typeof Production>;
 type Line = Static<typeof Line>;
 
 const productionManager = new ProductionManager();
-const ENDPOINT_IDLE_TIMEOUT_S = 600;
+const ENDPOINT_IDLE_TIMEOUT_S: string =
+  process.env.ENDPOINT_IDLE_TIMEOUT_S ?? '180';
+const SMB_ADDRESS: string = process.env.SMB_ADDRESS ?? 'http://localhost:8080';
 
 function generateOffer(
   endpoint: SmbEndpointDescription,
@@ -71,7 +75,7 @@ async function createEndpoint(
     endpointId,
     audio,
     data,
-    ENDPOINT_IDLE_TIMEOUT_S
+    parseInt(ENDPOINT_IDLE_TIMEOUT_S, 10)
   );
   return endpoint;
 }
@@ -99,14 +103,18 @@ async function handleAnswerRequest(
 
   const parsedAnswer = parse(answer);
   const answerMediaDescription = parsedAnswer.media[0];
-  if(parsedAnswer.media[1].ssrcs) {
+  if (parsedAnswer.media[1].ssrcs) {
     let parsedSsrcs = parsedAnswer.media[1].ssrcs[0].id;
-    if (typeof parsedSsrcs === "string"){
+    if (typeof parsedSsrcs === 'string') {
       parsedSsrcs = parseInt(parsedSsrcs, 10);
     }
-    endpointDescription.audio.ssrcs.push(parsedSsrcs) 
+    endpointDescription.audio.ssrcs.push(parsedSsrcs);
   }
-  
+  if (endpointDescription.audio.ssrcs.length === 0) {
+    throw new Error(
+      'Missing audio ssrcs when handling sdp answer from endpoint'
+    );
+  }
 
   const transport = endpointDescription['bundle-transport'];
   if (!transport) {
@@ -189,7 +197,7 @@ function getLine(productionLines: Line[], name: string): Line {
 }
 
 const apiProductions: FastifyPluginCallback = (fastify, opts, next) => {
-  const smbServerUrl = 'http://localhost:8080/conferences/';
+  const smbServerUrl = SMB_ADDRESS + '/conferences/';
   const smb = new SmbProtocol();
 
   fastify.post<{

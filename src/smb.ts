@@ -165,7 +165,6 @@ export class SmbProtocol {
       },
       body: JSON.stringify(request)
     });
-
     console.log(request);
 
     if (!response.ok) {
