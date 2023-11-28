@@ -1,4 +1,4 @@
-# {{Name}}
+# intercom-manager
 
 <!--
 

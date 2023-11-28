@@ -1,6 +1,6 @@
 import api from './api';
 
-const server = api({ title: '@eyevinn/typescript-nodejs' });
+const server = api({ title: 'intercom-manager' });
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8000;
 
