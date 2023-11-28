@@ -16,7 +16,7 @@ env:
   ECS_SERVICE: intercom-manager
   ECS_CLUSTER: development
   ECS_TASK_DEFINITION: aws/ecs/taskdef-dev.json
-  CONTAINER_NAME: development
+  CONTAINER_NAME: intercom-manager
 
 defaults:
   run:
