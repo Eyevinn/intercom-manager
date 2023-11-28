@@ -106,7 +106,7 @@ export class SmbProtocol {
     data: boolean,
     idleTimeout: number
   ): Promise<SmbEndpointDescription> {
-    let request: any = {
+    const request: any = {
       action: 'allocate',
       'bundle-transport': {
         'ice-controlling': true,
@@ -155,7 +155,7 @@ export class SmbProtocol {
     endpointId: string,
     endpointDescription: SmbEndpointDescription
   ): Promise<void> {
-    let request = JSON.parse(JSON.stringify(endpointDescription));
+    const request = JSON.parse(JSON.stringify(endpointDescription));
     request['action'] = 'configure';
     const url = smbUrl + conferenceId + '/' + endpointId;
     const response = await fetch(url, {
