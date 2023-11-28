@@ -1,6 +1,6 @@
 name: Manually triggered deploy
 
-on: 
+on:
   workflow_dispatch:
     inputs:
       deploy:
@@ -42,12 +42,12 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.ECR_AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.ECR_AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}        
-      
+          aws-region: ${{ env.AWS_REGION }}
+
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
-      
+
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@v4
