@@ -2,46 +2,44 @@
   "executionRoleArn": "arn:aws:iam::590877988961:role/ecsTaskExecutionRole",
   "containerDefinitions": [
     {
-        "name": "intercom-manager",
-        "image": "590877988961.dkr.ecr.eu-north-1.amazonaws.com/intercom-manager:sha-dd68274",
-        "cpu": 256,
-        "portMappings": [
-            {
-                "name": "intercom-manager-8000-tcp",
-                "containerPort": 8000,
-                "hostPort": 8000,
-                "protocol": "tcp",
-                "appProtocol": "http"
-            }
-        ],
-        "environment": [
-            {
-                "name": "SMB_ADDRESS",
-                "value": "http://13.49.224.46:8280"
-            }
-        ],
-        "environmentFiles": [],
-        "mountPoints": [],
-        "volumesFrom": [],
-        "ulimits": [],
-        "logConfiguration": {
-            "logDriver": "awslogs",
-            "options": {
-                "awslogs-create-group": "true",
-                "awslogs-group": "/ecs/intercom-manager",
-                "awslogs-region": "eu-north-1",
-                "awslogs-stream-prefix": "ecs"
-            },
-            "secretOptions": []
+      "name": "intercom-manager",
+      "image": "590877988961.dkr.ecr.eu-north-1.amazonaws.com/intercom-manager:sha-dd68274",
+      "cpu": 256,
+      "portMappings": [
+        {
+          "name": "intercom-manager-8000-tcp",
+          "containerPort": 8000,
+          "hostPort": 8000,
+          "protocol": "tcp",
+          "appProtocol": "http"
         }
+      ],
+      "environment": [
+        {
+          "name": "SMB_ADDRESS",
+          "value": "http://13.49.224.46:8280"
+        }
+      ],
+      "environmentFiles": [],
+      "mountPoints": [],
+      "volumesFrom": [],
+      "ulimits": [],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-create-group": "true",
+          "awslogs-group": "/ecs/intercom-manager",
+          "awslogs-region": "eu-north-1",
+          "awslogs-stream-prefix": "ecs"
+        },
+        "secretOptions": []
+      }
     }
   ],
   "family": "intercom-manager",
   "networkMode": "awsvpc",
   "volumes": [],
-  "requiresCompatibilities": [
-    "FARGATE"
-  ],
+  "requiresCompatibilities": ["FARGATE"],
   "cpu": "1024",
   "memory": "3072",
   "runtimePlatform": {

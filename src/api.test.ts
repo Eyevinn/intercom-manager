@@ -2,7 +2,11 @@ import api from './api';
 
 describe('api', () => {
   it('responds with hello, world!', async () => {
-    const server = api({ title: 'my awesome service' });
+    const server = api({
+      title: 'my awesome service',
+      smbServerBaseUrl: 'http://localhost',
+      endpointIdleTimeout: '60'
+    });
     const response = await server.inject({
       method: 'GET',
       url: '/'

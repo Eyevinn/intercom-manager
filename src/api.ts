@@ -39,6 +39,8 @@ const healthcheck: FastifyPluginCallback<HealthcheckOptions> = (
 
 export interface ApiOptions {
   title: string;
+  smbServerBaseUrl: string;
+  endpointIdleTimeout: string;
 }
 
 export default (opts: ApiOptions) => {
@@ -65,7 +67,10 @@ export default (opts: ApiOptions) => {
 
   api.register(healthcheck, { title: opts.title });
   // register other API routes here
-  api.register(apiProductions);
+  api.register(apiProductions, {
+    smbServerBaseUrl: opts.smbServerBaseUrl,
+    endpointIdleTimeout: opts.endpointIdleTimeout
+  });
 
   return api;
 };
