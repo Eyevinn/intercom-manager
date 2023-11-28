@@ -171,7 +171,7 @@ export class Connection extends EventEmitter {
     const audio = this.endpointDescription.audio;
     const audioPayloadType = audio['payload-type'];
 
-    for (let element of this.mediaStreams.audio.ssrcs) {
+    for (const element of this.mediaStreams.audio.ssrcs) {
       const audioDescription = this.makeMediaDescription('audio');
       audioDescription.payloads = audioPayloadType.id.toString();
       audioDescription.rtp = [
