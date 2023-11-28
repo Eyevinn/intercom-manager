@@ -66,6 +66,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
 
   deploy:
+    if: ${{ inputs.deploy }}
     name: Deploy to Dev cluster on ECS
     needs: ['build']
     runs-on: ubuntu-latest
