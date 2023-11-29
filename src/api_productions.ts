@@ -6,6 +6,7 @@ import { ProductionManager } from './production_manager';
 import { Connection } from './connection';
 import { write, parse } from 'sdp-transform';
 import dotenv from 'dotenv';
+import { MediaStreamsInfoSsrc } from './media_streams_info';
 dotenv.config();
 
 type NewProduction = Static<typeof NewProduction>;
@@ -24,10 +25,10 @@ function generateOffer(
     throw new Error('Missing audio when creating offer');
   }
 
-  const ssrcs: object[] = [];
+  const ssrcs: MediaStreamsInfoSsrc[] = [];
   endpoint.audio.ssrcs.forEach((ssrcsNr) => {
     ssrcs.push({
-      ssrc: ssrcsNr,
+      ssrc: ssrcsNr.toString(),
       cname: `${username}_audioCName`,
       mslabel: `${username}_audioMSLabel`,
       label: `${username}_audioLabel`

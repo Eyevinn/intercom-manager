@@ -2,7 +2,11 @@ import { v4 as uuidv4 } from 'uuid';
 import { EventEmitter } from 'events';
 import { SessionDescription } from 'sdp-transform';
 
-import { SfuEndpointDescription } from './sfu/interface';
+import {
+  AudioSmbPayloadParameters,
+  MediaDescriptionBase,
+  SfuEndpointDescription
+} from './sfu/interface';
 import { MediaStreamsInfo } from './media_streams_info';
 
 export class Connection extends EventEmitter {
@@ -16,7 +20,7 @@ export class Connection extends EventEmitter {
 
   constructor(
     resourceId: string,
-    mediaStreams: MediaStreamsInfo | any,
+    mediaStreams: MediaStreamsInfo,
     endpointDescription: SfuEndpointDescription
   ) {
     super();
@@ -35,11 +39,11 @@ export class Connection extends EventEmitter {
     return this.resourceId;
   }
 
-  protected log(...args: any[]) {
+  protected log(...args: string[] | Connection[]) {
     console.log(`[connection ${this.connectionId}]`, ...args);
   }
 
-  protected error(...args: any[]) {
+  protected error(...args: string[] | Connection[]) {
     console.error(`[connection ${this.connectionId}]`, ...args);
   }
 
@@ -86,7 +90,7 @@ export class Connection extends EventEmitter {
     return offer;
   }
 
-  protected makeMediaDescription(type: string): any {
+  protected makeMediaDescription(type: string): MediaDescriptionBase {
     if (!this.endpointDescription) {
       throw new Error('Missing endpointDescription');
     }
@@ -183,7 +187,7 @@ export class Connection extends EventEmitter {
         }
       ];
 
-      const parameters = Object.keys(audioPayloadType.parameters);
+      const parameters: string[] = Object.keys(audioPayloadType.parameters);
       if (parameters.length !== 0) {
         audioDescription.fmtp = [
           {
@@ -191,7 +195,11 @@ export class Connection extends EventEmitter {
             config: parameters
               .map(
                 (element) =>
-                  `${element}=${audioPayloadType.parameters[element]}`
+                  `${element}=${
+                    audioPayloadType.parameters[
+                      element as keyof AudioSmbPayloadParameters
+                    ]
+                  }`
               )
               .join(';')
           }
@@ -225,104 +233,9 @@ export class Connection extends EventEmitter {
 
       offer.media.push(audioDescription);
     }
-
-    // let videoMsLabels = new Set(this.mediaStreams.video.ssrcs.flatMap(element => element.mslabel));
-
-    // for (let msLabel of videoMsLabels) {
-    //   const video = this.endpointDescription.video;
-    //   let videoDescription = this.makeMediaDescription('video');
-    //   videoDescription.payloads = video["payload-types"]
-    //     .flatMap(element => element.id)
-    //     .join(' ');
-    //   videoDescription.rtp = video["payload-types"].flatMap(element => {
-    //     return {
-    //       payload: element.id,
-    //       codec: element.name,
-    //       rate: element.clockrate,
-    //       encoding: element.channels
-    //     }
-    //   });
-    //   videoDescription.ext = video["rtp-hdrexts"].flatMap(element => {
-    //     return { value: element.id, uri: element.uri }
-    //   });
-
-    //   video["payload-types"].forEach(payloadType => {
-    //     const parameters = Object.keys(payloadType.parameters);
-    //     if (parameters.length !== 0) {
-    //       videoDescription.fmtp.push({
-    //         payload: payloadType.id,
-    //         config: parameters
-    //           .map(element => `${element}=${payloadType.parameters[element]}`)
-    //           .join(';')
-    //       });
-    //     }
-
-    //     payloadType["rtcp-fbs"].forEach(rtcpFb => {
-    //       videoDescription.rtcpFb.push({
-    //         payload: payloadType.id,
-    //         type: rtcpFb.type,
-    //         subtype: rtcpFb.subtype
-    //       });
-    //     });
-    //   });
-
-    //   for (let ssrc of this.mediaStreams.video.ssrcs.filter(element => element.mslabel === msLabel)) {
-    //     videoDescription.ssrcs.push({ id: ssrc.ssrc, attribute: 'cname', value: ssrc.cname });
-    //     videoDescription.ssrcs.push({ id: ssrc.ssrc, attribute: 'label', value: ssrc.label });
-    //     videoDescription.ssrcs.push({ id: ssrc.ssrc, attribute: 'mslabel', value: ssrc.mslabel });
-    //     videoDescription.ssrcs.push({ id: ssrc.ssrc, attribute: 'msid', value: `${ssrc.mslabel} ${ssrc.label}` });
-    //   }
-
-    //   videoDescription.ssrcGroups = this.mediaStreams.video.ssrcGroups.flatMap(element => {
-    //     return {
-    //       semantics: element.semantics,
-    //       ssrcs: element.ssrcs.join(' ')
-    //     }
-    //   });
-    //   offer.media.push(videoDescription);
-    // }
   }
 
   protected addSFUMids(offer: SessionDescription) {
-    // const video = this.endpointDescription.video;
-    // const videoSsrc = video.streams[0].sources[0].main;
-
-    // let videoDescription = this.makeMediaDescription('video');
-    // videoDescription.payloads = video["payload-types"]
-    //   .flatMap(element => element.id)
-    //   .join(' ');
-    // videoDescription.rtp = video["payload-types"].flatMap(element => {
-    //   return {
-    //     payload: element.id,
-    //     codec: element.name,
-    //     rate: element.clockrate,
-    //     encoding: element.channels
-    //   }
-    // });
-
-    // video["payload-types"].forEach(payloadType => {
-    //   const parameters = Object.keys(payloadType.parameters);
-    //   if (parameters.length !== 0) {
-    //     videoDescription.fmtp.push({
-    //       payload: payloadType.id,
-    //       config: parameters
-    //         .map(element => `${element}=${payloadType.parameters[element]}`)
-    //         .join(';')
-    //     });
-    //   }
-    // });
-
-    // videoDescription.ext = video["rtp-hdrexts"].flatMap(element => {
-    //   return { value: element.id, uri: element.uri }
-    // });
-    // videoDescription.ssrcs = [
-    //   { id: videoSsrc, attribute: 'cname', value: 'feedbackvideocname' },
-    //   { id: videoSsrc, attribute: 'label', value: 'feedbackvideolabel' },
-    //   { id: videoSsrc, attribute: 'mslabel', value: 'feedbackvideomslabel' },
-    //   { id: videoSsrc, attribute: 'msid', value: 'feedbackvideomslabel feedbackvideolabel' }
-    // ];
-    // offer.media.push(videoDescription);
-
     const dataDescription = this.makeMediaDescription('application');
     dataDescription.protocol = 'UDP/DTLS/SCTP';
     dataDescription.payloads = 'webrtc-datachannel';
