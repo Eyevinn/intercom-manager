@@ -205,7 +205,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   next
 ) => {
   const smbServerUrl = new URL(
-    '/conferences',
+    '/conferences/',
     opts.smbServerBaseUrl
   ).toString();
   const smb = new SmbProtocol();
