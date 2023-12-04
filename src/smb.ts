@@ -31,15 +31,19 @@ interface RtcpFeedback {
   subtype: string;
 }
 
-interface SmbPayloadType {
+interface AudioSmbPayloadParameters {
+  minptime: string;
+  useinbandfec: string;
+}
+
+interface AudioSmbPayloadType {
   id: number;
   name: string;
   clockrate: number;
   channels?: number;
-  parameters?: any;
+  parameters: AudioSmbPayloadParameters;
   'rtcp-fbs'?: RtcpFeedback[];
 }
-
 interface SmbRtpHeaderExtension {
   id: number;
   uri: string;
@@ -58,21 +62,32 @@ export interface SmbVideoStream {
 
 export interface SmbEndpointDescription {
   'bundle-transport'?: SmbTransport;
-  audio?: {
+  audio: {
     ssrcs: number[];
-    'payload-type': SmbPayloadType;
+    'payload-type': AudioSmbPayloadType;
     'rtp-hdrexts': SmbRtpHeaderExtension[];
-  };
-
-  video?: {
-    streams: SmbVideoStream[];
-    'payload-types': SmbPayloadType[];
-    'rtp-hdrexts'?: SmbRtpHeaderExtension[];
   };
 
   data?: {
     port: number;
   };
+  idleTimeout?: number;
+}
+
+export interface AllocateConferenceResponse {
+  id: string;
+}
+
+interface BaseAllocationRequest {
+  action: string;
+  'bundle-transport': {
+    'ice-controlling': boolean;
+    ice: boolean;
+    dtls: boolean;
+    sdes: boolean;
+  };
+  audio?: object;
+  data?: object;
   idleTimeout?: number;
 }
 
@@ -94,7 +109,8 @@ export class SmbProtocol {
       );
     }
 
-    const allocateResponseJson: any = await allocateResponse.json();
+    const allocateResponseJson: AllocateConferenceResponse =
+      await allocateResponse.json();
     return allocateResponseJson['id'];
   }
 
@@ -106,7 +122,7 @@ export class SmbProtocol {
     data: boolean,
     idleTimeout: number
   ): Promise<SmbEndpointDescription> {
-    const request: any = {
+    const request: BaseAllocationRequest = {
       action: 'allocate',
       'bundle-transport': {
         'ice-controlling': true,
@@ -145,7 +161,8 @@ export class SmbProtocol {
       );
     }
 
-    const smbEndpointDescription: any = await response.json();
+    const smbEndpointDescription: SmbEndpointDescription =
+      await response.json();
     return smbEndpointDescription;
   }
 
@@ -182,7 +199,7 @@ export class SmbProtocol {
       return [];
     }
 
-    const responseBody: any = await response.json();
+    const responseBody: string[] = await response.json();
     return responseBody;
   }
 }

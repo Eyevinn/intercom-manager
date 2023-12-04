@@ -60,7 +60,3 @@ export const Line = Type.Object({
   id: Type.String(),
   connections: Type.Any()
 });
-
-export const ConferenceId = Type.Object({
-  id: Type.Integer()
-});

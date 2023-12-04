@@ -14,10 +14,6 @@ export interface MediaStreamsInfo {
   audio: {
     ssrcs: MediaStreamsInfoSsrc[];
   };
-  video: {
-    ssrcs: MediaStreamsInfoSsrc[];
-    ssrcGroups: MediaStreamsInfoSsrcGroup[];
-  };
 }
 
 const MediaStreamsInfoSsrcSchema = {
