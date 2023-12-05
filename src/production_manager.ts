@@ -61,15 +61,37 @@ export class ProductionManager {
     }
   }
 
-  setLineId(productionName: string, lineName: string, lineId: string): void {
-    const matchedProduction = this.productions.find(
+  deleteProduction(productionName: string): string | undefined {
+    const matchedProductionIndex: number = this.productions.findIndex(
       (production) => production.name === productionName
     );
+    if (matchedProductionIndex != -1) {
+      if (this.productions.splice(matchedProductionIndex, 1)) {
+        return productionName;
+      } else {
+        return undefined;
+      }
+    } else {
+      return undefined;
+    }
+  }
+
+  setLineId(
+    productionName: string,
+    lineName: string,
+    lineId: string
+  ): Line | undefined {
+    const matchedProduction = this.getProduction(productionName);
     if (matchedProduction) {
       const line = this.getLine(matchedProduction.lines, lineName);
       if (line) {
         line.id = lineId;
+        return line;
+      } else {
+        return undefined;
       }
+    } else {
+      return undefined;
     }
   }
 

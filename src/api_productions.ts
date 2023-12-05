@@ -98,7 +98,6 @@ async function handleAnswerRequest(
     );
   }
   endpointDescription.audio.ssrcs = [];
-  //endpointDescription.video.streams = [];
 
   const parsedAnswer = parse(answer);
   const answerMediaDescription = parsedAnswer.media[0];
@@ -179,7 +178,7 @@ function getProduction(name: string): Production {
   const production: Production | undefined =
     productionManager.getProduction(name);
   if (!production) {
-    throw new Error('Trying to join production that does not exist');
+    throw new Error('Trying to get production that does not exist');
   }
   return production;
 }
@@ -243,34 +242,50 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   );
 
   fastify.get<{
-    Reply: string[] | string;
+    Reply: Production[] | string;
   }>(
-    '/lines',
+    '/productions',
     {
       schema: {
-        // description: 'Retrieves all active lines.',
+        // description: 'Retrieves all Productions.',
         response: {
-          200: Type.Array(Type.String())
-        },
-        hide: true
+          200: Type.Array(Production)
+        }
       }
     },
     async (request, reply) => {
       try {
-        const productionsSavedInManager = productionManager.getProductions();
-        console.log(productionsSavedInManager);
-        const lines = await getActiveLines(smb, smbServerUrl);
-        if (lines) {
-          console.log(lines);
-          reply.code(200).send(lines);
-        }
+        const productions: Production[] = productionManager.getProductions();
+        reply.code(200).send(productions);
       } catch (err) {
         reply
           .code(500)
-          .send(
-            'Exception thrown when trying to get active production lines: ' +
-              err
-          );
+          .send('Exception thrown when trying to get productions: ' + err);
+      }
+    }
+  );
+
+  fastify.get<{
+    Params: { name: string };
+    Reply: Production | string;
+  }>(
+    '/productions/:name',
+    {
+      schema: {
+        // description: 'Retrieves a Production.',
+        response: {
+          200: Production
+        }
+      }
+    },
+    async (request, reply) => {
+      try {
+        const production: Production = getProduction(request.params.name);
+        reply.code(200).send(production);
+      } catch (err) {
+        reply
+          .code(500)
+          .send('Exception thrown when trying to get productions: ' + err);
       }
     }
   );
@@ -284,7 +299,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       schema: {
         // description: 'Retrieves lines for a Production.',
         response: {
-          200: Type.Object({ Line })
+          200: Type.Array(Line)
         }
       }
     },
@@ -301,22 +316,22 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   );
 
   fastify.get<{
-    Params: { name: string; lineName: string };
+    Params: { name: string; linename: string };
     Reply: Line | string;
   }>(
-    '/productions/:name/lines/:lineName',
+    '/productions/:name/lines/:linename',
     {
       schema: {
         // description: 'Retrieves an active Production line.',
         response: {
-          200: Type.Object({ Line })
+          200: Line
         }
       }
     },
     async (request, reply) => {
       try {
         const production: Production = getProduction(request.params.name);
-        const line: Line = getLine(production.lines, request.params.lineName);
+        const line: Line = getLine(production.lines, request.params.linename);
         reply.code(200).send(line);
       } catch (err) {
         reply
@@ -327,10 +342,10 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   );
 
   fastify.post<{
-    Params: { name: string; lineName: string; username: string };
+    Params: { name: string; linename: string; username: string };
     Reply: { [key: string]: string | string[] } | string;
   }>(
-    '/productions/:name/lines/:lineName/:username',
+    '/productions/:name/lines/:linename/:username',
     {
       schema: {
         // description: 'Join a Production.',
@@ -344,12 +359,18 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     async (request, reply) => {
       try {
         const production: Production = getProduction(request.params.name);
-        const line: Line = getLine(production.lines, request.params.lineName);
+        const line: Line = getLine(production.lines, request.params.linename);
 
         const activeLines = await getActiveLines(smb, smbServerUrl);
         if (!activeLines.includes(line.id)) {
           const newLineId = await smb.allocateConference(smbServerUrl);
-          productionManager.setLineId(production.name, line.name, newLineId);
+          if (
+            !productionManager.setLineId(production.name, line.name, newLineId)
+          ) {
+            throw new Error(
+              `Failed to set line id for line ${line.name} in production ${production.name}`
+            );
+          }
         }
 
         const endpoint = await createEndpoint(
@@ -378,7 +399,6 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         );
 
         if (sdpOffer) {
-          console.log(sdpOffer);
           reply.code(200).send({ sdp: sdpOffer });
         } else {
           reply.code(500).send('Failed to generate sdp offer for endpoint');
@@ -392,10 +412,10 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   );
 
   fastify.patch<{
-    Params: { name: string; lineName: string; username: string };
+    Params: { name: string; linename: string; username: string };
     Body: string;
   }>(
-    '/productions/:name/lines/:lineName/:username',
+    '/productions/:name/lines/:linename/:username',
     {
       schema: {
         //description: 'Join a Production line.',
@@ -407,7 +427,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     async (request, reply) => {
       try {
         const production: Production = getProduction(request.params.name);
-        const line: Line = getLine(production.lines, request.params.lineName);
+        const line: Line = getLine(production.lines, request.params.linename);
 
         const connectionEndpointDescription =
           line.connections[request.params.username];
@@ -429,6 +449,33 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         reply
           .code(500)
           .send('Exception thrown when trying to configure endpoint: ' + err);
+      }
+    }
+  );
+
+  fastify.delete<{
+    Params: { name: string };
+    Reply: string;
+  }>(
+    '/productions/:name',
+    {
+      schema: {
+        // description: 'Deletes a Production.',
+        response: {
+          204: Type.String()
+        }
+      }
+    },
+    async (request, reply) => {
+      try {
+        if (!productionManager.deleteProduction(request.params.name)) {
+          throw new Error('Could not delete production');
+        }
+        reply.code(204).send(`Deleted ${request.params.name}`);
+      } catch (err) {
+        reply
+          .code(500)
+          .send('Exception thrown when trying to get line: ' + err);
       }
     }
   );
