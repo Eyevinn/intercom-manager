@@ -1,19 +1,50 @@
 # intercom-manager
 
-<!--
+> _Open Source Intercom Solution_
+
+[![Slack](http://slack.streamingtech.se/badge.svg)](http://slack.streamingtech.se)
+
+Intercom solution powered by Symphony Media Bridge. This is the Intercom manager API microservice.
 
 ## Requirements
-Add any external project dependencies such as node.js version etc here
+
+- A Symphony Media Bridge running and reachable
+- Docker engine
 
 ## Installation / Usage
 
-Add clear instructions on how to use the project here
+Start an Intercom Manager instance:
+
+```
+docker run -d -p 8000:8000 \
+  -e PORT=8000 \
+  -e SMB_ADDRESS=http://<smburl>:<smbport> \
+  eyevinntechnology/intercom-manager
+```
+
+API docs is then available on `http://localhost:8000/docs/`
 
 ## Development
 
-Add clear instructions on how to start development of the project here
+Requires Node JS engine >= v18.
 
--->
+Install dependencies
+
+```
+npm install
+```
+
+Run tests
+
+```
+npm test
+```
+
+Start server locally
+
+```
+SMB_ADDRESS=http://<smburl>:<smbport> npm start
+```
 
 ### Contributing
 
