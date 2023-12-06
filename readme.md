@@ -1,11 +1,13 @@
 # intercom-manager
-> *Open Source Intercom Solution*
+
+> _Open Source Intercom Solution_
 
 [![Slack](http://slack.streamingtech.se/badge.svg)](http://slack.streamingtech.se)
 
 Intercom solution powered by Symphony Media Bridge. This is the Intercom manager API microservice.
 
 ## Requirements
+
 - A Symphony Media Bridge running and reachable
 - Docker engine
 
