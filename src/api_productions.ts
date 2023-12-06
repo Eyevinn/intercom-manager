@@ -420,7 +420,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       schema: {
         //description: 'Join a Production line.',
         response: {
-          200: Type.Object({})
+          200: Line
         }
       }
     },
@@ -444,7 +444,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           connectionEndpointDescription,
           request.body
         );
-        reply.code(200);
+        reply.code(200).send(line);
       } catch (err) {
         reply
           .code(500)

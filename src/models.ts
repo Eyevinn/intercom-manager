@@ -44,13 +44,15 @@ export const NewProduction = Type.Object({
   )
 });
 
+export const Connections = Type.Record(Type.String(), Type.Any());
+
 export const Production = Type.Object({
   name: Type.String(),
   lines: Type.Array(
     Type.Object({
       name: Type.String(),
       id: Type.String(),
-      connections: Type.Any()
+      connections: Connections
     })
   )
 });
@@ -58,5 +60,5 @@ export const Production = Type.Object({
 export const Line = Type.Object({
   name: Type.String(),
   id: Type.String(),
-  connections: Type.Any()
+  connections: Connections
 });
