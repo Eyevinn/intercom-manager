@@ -24,8 +24,25 @@ API docs is then available on `http://localhost:8000/docs/`
 
 ## Development
 
-Add clear instructions on how to start development of the project here
+Requires Node JS engine >= v18.
 
+Install dependencies
+
+```
+npm install
+```
+
+Run tests
+
+```
+npm test
+```
+
+Start server locally
+
+```
+SMB_ADDRESS=http://<smburl>:<smbport> npm start
+```
 
 ### Contributing
 
