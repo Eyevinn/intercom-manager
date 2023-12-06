@@ -9,7 +9,8 @@
     "pretty": "prettier --check --ignore-unknown .",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "dev": "nodemon",
-    "start": "ts-node -T src/server.ts"
+    "start": "ts-node -T src/server.ts",
+    "postversion": "git push && git push --tags"
   },
   "license": "MIT",
   "engines": {
