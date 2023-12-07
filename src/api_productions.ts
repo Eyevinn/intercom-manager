@@ -227,7 +227,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     async (request, reply) => {
       try {
         const production: Production | undefined =
-          await productionManager.createProduction(request.body);
+          productionManager.createProduction(request.body);
         if (production) {
           reply.code(200).send(production);
         } else {
