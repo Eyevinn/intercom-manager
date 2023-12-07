@@ -13,9 +13,7 @@ export class ProductionManager {
     this.productions = [];
   }
 
-  async createProduction(
-    newProduction: NewProduction
-  ): Promise<Production | undefined> {
+  createProduction(newProduction: NewProduction): Production | undefined {
     if (!this.getProduction(newProduction.name)) {
       const newProductionLines: Line[] = [];
 
