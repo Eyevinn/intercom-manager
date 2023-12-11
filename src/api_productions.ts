@@ -345,10 +345,10 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     Params: { name: string; linename: string; username: string };
     Reply: { [key: string]: string | string[] } | string;
   }>(
-    '/productions/:name/lines/:linename/:username',
+    '/productions/:name/lines/:linename/users/:username',
     {
       schema: {
-        // description: 'Join a Production.',
+        // description: 'Initiate line conference join.',
         response: {
           200: Type.Object({
             sdp: Type.String()
@@ -415,10 +415,10 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     Params: { name: string; linename: string; username: string };
     Body: string;
   }>(
-    '/productions/:name/lines/:linename/:username',
+    '/productions/:name/lines/:linename/users/:username',
     {
       schema: {
-        //description: 'Join a Production line.',
+        //description: 'Provide client connection information to finalize line conference join.',
         response: {
           200: Line
         }
@@ -471,11 +471,46 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         if (!productionManager.deleteProduction(request.params.name)) {
           throw new Error('Could not delete production');
         }
-        reply.code(204).send(`Deleted ${request.params.name}`);
+        reply.code(204).send(`Deleted production ${request.params.name}`);
       } catch (err) {
         reply
           .code(500)
-          .send('Exception thrown when trying to get line: ' + err);
+          .send('Exception thrown when trying to delete production: ' + err);
+      }
+    }
+  );
+
+  fastify.delete<{
+    Params: { name: string; linename: string; username: string };
+    Reply: string;
+  }>(
+    '/productions/:name/lines/:linename/users/:username',
+    {
+      schema: {
+        // description: 'Deletes a Connection from ProductionManager.',
+        response: {
+          204: Type.String()
+        }
+      }
+    },
+    async (request, reply) => {
+      try {
+        if (
+          !productionManager.removeConnectionFromLine(
+            request.params.name,
+            request.params.linename,
+            request.params.username
+          )
+        ) {
+          throw new Error(
+            `Could not delete connection ${request.params.username}`
+          );
+        }
+        reply.code(204).send(`Deleted connection ${request.params.username}`);
+      } catch (err) {
+        reply
+          .code(500)
+          .send('Exception thrown when trying to delete connection: ' + err);
       }
     }
   );
