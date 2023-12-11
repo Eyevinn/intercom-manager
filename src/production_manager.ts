@@ -121,4 +121,25 @@ export class ProductionManager {
       );
     }
   }
+
+  removeConnectionFromLine(
+    productionName: string,
+    lineName: string,
+    userName: string
+  ): string | undefined {
+    const production = this.getProduction(productionName);
+    if (production) {
+      const matchedLine = production.lines.find(
+        (line) => line.name === lineName
+      );
+      if (matchedLine?.connections) {
+        delete matchedLine.connections[userName];
+        return userName;
+      }
+    } else {
+      throw new Error(
+        `Deleting connection failed, Production ${productionName} does not exist`
+      );
+    }
+  }
 }
