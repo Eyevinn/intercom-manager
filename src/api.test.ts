@@ -5,7 +5,9 @@ describe('api', () => {
     const server = api({
       title: 'my awesome service',
       smbServerBaseUrl: 'http://localhost',
-      endpointIdleTimeout: '60'
+      endpointIdleTimeout: '60',
+      smbPoll: false,
+      smbPollInterval_s: '60'
     });
     const response = await server.inject({
       method: 'GET',

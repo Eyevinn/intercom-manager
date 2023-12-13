@@ -91,6 +91,19 @@ interface BaseAllocationRequest {
   idleTimeout?: number;
 }
 
+export interface DetailedConference {
+  dtlsState: string;
+  iceState: string;
+  id: string;
+  isActiveTalker: boolean;
+  isDominantSpeaker: boolean;
+  ActiveTalker?: {
+    noiseLevel: number;
+    ptt: boolean;
+    score: number;
+  };
+}
+
 export class SmbProtocol {
   async allocateConference(smbUrl: string): Promise<string> {
     const allocateResponse = await fetch(smbUrl, {
@@ -200,6 +213,23 @@ export class SmbProtocol {
     }
 
     const responseBody: string[] = await response.json();
+    return responseBody;
+  }
+
+  async getConference(
+    smbUrl: string,
+    conferenceId: string
+  ): Promise<DetailedConference[]> {
+    const url = smbUrl + conferenceId;
+    const response = await fetch(url, {
+      method: 'GET'
+    });
+
+    if (!response.ok) {
+      return [];
+    }
+
+    const responseBody: DetailedConference[] = await response.json();
     return responseBody;
   }
 }

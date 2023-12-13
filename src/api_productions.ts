@@ -1,7 +1,7 @@
 import { Type, Static } from '@sinclair/typebox';
 import { FastifyPluginCallback } from 'fastify';
 import { NewProduction, Production, Line } from './models';
-import { SmbProtocol, SmbEndpointDescription } from './smb';
+import { SmbProtocol, SmbEndpointDescription, DetailedConference } from './smb';
 import { ProductionManager } from './production_manager';
 import { Connection } from './connection';
 import { write, parse } from 'sdp-transform';
@@ -197,6 +197,8 @@ function getLine(productionLines: Line[], name: string): Line {
 export interface ApiProductionsOptions {
   smbServerBaseUrl: string;
   endpointIdleTimeout: string;
+  smbPoll: boolean;
+  smbPollInterval_s: string;
 }
 
 const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
@@ -515,7 +517,50 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     }
   );
 
+  let parsedDelay_ms: number = parseInt(opts.smbPollInterval_s) * 1000;
+  if (parsedDelay_ms < 20000) {
+    parsedDelay_ms = 60000;
+  }
+
+  if (opts.smbPoll) {
+    startRepeatingPoll(smb, smbServerUrl, parsedDelay_ms);
+  }
+
   next();
 };
+
+async function poll(smb: SmbProtocol, smbServerUrl: string) {
+  const productions: Production[] = productionManager.getProductions();
+
+  for (const production of productions) {
+    for (const line of production.lines) {
+      const endpoints: DetailedConference[] = await smb.getConference(
+        smbServerUrl,
+        line.id
+      );
+      const activeConnections: Record<string, SmbEndpointDescription> = {};
+      for (const endpoint of endpoints) {
+        const activeConnection: SmbEndpointDescription =
+          line.connections[endpoint['id']];
+        if (activeConnection) {
+          activeConnections[endpoint['id']] = activeConnection;
+        }
+      }
+      line.connections = activeConnections;
+      console.log(line.connections);
+    }
+  }
+}
+
+function startRepeatingPoll(
+  smb: SmbProtocol,
+  smbServerUrl: string,
+  delay_ms: number
+) {
+  setInterval(() => {
+    poll(smb, smbServerUrl);
+    console.log('Repeating poll running...');
+  }, delay_ms);
+}
 
 export default apiProductions;
