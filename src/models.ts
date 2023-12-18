@@ -125,7 +125,12 @@ export const SmbEndpointDescription = Type.Object({
   idleTimeout: Type.Optional(Type.Number())
 });
 
-export const Connections = Type.Record(Type.String(), SmbEndpointDescription);
+export const Endpoint = Type.Object({
+  endpointId: Type.String(),
+  sessionDescription: SmbEndpointDescription
+});
+
+export const Connections = Type.Record(Type.String(), Endpoint);
 
 export const Production = Type.Object({
   name: Type.String(),

@@ -19,16 +19,12 @@ Start an Intercom Manager instance:
 docker run -d -p 8000:8000 \
   -e PORT=8000 \
   -e SMB_ADDRESS=http://<smburl>:<smbport> \
-  -e SMB_POLL=true \
-  -e SMB_POLL_INTERVAL_S=60 \
   eyevinntechnology/intercom-manager
 ```
 
 ```
   PORT=8000                             intercom-manager api port.
   SMB_ADDRESS=http://<smburl>:<smbport> The address:port of the Symphony Media Bridge instance.
-  SMB_POLL=true                         Activate regular interval polling to remove unused endpoints. Defaults to false.
-  SMB_POLL_INTERVAL_S=60                Polling interval length in seconds. Defaults to 60. Api will never poll more often than every 20s.
 ```
 
 API docs is then available on `http://localhost:8000/docs/`
