@@ -1,17 +1,19 @@
-import { Type, Static } from '@sinclair/typebox';
+import { Type } from '@sinclair/typebox';
 import { FastifyPluginCallback } from 'fastify';
-import { NewProduction, Production, Line } from './models';
-import { SmbProtocol, SmbEndpointDescription, DetailedConference } from './smb';
+import {
+  NewProduction,
+  Production,
+  Line,
+  SmbEndpointDescription,
+  DetailedConference
+} from './models';
+import { SmbProtocol } from './smb';
 import { ProductionManager } from './production_manager';
 import { Connection } from './connection';
 import { write, parse } from 'sdp-transform';
 import dotenv from 'dotenv';
 import { MediaStreamsInfoSsrc } from './media_streams_info';
 dotenv.config();
-
-type NewProduction = Static<typeof NewProduction>;
-type Production = Static<typeof Production>;
-type Line = Static<typeof Line>;
 
 const productionManager = new ProductionManager();
 
