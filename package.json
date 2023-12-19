@@ -1,6 +1,6 @@
 {
   "name": "@eyevinn/typescript-nodejs",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "The default typescript-nodejs template for eyevinn projects",
   "scripts": {
     "test": "jest",
