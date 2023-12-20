@@ -1,10 +1,9 @@
-import { Static } from '@sinclair/typebox';
-import { NewProduction, Production, Line } from './models';
-import { SmbEndpointDescription } from './smb';
-
-type NewProduction = Static<typeof NewProduction>;
-type Production = Static<typeof Production>;
-type Line = Static<typeof Line>;
+import {
+  NewProduction,
+  Production,
+  Line,
+  SmbEndpointDescription
+} from './models';
 
 export class ProductionManager {
   private productions: Production[];

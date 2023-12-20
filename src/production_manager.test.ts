@@ -1,10 +1,5 @@
-import { Static } from '@sinclair/typebox';
 import { ProductionManager } from './production_manager';
-import { NewProduction, Production } from './models';
-import { SmbEndpointDescription } from './smb';
-
-type NewProduction = Static<typeof NewProduction>;
-type Production = Static<typeof Production>;
+import { NewProduction, Production, SmbEndpointDescription } from './models';
 
 const SmbEndpointDescriptionMock: SmbEndpointDescription = {
   'bundle-transport': {

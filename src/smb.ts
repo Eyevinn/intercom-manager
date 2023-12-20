@@ -1,80 +1,6 @@
-interface SmbCandidate {
-  generation: number;
-  component: number;
-  protocol: string;
-  port: number;
-  ip: string;
-  'rel-port'?: number;
-  'rel-addr'?: string;
-  foundation: string;
-  priority: number;
-  type: string;
-  network?: number;
-}
+import { SmbEndpointDescription, DetailedConference } from './models';
 
-interface SmbTransport {
-  'rtcp-mux'?: boolean;
-  ice?: {
-    ufrag: string;
-    pwd: string;
-    candidates: SmbCandidate[];
-  };
-  dtls?: {
-    setup: string;
-    type: string;
-    hash: string;
-  };
-}
-
-interface RtcpFeedback {
-  type: string;
-  subtype: string;
-}
-
-interface AudioSmbPayloadParameters {
-  minptime: string;
-  useinbandfec: string;
-}
-
-interface AudioSmbPayloadType {
-  id: number;
-  name: string;
-  clockrate: number;
-  channels?: number;
-  parameters: AudioSmbPayloadParameters;
-  'rtcp-fbs'?: RtcpFeedback[];
-}
-interface SmbRtpHeaderExtension {
-  id: number;
-  uri: string;
-}
-
-export interface SmbVideoSource {
-  main: number;
-  feedback?: number;
-}
-
-export interface SmbVideoStream {
-  sources: SmbVideoSource[];
-  id: string;
-  content: string;
-}
-
-export interface SmbEndpointDescription {
-  'bundle-transport'?: SmbTransport;
-  audio: {
-    ssrcs: number[];
-    'payload-type': AudioSmbPayloadType;
-    'rtp-hdrexts': SmbRtpHeaderExtension[];
-  };
-
-  data?: {
-    port: number;
-  };
-  idleTimeout?: number;
-}
-
-export interface AllocateConferenceResponse {
+interface AllocateConferenceResponse {
   id: string;
 }
 
@@ -89,19 +15,6 @@ interface BaseAllocationRequest {
   audio?: object;
   data?: object;
   idleTimeout?: number;
-}
-
-export interface DetailedConference {
-  dtlsState: string;
-  iceState: string;
-  id: string;
-  isActiveTalker: boolean;
-  isDominantSpeaker: boolean;
-  ActiveTalker?: {
-    noiseLevel: number;
-    ptt: boolean;
-    score: number;
-  };
 }
 
 export class SmbProtocol {
