@@ -4,25 +4,26 @@ import {
   NewProduction,
   Production,
   Line,
-  SmbEndpointDescription,
-  DetailedConference
+  SmbEndpointDescription
 } from './models';
 import { SmbProtocol } from './smb';
 import { ProductionManager } from './production_manager';
 import { Connection } from './connection';
-import { write, parse } from 'sdp-transform';
+import { write, parse, SessionDescription } from 'sdp-transform';
 import dotenv from 'dotenv';
 import { MediaStreamsInfoSsrc } from './media_streams_info';
+import { v4 as uuidv4 } from 'uuid';
 dotenv.config();
 
 const productionManager = new ProductionManager();
 
-function generateOffer(
+function createConnection(
   endpoint: SmbEndpointDescription,
   productionName: string,
   lineName: string,
-  username: string
-): string {
+  username: string,
+  endpointId: string
+): Connection {
   if (!endpoint.audio) {
     throw new Error('Missing audio when creating offer');
   }
@@ -46,19 +47,19 @@ function generateOffer(
   const connection = new Connection(
     username,
     endpointMediaStreamInfo,
-    endpoint
+    endpoint,
+    endpointId
   );
 
   productionManager.addConnectionToLine(
     productionName,
     lineName,
     username,
-    endpoint
+    endpoint,
+    endpointId
   );
 
-  const offer = connection.createOffer();
-  const sdp = write(offer);
-  return sdp;
+  return connection;
 }
 
 async function createEndpoint(
@@ -199,8 +200,6 @@ function getLine(productionLines: Line[], name: string): Line {
 export interface ApiProductionsOptions {
   smbServerBaseUrl: string;
   endpointIdleTimeout: string;
-  smbPoll: boolean;
-  smbPollInterval_s: string;
 }
 
 const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
@@ -377,11 +376,17 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           }
         }
 
+        if (line.connections[request.params.username]) {
+          throw new Error(
+            `Connection ${request.params.username} already exists`
+          );
+        }
+        const endpointId: string = uuidv4();
         const endpoint = await createEndpoint(
           smb,
           smbServerUrl,
           line.id,
-          request.params.username,
+          endpointId,
           true,
           false,
           parseInt(opts.endpointIdleTimeout, 10)
@@ -392,15 +397,16 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         if (!endpoint.audio.ssrcs) {
           throw new Error('Missing ssrcs when creating sdp offer for endpoint');
         }
-        if (request.params.name in line.connections) {
-          throw new Error(`Connection ${request.params.name} already exists`);
-        }
-        const sdpOffer = generateOffer(
+        const connection: Connection = createConnection(
           endpoint,
           production.name,
           line.name,
-          request.params.username
+          request.params.username,
+          endpointId
         );
+
+        const offer: SessionDescription = connection.createOffer();
+        const sdpOffer: string = write(offer);
 
         if (sdpOffer) {
           reply.code(200).send({ sdp: sdpOffer });
@@ -433,18 +439,23 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         const production: Production = getProduction(request.params.name);
         const line: Line = getLine(production.lines, request.params.linename);
 
-        const connectionEndpointDescription =
-          line.connections[request.params.username];
+        const connectionEndpointDescription: SmbEndpointDescription =
+          line.connections[request.params.username].sessionDescription;
+        const endpointId: string =
+          line.connections[request.params.username].endpointId;
 
         if (!connectionEndpointDescription) {
           throw new Error('Could not get connection endpoint description');
+        }
+        if (!endpointId) {
+          throw new Error('Could not get connection endpoint id');
         }
 
         await handleAnswerRequest(
           smb,
           smbServerUrl,
           line.id,
-          request.params.username,
+          endpointId,
           connectionEndpointDescription,
           request.body
         );
@@ -519,50 +530,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     }
   );
 
-  let parsedDelay_ms: number = parseInt(opts.smbPollInterval_s) * 1000;
-  if (parsedDelay_ms < 20000) {
-    parsedDelay_ms = 60000;
-  }
-
-  if (opts.smbPoll) {
-    startRepeatingPoll(smb, smbServerUrl, parsedDelay_ms);
-  }
-
   next();
 };
-
-async function poll(smb: SmbProtocol, smbServerUrl: string) {
-  const productions: Production[] = productionManager.getProductions();
-
-  for (const production of productions) {
-    for (const line of production.lines) {
-      const endpoints: DetailedConference[] = await smb.getConference(
-        smbServerUrl,
-        line.id
-      );
-      const activeConnections: Record<string, SmbEndpointDescription> = {};
-      for (const endpoint of endpoints) {
-        const activeConnection: SmbEndpointDescription =
-          line.connections[endpoint['id']];
-        if (activeConnection) {
-          activeConnections[endpoint['id']] = activeConnection;
-        }
-      }
-      line.connections = activeConnections;
-      console.log(line.connections);
-    }
-  }
-}
-
-function startRepeatingPoll(
-  smb: SmbProtocol,
-  smbServerUrl: string,
-  delay_ms: number
-) {
-  setInterval(() => {
-    poll(smb, smbServerUrl);
-    console.log('Repeating poll running...');
-  }, delay_ms);
-}
 
 export default apiProductions;

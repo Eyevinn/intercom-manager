@@ -41,8 +41,6 @@ export interface ApiOptions {
   title: string;
   smbServerBaseUrl: string;
   endpointIdleTimeout: string;
-  smbPoll: boolean;
-  smbPollInterval_s: string;
 }
 
 export default (opts: ApiOptions) => {
@@ -71,9 +69,7 @@ export default (opts: ApiOptions) => {
   // register other API routes here
   api.register(apiProductions, {
     smbServerBaseUrl: opts.smbServerBaseUrl,
-    endpointIdleTimeout: opts.endpointIdleTimeout,
-    smbPoll: opts.smbPoll,
-    smbPollInterval_s: opts.smbPollInterval_s
+    endpointIdleTimeout: opts.endpointIdleTimeout
   });
 
   return api;

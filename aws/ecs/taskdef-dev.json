@@ -18,14 +18,6 @@
         {
           "name": "SMB_ADDRESS",
           "value": "http://13.49.224.46:8280"
-        },
-        {
-          "name": "SMB_POLL",
-          "value": "true"
-        },
-        {
-          "name": "SMB_POLL_INTERVAL_S",
-          "value": "60"
         }
       ],
       "environmentFiles": [],

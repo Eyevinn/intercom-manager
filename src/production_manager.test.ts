@@ -284,7 +284,8 @@ describe('production_manager', () => {
       'productionname',
       'linename',
       'username',
-      SmbEndpointDescriptionMock
+      SmbEndpointDescriptionMock,
+      'endpoinId'
     );
     const productionLines =
       productionManagerTest.getProduction('productionname')?.lines;
@@ -294,7 +295,12 @@ describe('production_manager', () => {
     const endpointDescription = productionManagerTest.getLine(
       productionLines,
       'linename'
-    )?.connections['username'];
+    )?.connections['username'].sessionDescription;
+    const endpointId = productionManagerTest.getLine(
+      productionLines,
+      'linename'
+    )?.connections['username'].endpointId;
     expect(endpointDescription).toStrictEqual(SmbEndpointDescriptionMock);
+    expect(endpointId).toStrictEqual('endpoinId');
   });
 });

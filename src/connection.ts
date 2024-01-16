@@ -1,4 +1,3 @@
-import { v4 as uuidv4 } from 'uuid';
 import { EventEmitter } from 'events';
 import { SessionDescription } from 'sdp-transform';
 
@@ -17,15 +16,17 @@ export class Connection extends EventEmitter {
 
   protected mediaStreams?: MediaStreamsInfo;
   protected endpointDescription?: SfuEndpointDescription;
+  protected endpointId?: string;
 
   constructor(
     resourceId: string,
     mediaStreams: MediaStreamsInfo,
-    endpointDescription: SfuEndpointDescription
+    endpointDescription: SfuEndpointDescription,
+    endpointId: string
   ) {
     super();
     this.resourceId = resourceId;
-    this.connectionId = uuidv4();
+    this.connectionId = endpointId;
     this.mediaStreams = mediaStreams;
     this.endpointDescription = endpointDescription;
     this.log(`Create, sfuResourceId ${resourceId}`);

@@ -104,7 +104,8 @@ export class ProductionManager {
     productionName: string,
     lineName: string,
     userName: string,
-    endpointDescription: SmbEndpointDescription
+    endpointDescription: SmbEndpointDescription,
+    endpointId: string
   ): void {
     const production = this.getProduction(productionName);
     if (production) {
@@ -112,7 +113,10 @@ export class ProductionManager {
         (line) => line.name === lineName
       );
       if (matchedLine) {
-        matchedLine.connections[userName] = endpointDescription;
+        matchedLine.connections[userName] = {
+          sessionDescription: endpointDescription,
+          endpointId: endpointId
+        };
       }
     } else {
       throw new Error(

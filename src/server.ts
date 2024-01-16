@@ -7,18 +7,12 @@ if (!process.env.SMB_ADDRESS) {
 }
 
 const ENDPOINT_IDLE_TIMEOUT_S: string =
-  process.env.ENDPOINT_IDLE_TIMEOUT_S ?? '180';
-
-const SMB_POLL: boolean = process.env.SMB_POLL === 'true';
-
-const SMB_POLL_INTERVAL_S: string = process.env.SMB_POLL_INTERVAL_S ?? '60';
+  process.env.ENDPOINT_IDLE_TIMEOUT_S ?? '60';
 
 const server = api({
   title: 'intercom-manager',
   smbServerBaseUrl: SMB_ADDRESS,
-  endpointIdleTimeout: ENDPOINT_IDLE_TIMEOUT_S,
-  smbPoll: SMB_POLL,
-  smbPollInterval_s: SMB_POLL_INTERVAL_S
+  endpointIdleTimeout: ENDPOINT_IDLE_TIMEOUT_S
 });
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8000;
