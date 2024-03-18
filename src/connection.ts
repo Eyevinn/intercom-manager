@@ -1,4 +1,3 @@
-import { EventEmitter } from 'events';
 import { SessionDescription } from 'sdp-transform';
 
 import {
@@ -8,7 +7,7 @@ import {
 } from './sfu/interface';
 import { MediaStreamsInfo } from './media_streams_info';
 
-export class Connection extends EventEmitter {
+export class Connection {
   private resourceId: string;
   private connectionId: string;
   private nextMid = 0;
@@ -24,7 +23,6 @@ export class Connection extends EventEmitter {
     endpointDescription: SfuEndpointDescription,
     endpointId: string
   ) {
-    super();
     this.resourceId = resourceId;
     this.connectionId = endpointId;
     this.mediaStreams = mediaStreams;
