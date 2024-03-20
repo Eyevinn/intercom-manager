@@ -122,6 +122,7 @@ describe('production_manager', () => {
       lines: [
         {
           name: 'linename',
+          id: '1',
           smbid: '',
           connections: {}
         }
@@ -182,6 +183,7 @@ describe('production_manager', () => {
       lines: [
         {
           name: 'linename1',
+          id: '1',
           smbid: '',
           connections: {}
         }
@@ -194,6 +196,7 @@ describe('production_manager', () => {
       lines: [
         {
           name: 'linename2',
+          id: '1',
           smbid: '',
           connections: {}
         }
@@ -206,7 +209,7 @@ describe('production_manager', () => {
       production1,
       production2
     ]);
-    productionManagerTest.deleteProduction('productionname1');
+    productionManagerTest.deleteProduction('1');
     expect(productionManagerTest.getProductions()).toStrictEqual([production2]);
   });
 });
@@ -226,11 +229,11 @@ describe('production_manager', () => {
 
     const production = productionManagerTest.createProduction(newProduction);
     expect(productionManagerTest.getProductions()).toStrictEqual([production]);
-    productionManagerTest.deleteProduction('productionname');
+    productionManagerTest.deleteProduction('1');
     expect(productionManagerTest.getProductions()).toStrictEqual([]);
-    expect(
-      productionManagerTest.deleteProduction('productionname')
-    ).toStrictEqual(undefined);
+    expect(productionManagerTest.deleteProduction('1')).toStrictEqual(
+      undefined
+    );
   });
 });
 
@@ -251,7 +254,7 @@ describe('production_manager', () => {
     const lineIdBefore =
       productionManagerTest.getProduction('1')?.lines[0].smbid;
     expect(lineIdBefore).toStrictEqual('');
-    productionManagerTest.setLineId('1', 'linename', 'newLineId');
+    productionManagerTest.setLineId('1', '1', 'newLineId');
     const lineIdAfter =
       productionManagerTest.getProduction('1')?.lines[0].smbid;
     expect(lineIdAfter).toStrictEqual('newLineId');
@@ -279,7 +282,7 @@ describe('production_manager', () => {
       name: 'productionname',
       lines: [
         {
-          name: 'linename'
+          name: 'linename_addConnection'
         }
       ]
     };
@@ -287,10 +290,10 @@ describe('production_manager', () => {
     productionManagerTest.createProduction(newProduction);
     productionManagerTest.addConnectionToLine(
       '1',
-      'linename',
-      'username',
+      '1',
       SmbEndpointDescriptionMock,
-      'endpoinId'
+      'endpointId',
+      'sessionId'
     );
     const productionLines = productionManagerTest.getProduction('1')?.lines;
     if (!productionLines) {
@@ -298,13 +301,11 @@ describe('production_manager', () => {
     }
     const endpointDescription = productionManagerTest.getLine(
       productionLines,
-      'linename'
-    )?.connections['username'].sessionDescription;
-    const endpointId = productionManagerTest.getLine(
-      productionLines,
-      'linename'
-    )?.connections['username'].endpointId;
+      '1'
+    )?.connections['sessionId'].sessionDescription;
+    const endpointId = productionManagerTest.getLine(productionLines, '1')
+      ?.connections['sessionId'].endpointId;
     expect(endpointDescription).toStrictEqual(SmbEndpointDescriptionMock);
-    expect(endpointId).toStrictEqual('endpoinId');
+    expect(endpointId).toStrictEqual('endpointId');
   });
 });

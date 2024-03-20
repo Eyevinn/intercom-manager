@@ -17,9 +17,12 @@ export class ProductionManager {
     if (!this.getProduction(productionId)) {
       const newProductionLines: Line[] = [];
 
+      let index = 0;
       for (const line of newProduction.lines) {
+        index++;
         const newProductionLine: Line = {
           name: line.name,
+          id: index.toString(),
           smbid: '',
           connections: {}
         };
@@ -61,13 +64,13 @@ export class ProductionManager {
     }
   }
 
-  deleteProduction(productionName: string): string | undefined {
+  deleteProduction(productionId: string): string | undefined {
     const matchedProductionIndex: number = this.productions.findIndex(
-      (production) => production.name === productionName
+      (production) => production.productionid === productionId
     );
     if (matchedProductionIndex != -1) {
       if (this.productions.splice(matchedProductionIndex, 1)) {
-        return productionName;
+        return productionId;
       } else {
         return undefined;
       }
@@ -78,12 +81,12 @@ export class ProductionManager {
 
   setLineId(
     productionid: string,
-    lineName: string,
+    lineId: string,
     lineSmbId: string
   ): Line | undefined {
     const matchedProduction = this.getProduction(productionid);
     if (matchedProduction) {
-      const line = this.getLine(matchedProduction.lines, lineName);
+      const line = this.getLine(matchedProduction.lines, lineId);
       if (line) {
         line.smbid = lineSmbId;
         return line;
@@ -95,8 +98,8 @@ export class ProductionManager {
     }
   }
 
-  getLine(lines: Line[], lineName: string): Line | undefined {
-    const matchedLine = lines.find((line) => line.name === lineName);
+  getLine(lines: Line[], lineId: string): Line | undefined {
+    const matchedLine = lines.find((line) => line.id === lineId);
     if (matchedLine) {
       return matchedLine;
     }
@@ -105,21 +108,23 @@ export class ProductionManager {
 
   addConnectionToLine(
     productionId: string,
-    lineName: string,
-    userName: string,
+    lineId: string,
     endpointDescription: SmbEndpointDescription,
-    endpointId: string
+    endpointId: string,
+    sessionId: string
   ): void {
     const production = this.getProduction(productionId);
     if (production) {
-      const matchedLine = production.lines.find(
-        (line) => line.name === lineName
-      );
+      const matchedLine = production.lines.find((line) => line.id === lineId);
       if (matchedLine) {
-        matchedLine.connections[userName] = {
+        matchedLine.connections[sessionId] = {
           sessionDescription: endpointDescription,
           endpointId: endpointId
         };
+      } else {
+        throw new Error(
+          `Adding connection failed, Line ${lineId} does not exist`
+        );
       }
     } else {
       throw new Error(
@@ -129,22 +134,20 @@ export class ProductionManager {
   }
 
   removeConnectionFromLine(
-    productionName: string,
-    lineName: string,
-    userName: string
+    productionId: string,
+    lineId: string,
+    sessionId: string
   ): string | undefined {
-    const production = this.getProduction(productionName);
+    const production = this.getProduction(productionId);
     if (production) {
-      const matchedLine = production.lines.find(
-        (line) => line.name === lineName
-      );
+      const matchedLine = production.lines.find((line) => line.id === lineId);
       if (matchedLine?.connections) {
-        delete matchedLine.connections[userName];
-        return userName;
+        delete matchedLine.connections[sessionId];
+        return sessionId;
       }
     } else {
       throw new Error(
-        `Deleting connection failed, Production ${productionName} does not exist`
+        `Deleting connection failed, Production ${productionId} does not exist`
       );
     }
   }
