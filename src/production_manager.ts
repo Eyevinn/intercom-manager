@@ -13,19 +13,22 @@ export class ProductionManager {
   }
 
   createProduction(newProduction: NewProduction): Production | undefined {
-    if (!this.getProduction(newProduction.name)) {
+    const productionId: string = (this.productions.length + 1).toString();
+    if (!this.getProduction(productionId)) {
       const newProductionLines: Line[] = [];
 
       for (const line of newProduction.lines) {
         const newProductionLine: Line = {
           name: line.name,
-          id: '',
+          smbid: '',
           connections: {}
         };
         newProductionLines.push(newProductionLine);
       }
+
       const production: Production = {
         name: newProduction.name,
+        productionid: productionId,
         lines: newProductionLines
       };
       if (production) {
@@ -38,7 +41,7 @@ export class ProductionManager {
       }
     } else {
       throw new Error(
-        `Create production failed, Production ${newProduction.name} already exists`
+        `Create production failed, Production ${newProduction} already exists`
       );
     }
   }
@@ -47,9 +50,9 @@ export class ProductionManager {
     return this.productions;
   }
 
-  getProduction(productionName: string): Production | undefined {
+  getProduction(productionid: string): Production | undefined {
     const matchedProduction = this.productions.find(
-      (production) => production.name === productionName
+      (production) => production.productionid === productionid
     );
     if (matchedProduction) {
       return matchedProduction;
@@ -74,15 +77,15 @@ export class ProductionManager {
   }
 
   setLineId(
-    productionName: string,
+    productionid: string,
     lineName: string,
-    lineId: string
+    lineSmbId: string
   ): Line | undefined {
-    const matchedProduction = this.getProduction(productionName);
+    const matchedProduction = this.getProduction(productionid);
     if (matchedProduction) {
       const line = this.getLine(matchedProduction.lines, lineName);
       if (line) {
-        line.id = lineId;
+        line.smbid = lineSmbId;
         return line;
       } else {
         return undefined;
@@ -101,13 +104,13 @@ export class ProductionManager {
   }
 
   addConnectionToLine(
-    productionName: string,
+    productionId: string,
     lineName: string,
     userName: string,
     endpointDescription: SmbEndpointDescription,
     endpointId: string
   ): void {
-    const production = this.getProduction(productionName);
+    const production = this.getProduction(productionId);
     if (production) {
       const matchedLine = production.lines.find(
         (line) => line.name === lineName
@@ -120,7 +123,7 @@ export class ProductionManager {
       }
     } else {
       throw new Error(
-        `Adding connection failed, Production ${productionName} does not exist`
+        `Adding connection failed, Production ${productionId} does not exist`
       );
     }
   }

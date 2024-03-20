@@ -2,6 +2,7 @@ import { Type, Static } from '@sinclair/typebox';
 
 export type NewProduction = Static<typeof NewProduction>;
 export type Production = Static<typeof Production>;
+export type ProductionResponse = Static<typeof ProductionResponse>;
 export type Line = Static<typeof Line>;
 export type SmbEndpointDescription = Static<typeof SmbEndpointDescription>;
 export type DetailedConference = Static<typeof DetailedConference>;
@@ -134,17 +135,22 @@ export const Connections = Type.Record(Type.String(), Endpoint);
 
 export const Production = Type.Object({
   name: Type.String(),
+  productionid: Type.String(),
   lines: Type.Array(
     Type.Object({
       name: Type.String(),
-      id: Type.String(),
+      smbid: Type.String(),
       connections: Connections
     })
   )
 });
 
+export const ProductionResponse = Type.Object({
+  productionid: Type.String()
+});
+
 export const Line = Type.Object({
   name: Type.String(),
-  id: Type.String(),
+  smbid: Type.String(),
   connections: Connections
 });
