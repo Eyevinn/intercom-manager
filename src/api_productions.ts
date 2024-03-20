@@ -192,7 +192,7 @@ function getLine(productionLines: Line[], name: string): Line {
     name
   );
   if (!line) {
-    throw new Error('Trying to join production that does not exist');
+    throw new Error('Trying to get line that does not exist');
   }
   return line;
 }
@@ -220,7 +220,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     '/production',
     {
       schema: {
-        // description: 'Create a new Production resource.',
+        description: 'Create a new Production.',
         body: NewProduction,
         response: {
           200: Production
@@ -250,7 +250,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     '/productions',
     {
       schema: {
-        // description: 'Retrieves all Productions.',
+        description: 'Retrieves all Productions.',
         response: {
           200: Type.Array(Production)
         }
@@ -269,13 +269,13 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   );
 
   fastify.get<{
-    Params: { name: string };
+    Params: { productionname: string };
     Reply: Production | string;
   }>(
-    '/productions/:name',
+    '/productions/:productionname',
     {
       schema: {
-        // description: 'Retrieves a Production.',
+        description: 'Retrieves a Production.',
         response: {
           200: Production
         }
@@ -283,7 +283,9 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const production: Production = getProduction(request.params.name);
+        const production: Production = getProduction(
+          request.params.productionname
+        );
         reply.code(200).send(production);
       } catch (err) {
         reply
@@ -294,13 +296,13 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   );
 
   fastify.get<{
-    Params: { name: string };
+    Params: { productionname: string };
     Reply: Line[] | string;
   }>(
-    '/productions/:name/lines',
+    '/productions/:productionname/lines',
     {
       schema: {
-        // description: 'Retrieves lines for a Production.',
+        description: 'Retrieves all lines for a Production.',
         response: {
           200: Type.Array(Line)
         }
@@ -308,7 +310,9 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const production: Production = getProduction(request.params.name);
+        const production: Production = getProduction(
+          request.params.productionname
+        );
         reply.code(200).send(production.lines);
       } catch (err) {
         reply
@@ -319,13 +323,13 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   );
 
   fastify.get<{
-    Params: { name: string; linename: string };
+    Params: { productionname: string; linename: string };
     Reply: Line | string;
   }>(
-    '/productions/:name/lines/:linename',
+    '/productions/:productionname/lines/:linename',
     {
       schema: {
-        // description: 'Retrieves an active Production line.',
+        description: 'Retrieves an active Production line.',
         response: {
           200: Line
         }
@@ -333,7 +337,9 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const production: Production = getProduction(request.params.name);
+        const production: Production = getProduction(
+          request.params.productionname
+        );
         const line: Line = getLine(production.lines, request.params.linename);
         reply.code(200).send(line);
       } catch (err) {
@@ -345,13 +351,14 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   );
 
   fastify.post<{
-    Params: { name: string; linename: string; username: string };
+    Params: { productionname: string; linename: string; username: string };
     Reply: { [key: string]: string | string[] } | string;
   }>(
-    '/productions/:name/lines/:linename/users/:username',
+    '/productions/:productionname/lines/:linename/users/:username',
     {
       schema: {
-        // description: 'Initiate line conference join.',
+        description:
+          'Initiate connection protocol. Generates sdp offer describing remote SMB instance.',
         response: {
           200: Type.Object({
             sdp: Type.String()
@@ -361,7 +368,9 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const production: Production = getProduction(request.params.name);
+        const production: Production = getProduction(
+          request.params.productionname
+        );
         const line: Line = getLine(production.lines, request.params.linename);
 
         const activeLines = await getActiveLines(smb, smbServerUrl);
@@ -422,13 +431,14 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   );
 
   fastify.patch<{
-    Params: { name: string; linename: string; username: string };
+    Params: { productionname: string; linename: string; username: string };
     Body: string;
   }>(
-    '/productions/:name/lines/:linename/users/:username',
+    '/productions/:productionname/lines/:linename/users/:username',
     {
       schema: {
-        //description: 'Provide client connection information to finalize line conference join.',
+        description:
+          'Provide client local SDP description as request body to finalize connection protocol.',
         response: {
           200: Line
         }
@@ -436,7 +446,9 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const production: Production = getProduction(request.params.name);
+        const production: Production = getProduction(
+          request.params.productionname
+        );
         const line: Line = getLine(production.lines, request.params.linename);
 
         const connectionEndpointDescription: SmbEndpointDescription =
@@ -469,13 +481,13 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   );
 
   fastify.delete<{
-    Params: { name: string };
+    Params: { productionname: string };
     Reply: string;
   }>(
-    '/productions/:name',
+    '/productions/:productionname',
     {
       schema: {
-        // description: 'Deletes a Production.',
+        description: 'Deletes a Production.',
         response: {
           204: Type.String()
         }
@@ -483,10 +495,14 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        if (!productionManager.deleteProduction(request.params.name)) {
+        if (
+          !productionManager.deleteProduction(request.params.productionname)
+        ) {
           throw new Error('Could not delete production');
         }
-        reply.code(204).send(`Deleted production ${request.params.name}`);
+        reply
+          .code(204)
+          .send(`Deleted production ${request.params.productionname}`);
       } catch (err) {
         reply
           .code(500)
@@ -496,13 +512,13 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   );
 
   fastify.delete<{
-    Params: { name: string; linename: string; username: string };
+    Params: { productionname: string; linename: string; username: string };
     Reply: string;
   }>(
-    '/productions/:name/lines/:linename/users/:username',
+    '/productions/:productionname/lines/:linename/users/:username',
     {
       schema: {
-        // description: 'Deletes a Connection from ProductionManager.',
+        description: 'Deletes a Connection from ProductionManager.',
         response: {
           204: Type.String()
         }
@@ -512,7 +528,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       try {
         if (
           !productionManager.removeConnectionFromLine(
-            request.params.name,
+            request.params.productionname,
             request.params.linename,
             request.params.username
           )
