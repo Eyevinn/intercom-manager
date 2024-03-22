@@ -4,6 +4,7 @@ import {
   NewProduction,
   Production,
   Line,
+  LineResponse,
   SmbEndpointDescription,
   ProductionResponse
 } from './models';
@@ -21,9 +22,10 @@ const productionManager = new ProductionManager();
 function createConnection(
   endpoint: SmbEndpointDescription,
   productionId: string,
-  lineName: string,
+  lineId: string,
   username: string,
-  endpointId: string
+  endpointId: string,
+  sessionId: string
 ): Connection {
   if (!endpoint.audio) {
     throw new Error('Missing audio when creating offer');
@@ -54,10 +56,10 @@ function createConnection(
 
   productionManager.addConnectionToLine(
     productionId,
-    lineName,
-    username,
+    lineId,
     endpoint,
-    endpointId
+    endpointId,
+    sessionId
   );
 
   return connection;
@@ -86,7 +88,7 @@ async function createEndpoint(
 async function handleAnswerRequest(
   smb: SmbProtocol,
   smbServerUrl: string,
-  lineName: string,
+  lineId: string,
   endpointId: string,
   endpointDescription: SmbEndpointDescription,
   answer: string
@@ -164,7 +166,7 @@ async function handleAnswerRequest(
 
   return await smb.configureEndpoint(
     smbServerUrl,
-    lineName,
+    lineId,
     endpointId,
     endpointDescription
   );
@@ -187,10 +189,10 @@ function getProduction(name: string): Production {
   return production;
 }
 
-function getLine(productionLines: Line[], name: string): Line {
+function getLine(productionLines: Line[], lineId: string): Line {
   const line: Line | undefined = productionManager.getLine(
     productionLines,
-    name
+    lineId
   );
   if (!line) {
     throw new Error('Trying to get line that does not exist');
@@ -327,15 +329,15 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   );
 
   fastify.get<{
-    Params: { productionid: string; linename: string };
-    Reply: Line | string;
+    Params: { productionid: string; lineId: string };
+    Reply: LineResponse | string;
   }>(
-    '/productions/:productionid/lines/:linename',
+    '/productions/:productionid/lines/:lineId',
     {
       schema: {
         description: 'Retrieves an active Production line.',
         response: {
-          200: Line
+          200: LineResponse
         }
       }
     },
@@ -344,8 +346,13 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         const production: Production = getProduction(
           request.params.productionid
         );
-        const line: Line = getLine(production.lines, request.params.linename);
-        reply.code(200).send(line);
+        const line: Line = getLine(production.lines, request.params.lineId);
+        const lineResponse: LineResponse = {
+          name: line.name,
+          id: line.id,
+          sessionid: line.smbid
+        };
+        reply.code(200).send(lineResponse);
       } catch (err) {
         reply
           .code(500)
@@ -355,17 +362,18 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   );
 
   fastify.post<{
-    Params: { productionid: string; linename: string; username: string };
+    Params: { productionid: string; lineid: string; username: string };
     Reply: { [key: string]: string | string[] } | string;
   }>(
-    '/productions/:productionid/lines/:linename/users/:username',
+    '/productions/:productionid/lines/:lineid/users/:username',
     {
       schema: {
         description:
           'Initiate connection protocol. Generates sdp offer describing remote SMB instance.',
         response: {
           200: Type.Object({
-            sdp: Type.String()
+            sdp: Type.String(),
+            sessionid: Type.String()
           })
         }
       }
@@ -375,7 +383,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         const production: Production = getProduction(
           request.params.productionid
         );
-        const line: Line = getLine(production.lines, request.params.linename);
+        const line: Line = getLine(production.lines, request.params.lineid);
 
         const activeLines = await getActiveLines(smb, smbServerUrl);
         if (!activeLines.includes(line.smbid)) {
@@ -383,21 +391,16 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           if (
             !productionManager.setLineId(
               production.productionid,
-              line.name,
+              line.id,
               newLineId
             )
           ) {
             throw new Error(
-              `Failed to set line smb id for line ${line.name} in production ${production.name}`
+              `Failed to set line smb id for line ${line.id} in production ${production.productionid}`
             );
           }
         }
 
-        if (line.connections[request.params.username]) {
-          throw new Error(
-            `Connection ${request.params.username} already exists`
-          );
-        }
         const endpointId: string = uuidv4();
         const endpoint = await createEndpoint(
           smb,
@@ -414,19 +417,21 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         if (!endpoint.audio.ssrcs) {
           throw new Error('Missing ssrcs when creating sdp offer for endpoint');
         }
+        const sessionId: string = uuidv4();
         const connection: Connection = createConnection(
           endpoint,
           production.productionid,
-          line.name,
+          line.id,
           request.params.username,
-          endpointId
+          endpointId,
+          sessionId
         );
 
         const offer: SessionDescription = connection.createOffer();
         const sdpOffer: string = write(offer);
 
         if (sdpOffer) {
-          reply.code(200).send({ sdp: sdpOffer });
+          reply.code(200).send({ sdp: sdpOffer, sessionid: sessionId });
         } else {
           reply.code(500).send('Failed to generate sdp offer for endpoint');
         }
@@ -439,10 +444,10 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   );
 
   fastify.patch<{
-    Params: { productionid: string; linename: string; username: string };
+    Params: { productionid: string; lineid: string; sessionid: string };
     Body: string;
   }>(
-    '/productions/:productionid/lines/:linename/users/:username',
+    '/productions/:productionid/lines/:lineid/session/:sessionid',
     {
       schema: {
         description:
@@ -457,12 +462,12 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         const production: Production = getProduction(
           request.params.productionid
         );
-        const line: Line = getLine(production.lines, request.params.linename);
+        const line: Line = getLine(production.lines, request.params.lineid);
 
         const connectionEndpointDescription: SmbEndpointDescription =
-          line.connections[request.params.username].sessionDescription;
+          line.connections[request.params.sessionid].sessionDescription;
         const endpointId: string =
-          line.connections[request.params.username].endpointId;
+          line.connections[request.params.sessionid].endpointId;
 
         if (!connectionEndpointDescription) {
           throw new Error('Could not get connection endpoint description');
@@ -518,10 +523,10 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   );
 
   fastify.delete<{
-    Params: { productionid: string; linename: string; username: string };
+    Params: { productionid: string; lineid: string; sessionid: string };
     Reply: string;
   }>(
-    '/productions/:productionid/lines/:linename/users/:username',
+    '/productions/:productionid/lines/:lineid/session/:sessionid',
     {
       schema: {
         description: 'Deletes a Connection from ProductionManager.',
@@ -535,15 +540,15 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         if (
           !productionManager.removeConnectionFromLine(
             request.params.productionid,
-            request.params.linename,
-            request.params.username
+            request.params.lineid,
+            request.params.sessionid
           )
         ) {
           throw new Error(
-            `Could not delete connection ${request.params.username}`
+            `Could not delete connection ${request.params.sessionid}`
           );
         }
-        reply.code(204).send(`Deleted connection ${request.params.username}`);
+        reply.code(204).send(`Deleted connection ${request.params.sessionid}`);
       } catch (err) {
         reply
           .code(500)

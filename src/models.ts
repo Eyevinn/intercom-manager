@@ -4,6 +4,7 @@ export type NewProduction = Static<typeof NewProduction>;
 export type Production = Static<typeof Production>;
 export type ProductionResponse = Static<typeof ProductionResponse>;
 export type Line = Static<typeof Line>;
+export type LineResponse = Static<typeof LineResponse>;
 export type SmbEndpointDescription = Static<typeof SmbEndpointDescription>;
 export type DetailedConference = Static<typeof DetailedConference>;
 
@@ -139,6 +140,7 @@ export const Production = Type.Object({
   lines: Type.Array(
     Type.Object({
       name: Type.String(),
+      id: Type.String(),
       smbid: Type.String(),
       connections: Connections
     })
@@ -149,8 +151,15 @@ export const ProductionResponse = Type.Object({
   productionid: Type.String()
 });
 
+export const LineResponse = Type.Object({
+  name: Type.String(),
+  id: Type.String(),
+  sessionid: Type.String() // SMB endpoint id
+});
+
 export const Line = Type.Object({
   name: Type.String(),
+  id: Type.String(),
   smbid: Type.String(),
   connections: Connections
 });
