@@ -5,6 +5,8 @@ import {
   SmbEndpointDescription
 } from './models';
 
+import { UserManager } from './user_manager';
+
 export class ProductionManager {
   private productions: Production[];
 
@@ -24,7 +26,8 @@ export class ProductionManager {
           name: line.name,
           id: index.toString(),
           smbid: '',
-          connections: {}
+          connections: {},
+          users: new UserManager()
         };
         newProductionLines.push(newProductionLine);
       }
@@ -119,7 +122,8 @@ export class ProductionManager {
       if (matchedLine) {
         matchedLine.connections[sessionId] = {
           sessionDescription: endpointDescription,
-          endpointId: endpointId
+          endpointId: endpointId,
+          isActive: true
         };
       } else {
         throw new Error(
@@ -144,6 +148,10 @@ export class ProductionManager {
       if (matchedLine?.connections) {
         delete matchedLine.connections[sessionId];
         return sessionId;
+      } else {
+        throw new Error(
+          `Deleting connection failed, Line ${lineId} does not exist`
+        );
       }
     } else {
       throw new Error(

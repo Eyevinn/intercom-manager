@@ -6,7 +6,8 @@ import {
   Line,
   LineResponse,
   SmbEndpointDescription,
-  ProductionResponse
+  ProductionResponse,
+  User
 } from './models';
 import { SmbProtocol } from './smb';
 import { ProductionManager } from './production_manager';
@@ -15,6 +16,7 @@ import { write, parse, SessionDescription } from 'sdp-transform';
 import dotenv from 'dotenv';
 import { MediaStreamsInfoSsrc } from './media_streams_info';
 import { v4 as uuidv4 } from 'uuid';
+import { UserManager } from './user_manager';
 dotenv.config();
 
 const productionManager = new ProductionManager();
@@ -180,9 +182,9 @@ async function getActiveLines(
   return productions;
 }
 
-function getProduction(name: string): Production {
+function getProduction(productionId: string): Production {
   const production: Production | undefined =
-    productionManager.getProduction(name);
+    productionManager.getProduction(productionId);
   if (!production) {
     throw new Error('Trying to get production that does not exist');
   }
@@ -197,6 +199,12 @@ function getLine(productionLines: Line[], lineId: string): Line {
   if (!line) {
     throw new Error('Trying to get line that does not exist');
   }
+  return line;
+}
+
+function retrieveLineFromProduction(productionId: string, lineId: string) {
+  const production: Production = getProduction(productionId);
+  const line: Line = getLine(production.lines, lineId);
   return line;
 }
 
@@ -329,10 +337,10 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   );
 
   fastify.get<{
-    Params: { productionid: string; lineId: string };
+    Params: { productionid: string; lineid: string };
     Reply: LineResponse | string;
   }>(
-    '/productions/:productionid/lines/:lineId',
+    '/productions/:productionid/lines/:lineid',
     {
       schema: {
         description: 'Retrieves an active Production line.',
@@ -343,14 +351,15 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const production: Production = getProduction(
-          request.params.productionid
+        const line: Line = retrieveLineFromProduction(
+          request.params.productionid,
+          request.params.lineid
         );
-        const line: Line = getLine(production.lines, request.params.lineId);
         const lineResponse: LineResponse = {
           name: line.name,
           id: line.id,
-          sessionid: line.smbid
+          smbconferenceid: line.smbid,
+          participants: line.users.users
         };
         reply.code(200).send(lineResponse);
       } catch (err) {
@@ -431,6 +440,12 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         const sdpOffer: string = write(offer);
 
         if (sdpOffer) {
+          const lineUserManager: UserManager = line.users;
+          lineUserManager.addUser({
+            name: request.params.username,
+            isActive: true,
+            sessionid: sessionId
+          });
           reply.code(200).send({ sdp: sdpOffer, sessionid: sessionId });
         } else {
           reply.code(500).send('Failed to generate sdp offer for endpoint');
@@ -459,10 +474,10 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const production: Production = getProduction(
-          request.params.productionid
+        const line: Line = retrieveLineFromProduction(
+          request.params.productionid,
+          request.params.lineid
         );
-        const line: Line = getLine(production.lines, request.params.lineid);
 
         const connectionEndpointDescription: SmbEndpointDescription =
           line.connections[request.params.sessionid].sessionDescription;
@@ -553,6 +568,48 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         reply
           .code(500)
           .send('Exception thrown when trying to delete connection: ' + err);
+      }
+    }
+  );
+
+  //Long poll endpoint
+  fastify.post<{
+    Params: { productionid: string; lineid: string; sessionid: string };
+    Reply: User[] | string;
+  }>(
+    '/productions/:productionid/lines/:lineid/participants',
+    {
+      schema: {
+        description:
+          'Long Poll Endpoint to confirm client connection is active and receive participant list.',
+        response: {
+          200: Type.Array(User)
+        }
+      }
+    },
+    async (request, reply) => {
+      try {
+        const line: Line = retrieveLineFromProduction(
+          request.params.productionid,
+          request.params.lineid
+        );
+        const lineUserManager: UserManager = line.users;
+        const participants: User[] = lineUserManager.getUsers();
+
+        const waitForChange = new Promise<void>((resolve) => {
+          lineUserManager.changeEmitter.once('change', () => {
+            resolve();
+          });
+        });
+        await waitForChange;
+        reply.code(200).send(participants);
+      } catch (err) {
+        reply
+          .code(500)
+          .send(
+            'Exception thrown when trying to set connection status for session: ' +
+              err
+          );
       }
     }
   );
