@@ -16,7 +16,7 @@ import { write, parse, SessionDescription } from 'sdp-transform';
 import dotenv from 'dotenv';
 import { MediaStreamsInfoSsrc } from './media_streams_info';
 import { v4 as uuidv4 } from 'uuid';
-import { UserManager } from './user_manager';
+import { Timer, UserManager } from './user_manager';
 dotenv.config();
 
 const productionManager = new ProductionManager();
@@ -202,15 +202,53 @@ function getLine(productionLines: Line[], lineId: string): Line {
   return line;
 }
 
+function getUser(line: Line, sessionid: string): User {
+  const lineUserManager: UserManager = line.users;
+  const user: User | undefined = lineUserManager.getUser(sessionid);
+  if (!user) {
+    throw new Error(`Could not find user session ${sessionid}`);
+  }
+  return user;
+}
+
 function retrieveLineFromProduction(productionId: string, lineId: string) {
   const production: Production = getProduction(productionId);
   const line: Line = getLine(production.lines, lineId);
   return line;
 }
 
+function cleanupInActiveSessions(
+  userInactivityThreshold: string,
+  userRemovalThreshold: string
+) {
+  const productions: Production[] = productionManager.getProductions();
+  for (const production of productions) {
+    for (const line of production.lines) {
+      const lineUserManager: UserManager = line.users;
+      const users: User[] = lineUserManager.getUsers();
+      for (const user of users) {
+        const userTimer: Timer = user.heartbeatTimer;
+        const timeSinceLastHeartbeat: number = userTimer.getTime();
+        if (timeSinceLastHeartbeat >= parseInt(userInactivityThreshold, 10)) {
+          user.isActive = false;
+        } else if (
+          timeSinceLastHeartbeat >= parseInt(userRemovalThreshold, 10)
+        ) {
+          const lineUserManager: UserManager = line.users;
+          lineUserManager.removeUser(user.sessionid);
+        }
+      }
+    }
+  }
+}
+
 export interface ApiProductionsOptions {
   smbServerBaseUrl: string;
   endpointIdleTimeout: string;
+  regularCleanup: string;
+  userInactivityThreshold: string;
+  userRemovalThreshold: string;
+  userCleanupInterval: string;
 }
 
 const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
@@ -222,7 +260,17 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     '/conferences/',
     opts.smbServerBaseUrl
   ).toString();
+
   const smb = new SmbProtocol();
+
+  if (opts.regularCleanup === 'true') {
+    setInterval(() => {
+      cleanupInActiveSessions(
+        opts.userInactivityThreshold,
+        opts.userCleanupInterval
+      );
+    }, parseInt(opts.userCleanupInterval, 10) * 1000);
+  }
 
   fastify.post<{
     Body: NewProduction;
@@ -580,8 +628,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     '/productions/:productionid/lines/:lineid/participants',
     {
       schema: {
-        description:
-          'Long Poll Endpoint to confirm client connection is active and receive participant list.',
+        description: 'Long Poll Endpoint to receive participant list.',
         response: {
           200: Type.Array(User)
         }
@@ -608,6 +655,42 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           .code(500)
           .send(
             'Exception thrown when trying to set connection status for session: ' +
+              err
+          );
+      }
+    }
+  );
+
+  //heartbeat endpoint
+  fastify.post<{
+    Params: { productionid: string; lineid: string; sessionid: string };
+    Reply: string;
+  }>(
+    '/productions/:productionid/lines/:lineid/session/:sessionid',
+    {
+      schema: {
+        description: 'Heartbeat Endpoint to confirm client session is active.',
+        response: {
+          200: Type.String()
+        }
+      }
+    },
+    async (request, reply) => {
+      try {
+        const line: Line = retrieveLineFromProduction(
+          request.params.productionid,
+          request.params.lineid
+        );
+        const user: User = getUser(line, request.params.sessionid);
+        user.heartbeatTimer.resetTimer();
+        reply
+          .code(200)
+          .send(`Heartbeat confirmed for session ${request.params.sessionid}`);
+      } catch (err) {
+        reply
+          .code(500)
+          .send(
+            `Exception thrown when trying to set connection status for session ${request.params.sessionid}: ` +
               err
           );
       }

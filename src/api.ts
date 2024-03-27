@@ -41,6 +41,10 @@ export interface ApiOptions {
   title: string;
   smbServerBaseUrl: string;
   endpointIdleTimeout: string;
+  regularCleanup: string;
+  userInactivityThreshold: string;
+  userRemovalThreshold: string;
+  userCleanupInterval: string;
 }
 
 export default (opts: ApiOptions) => {
@@ -69,7 +73,11 @@ export default (opts: ApiOptions) => {
   // register other API routes here
   api.register(apiProductions, {
     smbServerBaseUrl: opts.smbServerBaseUrl,
-    endpointIdleTimeout: opts.endpointIdleTimeout
+    endpointIdleTimeout: opts.endpointIdleTimeout,
+    regularCleanup: opts.endpointIdleTimeout,
+    userInactivityThreshold: opts.userInactivityThreshold,
+    userRemovalThreshold: opts.userRemovalThreshold,
+    userCleanupInterval: opts.userCleanupInterval
   });
 
   return api;

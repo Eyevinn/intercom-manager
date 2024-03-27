@@ -158,7 +158,8 @@ export const ProductionResponse = Type.Object({
 export const User = Type.Object({
   name: Type.String(),
   sessionid: Type.String(),
-  isActive: Type.Boolean()
+  isActive: Type.Boolean(),
+  heartbeatTimer: Type.Optional(Type.Any())
 });
 
 export const LineResponse = Type.Object({
