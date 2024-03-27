@@ -1,4 +1,5 @@
 import { ProductionManager } from './production_manager';
+import { UserManager } from './user_manager';
 import { NewProduction, Production, SmbEndpointDescription } from './models';
 
 const SmbEndpointDescriptionMock: SmbEndpointDescription = {
@@ -124,7 +125,8 @@ describe('production_manager', () => {
           name: 'linename',
           id: '1',
           smbid: '',
-          connections: {}
+          connections: {},
+          users: new UserManager()
         }
       ]
     };
@@ -185,7 +187,8 @@ describe('production_manager', () => {
           name: 'linename1',
           id: '1',
           smbid: '',
-          connections: {}
+          connections: {},
+          users: new UserManager()
         }
       ]
     };
@@ -198,7 +201,8 @@ describe('production_manager', () => {
           name: 'linename2',
           id: '1',
           smbid: '',
-          connections: {}
+          connections: {},
+          users: new UserManager()
         }
       ]
     };
@@ -299,13 +303,16 @@ describe('production_manager', () => {
     if (!productionLines) {
       fail('Test failed due to productionLines being undefined');
     }
-    const endpointDescription = productionManagerTest.getLine(
-      productionLines,
-      '1'
-    )?.connections['sessionId'].sessionDescription;
-    const endpointId = productionManagerTest.getLine(productionLines, '1')
-      ?.connections['sessionId'].endpointId;
-    expect(endpointDescription).toStrictEqual(SmbEndpointDescriptionMock);
-    expect(endpointId).toStrictEqual('endpointId');
+    const line = productionManagerTest.getLine(productionLines, '1');
+    expect(line);
+
+    const endpoint = line?.connections['sessionId'];
+    expect(endpoint);
+
+    expect(endpoint?.sessionDescription).toStrictEqual(
+      SmbEndpointDescriptionMock
+    );
+    expect(endpoint?.endpointId).toStrictEqual('endpointId');
+    expect(endpoint?.isActive).toStrictEqual(true);
   });
 });

@@ -7,6 +7,8 @@ export type Line = Static<typeof Line>;
 export type LineResponse = Static<typeof LineResponse>;
 export type SmbEndpointDescription = Static<typeof SmbEndpointDescription>;
 export type DetailedConference = Static<typeof DetailedConference>;
+export type Endpoint = Static<typeof Endpoint>;
+export type User = Static<typeof User>;
 
 export const Audio = Type.Object({
   'relay-type': Type.Array(
@@ -129,37 +131,39 @@ export const SmbEndpointDescription = Type.Object({
 
 export const Endpoint = Type.Object({
   endpointId: Type.String(),
-  sessionDescription: SmbEndpointDescription
+  sessionDescription: SmbEndpointDescription,
+  isActive: Type.Boolean()
 });
 
 export const Connections = Type.Record(Type.String(), Endpoint);
 
+export const Line = Type.Object({
+  name: Type.String(),
+  id: Type.String(),
+  smbid: Type.String(),
+  connections: Connections,
+  users: Type.Any()
+});
+
 export const Production = Type.Object({
   name: Type.String(),
   productionid: Type.String(),
-  lines: Type.Array(
-    Type.Object({
-      name: Type.String(),
-      id: Type.String(),
-      smbid: Type.String(),
-      connections: Connections
-    })
-  )
+  lines: Type.Array(Line)
 });
 
 export const ProductionResponse = Type.Object({
   productionid: Type.String()
 });
 
+export const User = Type.Object({
+  name: Type.String(),
+  sessionid: Type.String(),
+  isActive: Type.Boolean()
+});
+
 export const LineResponse = Type.Object({
   name: Type.String(),
   id: Type.String(),
-  sessionid: Type.String() // SMB endpoint id
-});
-
-export const Line = Type.Object({
-  name: Type.String(),
-  id: Type.String(),
-  smbid: Type.String(),
-  connections: Connections
+  smbconferenceid: Type.String(),
+  participants: Type.Array(User)
 });
