@@ -1,18 +1,12 @@
 import { User } from './models';
 import { EventEmitter } from 'events';
+import { UserManagerInterface } from './user_manager_interface';
 
-interface UserManagerInterface {
-  getUsers(): User[];
-  addUser(user: User): void;
-  removeUser(sessionId: string): string | undefined;
-}
-
-export class UserManager implements UserManagerInterface {
+export class UserManager extends EventEmitter implements UserManagerInterface {
   private users: User[];
-  changeEmitter: EventEmitter;
   constructor() {
+    super();
     this.users = [];
-    this.changeEmitter = new EventEmitter();
   }
 
   getUsers(): User[] {
@@ -20,12 +14,12 @@ export class UserManager implements UserManagerInterface {
   }
 
   addUser(user: User): number {
-    this.changeEmitter.emit('change');
+    this.emit('change');
     return this.users.push(user);
   }
 
   removeUser(sessionId: string): string | undefined {
-    this.changeEmitter.emit('change');
+    this.emit('change');
     const matchedUserIndex: number = this.users.findIndex(
       (user) => user.sessionid === sessionId
     );
