@@ -74,7 +74,6 @@ export class CoreFunctions implements CoreFunctionsInterface {
     data: boolean,
     endpointIdleTimeout: number
   ): Promise<SmbEndpointDescription> {
-    console.log('entering create endpoint');
     const endpoint: SmbEndpointDescription = await smb.allocateEndpoint(
       smbServerUrl,
       lineId,
@@ -173,27 +172,17 @@ export class CoreFunctions implements CoreFunctionsInterface {
     );
   }
 
-  async getConferencesForLines(
-    smb: SmbProtocol,
-    smbServerUrl: string
-  ): Promise<string[]> {
-    const conferences: string[] = await smb.getConferences(smbServerUrl);
-    return conferences;
-  }
-
-  async createConference(
+  private async createConference(
     smb: SmbProtocol,
     smbServerUrl: string,
     production: Production,
-    line: Line
+    lineId: string
   ): Promise<void> {
-    console.log('entering create conference');
-    const activeLines: string[] = await this.getConferencesForLines(
-      smb,
-      smbServerUrl
-    );
+    const activeLines: string[] = await smb.getConferences(smbServerUrl);
+
+    const line: Line = this.getLine(production.lines, lineId);
+
     if (!activeLines.includes(line.smbid)) {
-      console.log('entering check to allocate new conference');
       const newConferenceId = await smb.allocateConference(smbServerUrl);
       if (
         !this.productionManager.setLineId(
@@ -206,31 +195,19 @@ export class CoreFunctions implements CoreFunctionsInterface {
           `Failed to set line smb id for line ${line.id} in production ${production.productionid}`
         );
       }
-      console.log(newConferenceId);
     }
-    this.connectionQueue.removeFirst();
   }
 
   async createConferenceForLine(
     smb: SmbProtocol,
     smbServerUrl: string,
     production: Production,
-    line: Line
+    lineId: string
   ): Promise<void> {
-    if (this.connectionQueue.isEmpty()) {
-      await this.createConference(smb, smbServerUrl, production, line);
-    } else {
-      await this.waitForEmptyQueue();
-      this.connectionQueue.add(
-        this.createConference(smb, smbServerUrl, production, line)
-      );
-    }
-  }
+    const createConf = () =>
+      this.createConference(smb, smbServerUrl, production, lineId);
 
-  async waitForEmptyQueue(): Promise<void> {
-    while (!this.connectionQueue.isEmpty()) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
+    await this.connectionQueue.queueAsync(createConf);
   }
 
   getProduction(productionId: string): Production {

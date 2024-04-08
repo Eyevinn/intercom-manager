@@ -28,12 +28,7 @@ export interface CoreFunctionsInterface {
     endpointDescription: SmbEndpointDescription,
     answer: string
   ): Promise<void>;
-  getConferencesForLines(
-    smb: SmbProtocol,
-    smbServerUrl: string
-  ): Promise<string[]>;
   getProduction(productionId: string): Production;
   getLine(productionLines: Line[], lineId: string): Line;
   retrieveLineFromProduction(productionId: string, lineId: string): Line;
-  waitForEmptyQueue(): Promise<void>;
 }

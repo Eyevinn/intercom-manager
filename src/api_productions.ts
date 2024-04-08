@@ -209,16 +209,17 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         const production: Production = coreFunctions.getProduction(
           request.params.productionid
         );
-        const line: Line = coreFunctions.getLine(
-          production.lines,
-          request.params.lineid
-        );
 
         await coreFunctions.createConferenceForLine(
           smb,
           smbServerUrl,
           production,
-          line
+          request.params.lineid
+        );
+
+        const line: Line = coreFunctions.getLine(
+          production.lines,
+          request.params.lineid
         );
 
         const endpointId: string = uuidv4();
