@@ -9,6 +9,7 @@ export type SmbEndpointDescription = Static<typeof SmbEndpointDescription>;
 export type DetailedConference = Static<typeof DetailedConference>;
 export type Endpoint = Static<typeof Endpoint>;
 export type User = Static<typeof User>;
+export type SdpOfferResponse = Static<typeof SdpOfferResponse>;
 
 export const Audio = Type.Object({
   'relay-type': Type.Array(
@@ -151,6 +152,13 @@ export const Line = Type.Object({
   users: Type.Any()
 });
 
+export const LineResponse = Type.Object({
+  name: Type.String(),
+  id: Type.String(),
+  smbconferenceid: Type.String(),
+  participants: Type.Array(User)
+});
+
 export const Production = Type.Object({
   name: Type.String(),
   productionid: Type.String(),
@@ -158,12 +166,12 @@ export const Production = Type.Object({
 });
 
 export const ProductionResponse = Type.Object({
-  productionid: Type.String()
+  name: Type.String(),
+  productionid: Type.String(),
+  linesnamelist: Type.Optional(Type.Array(Type.String()))
 });
 
-export const LineResponse = Type.Object({
-  name: Type.String(),
-  id: Type.String(),
-  smbconferenceid: Type.String(),
-  participants: Type.Array(User)
+export const SdpOfferResponse = Type.Object({
+  sdp: Type.String(),
+  sessionid: Type.String()
 });
