@@ -59,7 +59,7 @@ export class SmbProtocol {
     };
 
     if (audio) {
-      request['audio'] = { 'relay-type': 'mixed' };
+      request['audio'] = { 'relay-type': 'ssrc-rewrite' };
     }
     if (data) {
       request['data'] = {};
