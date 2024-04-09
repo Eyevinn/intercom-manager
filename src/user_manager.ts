@@ -1,8 +1,7 @@
 import { User } from './models';
 import { EventEmitter } from 'events';
-import { UserManagerInterface } from './user_manager_interface';
 
-export class UserManager extends EventEmitter implements UserManagerInterface {
+export class UserManager extends EventEmitter {
   private users: User[];
   constructor() {
     super();
