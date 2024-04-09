@@ -35,9 +35,9 @@ export class CoreFunctions implements CoreFunctionsInterface {
     endpoint.audio.ssrcs.forEach((ssrcsNr) => {
       ssrcs.push({
         ssrc: ssrcsNr.toString(),
-        cname: `${username}_audioCName`,
-        mslabel: `${username}_audioMSLabel`,
-        label: `${username}_audioLabel`
+        cname: `audioCName`,
+        mslabel: `$audioMSLabel`,
+        label: `audioLabel`
       });
     });
 
