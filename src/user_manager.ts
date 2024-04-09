@@ -13,24 +13,20 @@ export class UserManager extends EventEmitter implements UserManagerInterface {
     return this.users;
   }
 
-  addUser(user: User): number {
+  addUser(user: User): void {
+    this.users.push(user);
     this.emit('change');
-    return this.users.push(user);
   }
 
   removeUser(sessionId: string): string | undefined {
-    this.emit('change');
     const matchedUserIndex: number = this.users.findIndex(
       (user) => user.sessionid === sessionId
     );
     if (matchedUserIndex != -1) {
-      if (this.users.splice(matchedUserIndex, 1)) {
-        return sessionId;
-      } else {
-        return undefined;
-      }
-    } else {
-      return undefined;
+      const [removedUser] = this.users.splice(matchedUserIndex, 1);
+      this.emit('change');
+      return removedUser?.sessionid;
     }
+    return undefined;
   }
 }
