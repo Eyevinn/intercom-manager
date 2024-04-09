@@ -12,201 +12,17 @@ import {
 import { SmbProtocol } from './smb';
 import { ProductionManager } from './production_manager';
 import { Connection } from './connection';
-import { write, parse, SessionDescription } from 'sdp-transform';
+import { write, SessionDescription } from 'sdp-transform';
 import dotenv from 'dotenv';
-import { MediaStreamsInfoSsrc } from './media_streams_info';
 import { v4 as uuidv4 } from 'uuid';
 import { UserManager } from './user_manager';
+import { ConnectionQueue } from './connection_queue';
+import { CoreFunctions } from './api_productions_core_functions';
 dotenv.config();
 
 const productionManager = new ProductionManager();
-
-function createConnection(
-  endpoint: SmbEndpointDescription,
-  productionId: string,
-  lineId: string,
-  username: string,
-  endpointId: string,
-  sessionId: string
-): Connection {
-  if (!endpoint.audio) {
-    throw new Error('Missing audio when creating offer');
-  }
-
-  const ssrcs: MediaStreamsInfoSsrc[] = [];
-  endpoint.audio.ssrcs.forEach((ssrcsNr) => {
-    ssrcs.push({
-      ssrc: ssrcsNr.toString(),
-      cname: `${username}_audioCName`,
-      mslabel: `${username}_audioMSLabel`,
-      label: `${username}_audioLabel`
-    });
-  });
-
-  const endpointMediaStreamInfo = {
-    audio: {
-      ssrcs: ssrcs
-    }
-  };
-
-  const connection = new Connection(
-    username,
-    endpointMediaStreamInfo,
-    endpoint,
-    endpointId
-  );
-
-  productionManager.addConnectionToLine(
-    productionId,
-    lineId,
-    endpoint,
-    endpointId,
-    sessionId
-  );
-
-  return connection;
-}
-
-async function createEndpoint(
-  smb: SmbProtocol,
-  smbServerUrl: string,
-  lineId: string,
-  endpointId: string,
-  audio: boolean,
-  data: boolean,
-  endpointIdleTimeout: number
-): Promise<SmbEndpointDescription> {
-  const endpoint: SmbEndpointDescription = await smb.allocateEndpoint(
-    smbServerUrl,
-    lineId,
-    endpointId,
-    audio,
-    data,
-    endpointIdleTimeout
-  );
-  return endpoint;
-}
-
-async function handleAnswerRequest(
-  smb: SmbProtocol,
-  smbServerUrl: string,
-  lineId: string,
-  endpointId: string,
-  endpointDescription: SmbEndpointDescription,
-  answer: string
-): Promise<void> {
-  if (!endpointDescription) {
-    throw new Error(
-      'Missing endpointDescription when handling sdp answer from endpoint'
-    );
-  }
-  if (!endpointDescription.audio) {
-    throw new Error(
-      'Missing endpointDescription audio when handling sdp answer from endpoint'
-    );
-  }
-  endpointDescription.audio.ssrcs = [];
-
-  const parsedAnswer = parse(answer);
-  const answerMediaDescription = parsedAnswer.media[0];
-  if (parsedAnswer.media[1].ssrcs) {
-    let parsedSsrcs = parsedAnswer.media[1].ssrcs[0].id;
-    if (typeof parsedSsrcs === 'string') {
-      parsedSsrcs = parseInt(parsedSsrcs, 10);
-    }
-    endpointDescription.audio.ssrcs.push(parsedSsrcs);
-  }
-  if (endpointDescription.audio.ssrcs.length === 0) {
-    throw new Error(
-      'Missing audio ssrcs when handling sdp answer from endpoint'
-    );
-  }
-
-  const transport = endpointDescription['bundle-transport'];
-  if (!transport) {
-    throw new Error(
-      'Missing endpointDescription when handling sdp answer from endpoint'
-    );
-  }
-  if (!transport.dtls) {
-    throw new Error('Missing dtls when handling sdp answer from endpoint');
-  }
-  if (!transport.ice) {
-    throw new Error('Missing ice when handling sdp answer from endpoint');
-  }
-
-  const answerFingerprint = parsedAnswer.fingerprint
-    ? parsedAnswer.fingerprint
-    : answerMediaDescription.fingerprint;
-  if (!answerFingerprint) {
-    throw new Error(
-      'Missing answerFingerprint when handling sdp answer from endpoint'
-    );
-  }
-  transport.dtls.type = answerFingerprint.type;
-  transport.dtls.hash = answerFingerprint.hash;
-  transport.dtls.setup = answerMediaDescription.setup || '';
-  transport.ice.ufrag = answerMediaDescription.iceUfrag || '';
-  transport.ice.pwd = answerMediaDescription.icePwd || '';
-  transport.ice.candidates = !answerMediaDescription.candidates
-    ? []
-    : answerMediaDescription.candidates.flatMap((element) => {
-        return {
-          generation: element.generation ? element.generation : 0,
-          component: element.component,
-          protocol: element.transport.toLowerCase(),
-          port: element.port,
-          ip: element.ip,
-          relPort: element.rport,
-          relAddr: element.raddr,
-          foundation: element.foundation.toString(),
-          priority: parseInt(element.priority.toString(), 10),
-          type: element.type,
-          network: element['network-id']
-        };
-      });
-
-  return await smb.configureEndpoint(
-    smbServerUrl,
-    lineId,
-    endpointId,
-    endpointDescription
-  );
-}
-
-async function getActiveLines(
-  smb: SmbProtocol,
-  smbServerUrl: string
-): Promise<string[]> {
-  const productions: string[] = await smb.getConferences(smbServerUrl);
-  return productions;
-}
-
-function getProduction(productionId: string): Production {
-  const production: Production | undefined =
-    productionManager.getProduction(productionId);
-  if (!production) {
-    throw new Error('Trying to get production that does not exist');
-  }
-  return production;
-}
-
-function getLine(productionLines: Line[], lineId: string): Line {
-  const line: Line | undefined = productionManager.getLine(
-    productionLines,
-    lineId
-  );
-  if (!line) {
-    throw new Error('Trying to get line that does not exist');
-  }
-  return line;
-}
-
-function retrieveLineFromProduction(productionId: string, lineId: string) {
-  const production: Production = getProduction(productionId);
-  const line: Line = getLine(production.lines, lineId);
-  return line;
-}
+const connectionQueue = new ConnectionQueue();
+const coreFunctions = new CoreFunctions(productionManager, connectionQueue);
 
 export interface ApiProductionsOptions {
   smbServerBaseUrl: string;
@@ -297,7 +113,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const production: Production = getProduction(
+        const production: Production = coreFunctions.getProduction(
           request.params.productionid
         );
         reply.code(200).send(production);
@@ -324,7 +140,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const production: Production = getProduction(
+        const production: Production = coreFunctions.getProduction(
           request.params.productionid
         );
         reply.code(200).send(production.lines);
@@ -351,7 +167,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const line: Line = retrieveLineFromProduction(
+        const line: Line = coreFunctions.retrieveLineFromProduction(
           request.params.productionid,
           request.params.lineid
         );
@@ -389,29 +205,25 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const production: Production = getProduction(
+        const sessionId: string = uuidv4();
+        const production: Production = coreFunctions.getProduction(
           request.params.productionid
         );
-        const line: Line = getLine(production.lines, request.params.lineid);
 
-        const activeLines = await getActiveLines(smb, smbServerUrl);
-        if (!activeLines.includes(line.smbid)) {
-          const newLineId = await smb.allocateConference(smbServerUrl);
-          if (
-            !productionManager.setLineId(
-              production.productionid,
-              line.id,
-              newLineId
-            )
-          ) {
-            throw new Error(
-              `Failed to set line smb id for line ${line.id} in production ${production.productionid}`
-            );
-          }
-        }
+        await coreFunctions.createConferenceForLine(
+          smb,
+          smbServerUrl,
+          production,
+          request.params.lineid
+        );
+
+        const line: Line = coreFunctions.getLine(
+          production.lines,
+          request.params.lineid
+        );
 
         const endpointId: string = uuidv4();
-        const endpoint = await createEndpoint(
+        const endpoint = await coreFunctions.createEndpoint(
           smb,
           smbServerUrl,
           line.smbid,
@@ -426,8 +238,8 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         if (!endpoint.audio.ssrcs) {
           throw new Error('Missing ssrcs when creating sdp offer for endpoint');
         }
-        const sessionId: string = uuidv4();
-        const connection: Connection = createConnection(
+
+        const connection: Connection = coreFunctions.createConnection(
           endpoint,
           production.productionid,
           line.id,
@@ -474,7 +286,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const line: Line = retrieveLineFromProduction(
+        const line: Line = coreFunctions.retrieveLineFromProduction(
           request.params.productionid,
           request.params.lineid
         );
@@ -491,7 +303,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           throw new Error('Could not get connection endpoint id');
         }
 
-        await handleAnswerRequest(
+        await coreFunctions.handleAnswerRequest(
           smb,
           smbServerUrl,
           line.smbid,
@@ -589,7 +401,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const line: Line = retrieveLineFromProduction(
+        const line: Line = coreFunctions.retrieveLineFromProduction(
           request.params.productionid,
           request.params.lineid
         );
@@ -597,7 +409,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         const participants: User[] = lineUserManager.getUsers();
 
         const waitForChange = new Promise<void>((resolve) => {
-          lineUserManager.changeEmitter.once('change', () => {
+          lineUserManager.once('change', () => {
             resolve();
           });
         });

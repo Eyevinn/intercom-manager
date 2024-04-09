@@ -137,6 +137,12 @@ export const Endpoint = Type.Object({
 
 export const Connections = Type.Record(Type.String(), Endpoint);
 
+export const User = Type.Object({
+  name: Type.String(),
+  sessionid: Type.String(),
+  isActive: Type.Boolean()
+});
+
 export const Line = Type.Object({
   name: Type.String(),
   id: Type.String(),
@@ -153,12 +159,6 @@ export const Production = Type.Object({
 
 export const ProductionResponse = Type.Object({
   productionid: Type.String()
-});
-
-export const User = Type.Object({
-  name: Type.String(),
-  sessionid: Type.String(),
-  isActive: Type.Boolean()
 });
 
 export const LineResponse = Type.Object({

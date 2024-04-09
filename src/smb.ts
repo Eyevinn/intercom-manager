@@ -112,7 +112,21 @@ export class SmbProtocol {
 
     if (!response.ok) {
       console.log(JSON.stringify(request));
-      throw new Error('Failed to configure endpoint');
+
+      const contentType = response.headers.get('content-type');
+
+      let text;
+      let json;
+
+      if (contentType && contentType.indexOf('text/plain') > -1) {
+        text = await response.text();
+      } else if (contentType && contentType.indexOf('application/json') > -1) {
+        json = await response.json();
+      }
+
+      throw new Error(
+        `Failed to configure endpoint ${text ? text : JSON.stringify(json)}`
+      );
     }
   }
 
