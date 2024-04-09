@@ -3,11 +3,10 @@ import { Connection } from './connection';
 import { MediaStreamsInfoSsrc } from './media_streams_info';
 import { Line, Production, SmbEndpointDescription } from './models';
 import { SmbProtocol } from './smb';
-import { CoreFunctionsInterface } from './api_productions_core_functions_interface';
 import { ConnectionQueue } from './connection_queue';
 import { ProductionManager } from './production_manager';
 
-export class CoreFunctions implements CoreFunctionsInterface {
+export class CoreFunctions {
   private productionManager: ProductionManager;
   private connectionQueue: ConnectionQueue;
 

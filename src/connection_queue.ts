@@ -1,8 +1,7 @@
-import { ConnectionQueueInterface } from './connection_queue_interface';
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
 
-export class ConnectionQueue implements ConnectionQueueInterface {
+export class ConnectionQueue {
   private queue: Array<[string, () => Promise<any>]>;
   private emitter = new EventEmitter();
 
