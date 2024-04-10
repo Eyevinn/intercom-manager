@@ -9,14 +9,44 @@ import {
   User
 } from './models';
 
+const USER_STATUS_CHECK_TIMEOUT = 1_000;
+const USER_INACTIVE_THRESHOLD = 10_000;
+const USER_DISCONNECTED_THRESHOLD = 30_000;
+
 export class ProductionManager extends EventEmitter {
   private productions: Production[];
   private userSessions: Record<string, UserSession>;
+  private userStatusMonitorInterval: NodeJS.Timeout;
 
   constructor() {
     super();
     this.productions = [];
     this.userSessions = {};
+    this.userStatusMonitorInterval = this.setupUserStatusMonitor();
+  }
+
+  private setupUserStatusMonitor(): NodeJS.Timeout {
+    clearInterval(this.userStatusMonitorInterval);
+    return setInterval(() => {
+      let disconnectedUsersCount = 0;
+      for (const [sessionId, userSession] of Object.entries(
+        this.userSessions
+      )) {
+        if (
+          userSession.lastSeen.getTime() <
+          new Date().getTime() - USER_DISCONNECTED_THRESHOLD
+        ) {
+          disconnectedUsersCount += 1;
+          delete this.userSessions[sessionId];
+        }
+      }
+      if (disconnectedUsersCount) {
+        console.log(
+          `Clearing ${disconnectedUsersCount} disconnected user sessions`
+        );
+        this.emit('users:change');
+      }
+    }, USER_STATUS_CHECK_TIMEOUT);
   }
 
   createProduction(newProduction: NewProduction): Production | undefined {
@@ -174,7 +204,7 @@ export class ProductionManager extends EventEmitter {
       productionId,
       lineId,
       name,
-      isActive: true
+      lastSeen: new Date()
     };
     this.emit('users:change');
   }
@@ -195,10 +225,14 @@ export class ProductionManager extends EventEmitter {
           productionId === userSession.productionId &&
           lineId === userSession.lineId
         ) {
+          const isActive =
+            userSession.lastSeen.getTime() >=
+            new Date().getTime() - USER_INACTIVE_THRESHOLD;
+
           return {
             sessionid,
             name: userSession.name,
-            isActive: userSession.isActive
+            isActive
           };
         }
         return [];

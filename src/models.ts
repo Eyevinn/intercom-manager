@@ -148,7 +148,7 @@ export const UserSession = Type.Object({
   name: Type.String(),
   productionId: Type.String(),
   lineId: Type.String(),
-  isActive: Type.Boolean()
+  lastSeen: Type.Date()
 });
 
 export const Line = Type.Object({
