@@ -17,7 +17,7 @@
       "environment": [
         {
           "name": "SMB_ADDRESS",
-          "value": "http://13.49.224.46:8280"
+          "value": "http://16.171.249.16:8280"
         }
       ],
       "environmentFiles": [],
