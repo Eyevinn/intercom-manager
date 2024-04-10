@@ -15,7 +15,6 @@ import { Connection } from './connection';
 import { write, SessionDescription } from 'sdp-transform';
 import dotenv from 'dotenv';
 import { v4 as uuidv4 } from 'uuid';
-import { UserManager } from './user_manager';
 import { ConnectionQueue } from './connection_queue';
 import { CoreFunctions } from './api_productions_core_functions';
 dotenv.config();
@@ -171,11 +170,17 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           request.params.productionid,
           request.params.lineid
         );
+
+        const participants = productionManager.getUsersForLine(
+          request.params.productionid,
+          request.params.lineid
+        );
+
         const lineResponse: LineResponse = {
           name: line.name,
           id: line.id,
           smbconferenceid: line.smbid,
-          participants: line.users.users
+          participants
         };
         reply.code(200).send(lineResponse);
       } catch (err) {
@@ -205,22 +210,19 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
+        const { lineid, productionid, username } = request.params;
         const sessionId: string = uuidv4();
-        const production: Production = coreFunctions.getProduction(
-          request.params.productionid
-        );
+        const production: Production =
+          coreFunctions.getProduction(productionid);
 
         await coreFunctions.createConferenceForLine(
           smb,
           smbServerUrl,
           production,
-          request.params.lineid
+          lineid
         );
 
-        const line: Line = coreFunctions.getLine(
-          production.lines,
-          request.params.lineid
-        );
+        const line: Line = coreFunctions.getLine(production.lines, lineid);
 
         const endpointId: string = uuidv4();
         const endpoint = await coreFunctions.createEndpoint(
@@ -243,7 +245,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           endpoint,
           production.productionid,
           line.id,
-          request.params.username,
+          username,
           endpointId,
           sessionId
         );
@@ -252,12 +254,12 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         const sdpOffer: string = write(offer);
 
         if (sdpOffer) {
-          const lineUserManager: UserManager = line.users;
-          lineUserManager.addUser({
-            name: request.params.username,
-            isActive: true,
-            sessionid: sessionId
-          });
+          productionManager.createUserSession(
+            productionid,
+            lineid,
+            sessionId,
+            username
+          );
           reply.code(200).send({ sdp: sdpOffer, sessionid: sessionId });
         } else {
           reply.code(500).send('Failed to generate sdp offer for endpoint');
@@ -401,15 +403,13 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const line: Line = coreFunctions.getLineFromProduction(
+        const participants = productionManager.getUsersForLine(
           request.params.productionid,
           request.params.lineid
         );
-        const lineUserManager: UserManager = line.users;
-        const participants: User[] = lineUserManager.getUsers();
 
         const waitForChange = new Promise<void>((resolve) => {
-          lineUserManager.once('change', () => {
+          productionManager.once('users:change', () => {
             resolve();
           });
         });

@@ -1,5 +1,4 @@
 import { ProductionManager } from './production_manager';
-import { UserManager } from './user_manager';
 import { NewProduction, Production, SmbEndpointDescription } from './models';
 
 const SmbEndpointDescriptionMock: SmbEndpointDescription = {
@@ -125,8 +124,7 @@ describe('production_manager', () => {
           name: 'linename',
           id: '1',
           smbid: '',
-          connections: {},
-          users: new UserManager()
+          connections: {}
         }
       ]
     };
@@ -187,8 +185,7 @@ describe('production_manager', () => {
           name: 'linename1',
           id: '1',
           smbid: '',
-          connections: {},
-          users: new UserManager()
+          connections: {}
         }
       ]
     };
@@ -201,8 +198,7 @@ describe('production_manager', () => {
           name: 'linename2',
           id: '1',
           smbid: '',
-          connections: {},
-          users: new UserManager()
+          connections: {}
         }
       ]
     };

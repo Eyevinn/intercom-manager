@@ -1,17 +1,22 @@
+import { EventEmitter } from 'events';
+
 import {
   NewProduction,
   Production,
   Line,
-  SmbEndpointDescription
+  SmbEndpointDescription,
+  UserSession,
+  User
 } from './models';
 
-import { UserManager } from './user_manager';
-
-export class ProductionManager {
+export class ProductionManager extends EventEmitter {
   private productions: Production[];
+  private userSessions: Record<string, UserSession>;
 
   constructor() {
+    super();
     this.productions = [];
+    this.userSessions = {};
   }
 
   createProduction(newProduction: NewProduction): Production | undefined {
@@ -26,8 +31,7 @@ export class ProductionManager {
           name: line.name,
           id: index.toString(),
           smbid: '',
-          connections: {},
-          users: new UserManager()
+          connections: {}
         };
         newProductionLines.push(newProductionLine);
       }
@@ -158,5 +162,47 @@ export class ProductionManager {
         `Deleting connection failed, Production ${productionId} does not exist`
       );
     }
+  }
+
+  createUserSession(
+    productionId: string,
+    lineId: string,
+    sessionId: string,
+    name: string
+  ): void {
+    this.userSessions[sessionId] = {
+      productionId,
+      lineId,
+      name,
+      isActive: true
+    };
+    this.emit('users:change');
+  }
+
+  removeUserSession(sessionId: string): string | undefined {
+    if (sessionId in this.userSessions) {
+      delete this.userSessions[sessionId];
+      this.emit('users:change');
+      return sessionId;
+    }
+    return undefined;
+  }
+
+  getUsersForLine(productionId: string, lineId: string): User[] {
+    return Object.entries(this.userSessions).flatMap(
+      ([sessionid, userSession]) => {
+        if (
+          productionId === userSession.productionId &&
+          lineId === userSession.lineId
+        ) {
+          return {
+            sessionid,
+            name: userSession.name,
+            isActive: userSession.isActive
+          };
+        }
+        return [];
+      }
+    );
   }
 }
