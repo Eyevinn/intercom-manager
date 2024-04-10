@@ -9,41 +9,36 @@ import {
   User
 } from './models';
 
-const USER_STATUS_CHECK_TIMEOUT = 1_000;
 const USER_INACTIVE_THRESHOLD = 10_000;
 const USER_EXPIRED_THRESHOLD = 30_000;
 
 export class ProductionManager extends EventEmitter {
   private productions: Production[];
   private userSessions: Record<string, UserSession>;
-  private userStatusMonitorInterval: NodeJS.Timeout;
   private disconnectedUsersCount = 0;
 
   constructor() {
     super();
     this.productions = [];
     this.userSessions = {};
-    this.userStatusMonitorInterval = this.setupUserStatusMonitor();
   }
 
-  private setupUserStatusMonitor(): NodeJS.Timeout {
-    clearInterval(this.userStatusMonitorInterval);
-    return setInterval(() => {
-      let disconnectedUsersCount = 0;
-      for (const userSession of Object.values(this.userSessions)) {
-        if (
-          userSession.lastSeen.getTime() <
-          new Date().getTime() - USER_EXPIRED_THRESHOLD
-        ) {
-          disconnectedUsersCount += 1;
-        }
+  checkUserStatus(): number {
+    let disconnectedUsersCount = 0;
+    for (const userSession of Object.values(this.userSessions)) {
+      if (
+        userSession.lastSeen.getTime() <
+        new Date().getTime() - USER_EXPIRED_THRESHOLD
+      ) {
+        disconnectedUsersCount += 1;
       }
-      if (disconnectedUsersCount !== this.disconnectedUsersCount) {
-        console.log(`${disconnectedUsersCount} users disconnected`);
-        this.disconnectedUsersCount = disconnectedUsersCount;
-        this.emit('users:change');
-      }
-    }, USER_STATUS_CHECK_TIMEOUT);
+    }
+    if (disconnectedUsersCount !== this.disconnectedUsersCount) {
+      console.log(`${disconnectedUsersCount} users disconnected`);
+      this.disconnectedUsersCount = disconnectedUsersCount;
+      this.emit('users:change');
+    }
+    return disconnectedUsersCount;
   }
 
   createProduction(newProduction: NewProduction): Production | undefined {

@@ -1,4 +1,4 @@
-import api from './api';
+import api, { checkUserStatus } from './api';
 
 const SMB_ADDRESS: string = process.env.SMB_ADDRESS ?? 'http://localhost:8080';
 
@@ -14,6 +14,8 @@ const server = api({
   smbServerBaseUrl: SMB_ADDRESS,
   endpointIdleTimeout: ENDPOINT_IDLE_TIMEOUT_S
 });
+
+setInterval(checkUserStatus, 1000);
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8000;
 

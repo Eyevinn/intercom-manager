@@ -23,6 +23,10 @@ const productionManager = new ProductionManager();
 const connectionQueue = new ConnectionQueue();
 const coreFunctions = new CoreFunctions(productionManager, connectionQueue);
 
+export function checkUserStatus() {
+  productionManager.checkUserStatus();
+}
+
 export interface ApiProductionsOptions {
   smbServerBaseUrl: string;
   endpointIdleTimeout: string;

@@ -5,7 +5,8 @@ import swaggerUI from '@fastify/swagger-ui';
 import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import { Static, Type } from '@sinclair/typebox';
 import { FastifyPluginCallback } from 'fastify';
-import apiProductions from './api_productions';
+import apiProductions, { checkUserStatus } from './api_productions';
+export { checkUserStatus };
 
 const HelloWorld = Type.String({
   description: 'The magical words!'
