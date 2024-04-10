@@ -5,6 +5,7 @@ import { Line, Production, SmbEndpointDescription } from './models';
 import { SmbProtocol } from './smb';
 import { ConnectionQueue } from './connection_queue';
 import { ProductionManager } from './production_manager';
+import { v4 as uuidv4 } from 'uuid';
 
 export class CoreFunctions {
   private productionManager: ProductionManager;
@@ -34,9 +35,9 @@ export class CoreFunctions {
     endpoint.audio.ssrcs.forEach((ssrcsNr) => {
       ssrcs.push({
         ssrc: ssrcsNr.toString(),
-        cname: `audioCName`,
-        mslabel: `$audioMSLabel`,
-        label: `audioLabel`
+        cname: uuidv4(),
+        mslabel: uuidv4(),
+        label: uuidv4()
       });
     });
 

@@ -71,7 +71,10 @@ export class Connection {
     let msidSemanticToken = 'feedbackvideomslabel';
     if (this.mediaStreams) {
       if (this.mediaStreams.audio.ssrcs.length !== 0) {
-        msidSemanticToken = `${this.mediaStreams.audio.ssrcs[0].mslabel}`;
+        const mslabels = this.mediaStreams.audio.ssrcs.map(
+          (element) => element.mslabel
+        );
+        msidSemanticToken = `${mslabels.join(' ')}`;
       }
     }
 
