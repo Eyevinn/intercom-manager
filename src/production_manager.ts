@@ -17,6 +17,7 @@ export class ProductionManager extends EventEmitter {
   private productions: Production[];
   private userSessions: Record<string, UserSession>;
   private userStatusMonitorInterval: NodeJS.Timeout;
+  private disconnectedUsersCount = 0;
 
   constructor() {
     super();
@@ -29,21 +30,17 @@ export class ProductionManager extends EventEmitter {
     clearInterval(this.userStatusMonitorInterval);
     return setInterval(() => {
       let disconnectedUsersCount = 0;
-      for (const [sessionId, userSession] of Object.entries(
-        this.userSessions
-      )) {
+      for (const userSession of Object.values(this.userSessions)) {
         if (
           userSession.lastSeen.getTime() <
           new Date().getTime() - USER_DISCONNECTED_THRESHOLD
         ) {
           disconnectedUsersCount += 1;
-          delete this.userSessions[sessionId];
         }
       }
-      if (disconnectedUsersCount) {
-        console.log(
-          `Cleared ${disconnectedUsersCount} disconnected user sessions`
-        );
+      if (disconnectedUsersCount !== this.disconnectedUsersCount) {
+        console.log(`${disconnectedUsersCount} users disconnected`);
+        this.disconnectedUsersCount = disconnectedUsersCount;
         this.emit('users:change');
       }
     }, USER_STATUS_CHECK_TIMEOUT);
@@ -232,7 +229,9 @@ export class ProductionManager extends EventEmitter {
       ([sessionid, userSession]) => {
         if (
           productionId === userSession.productionId &&
-          lineId === userSession.lineId
+          lineId === userSession.lineId &&
+          userSession.lastSeen.getTime() >=
+            new Date().getTime() - USER_DISCONNECTED_THRESHOLD
         ) {
           const isActive =
             userSession.lastSeen.getTime() >=
