@@ -167,7 +167,9 @@ export const Production = Type.Object({
 });
 
 export const ProductionResponse = Type.Object({
-  productionid: Type.String()
+  name: Type.String(),
+  productionid: Type.String(),
+  participantlist: Type.Optional(Type.Array(User))
 });
 
 export const LineResponse = Type.Object({

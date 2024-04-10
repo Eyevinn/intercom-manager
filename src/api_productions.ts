@@ -62,10 +62,11 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         const production: Production | undefined =
           productionManager.createProduction(request.body);
         if (production) {
-          const productionRepsonse: ProductionResponse = {
+          const allProductionResponse: ProductionResponse = {
+            name: production.name,
             productionid: production.productionid
           };
-          reply.code(200).send(productionRepsonse);
+          reply.code(200).send(allProductionResponse);
         } else {
           reply.code(500).send('Failed to create production');
         }
@@ -78,21 +79,29 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   );
 
   fastify.get<{
-    Reply: Production[] | string;
+    Reply: ProductionResponse[] | string;
   }>(
     '/productions',
     {
       schema: {
         description: 'Retrieves all Productions.',
         response: {
-          200: Type.Array(Production)
+          200: Type.Array(ProductionResponse)
         }
       }
     },
     async (request, reply) => {
       try {
         const productions: Production[] = productionManager.getProductions();
-        reply.code(200).send(productions);
+        const productionsResponse: ProductionResponse[] = [];
+        for (let i = 0; i < Math.min(productions.length, 50); i++) {
+          const production = productions[i];
+          productionsResponse.push({
+            name: production.name,
+            productionid: production.productionid
+          });
+        }
+        reply.code(200).send(productionsResponse);
       } catch (err) {
         reply
           .code(500)
@@ -103,14 +112,14 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
 
   fastify.get<{
     Params: { productionid: string };
-    Reply: Production | string;
+    Reply: ProductionResponse | string;
   }>(
     '/productions/:productionid',
     {
       schema: {
         description: 'Retrieves a Production.',
         response: {
-          200: Production
+          200: ProductionResponse
         }
       }
     },
@@ -119,7 +128,20 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         const production: Production = coreFunctions.getProduction(
           request.params.productionid
         );
-        reply.code(200).send(production);
+        const line: Line = coreFunctions.getLine(
+          production.lines,
+          production.productionid
+        );
+        const participantlist: User[] = productionManager.getUsersForLine(
+          production.productionid,
+          line.id
+        );
+        const productionResponse: ProductionResponse = {
+          name: production.name,
+          productionid: production.productionid,
+          participantlist: participantlist
+        };
+        reply.code(200).send(productionResponse);
       } catch (err) {
         reply
           .code(500)
@@ -130,14 +152,14 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
 
   fastify.get<{
     Params: { productionid: string };
-    Reply: Line[] | string;
+    Reply: LineResponse[] | string;
   }>(
     '/productions/:productionid/lines',
     {
       schema: {
         description: 'Retrieves all lines for a Production.',
         response: {
-          200: Type.Array(Line)
+          200: Type.Array(LineResponse)
         }
       }
     },
@@ -146,7 +168,21 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         const production: Production = coreFunctions.getProduction(
           request.params.productionid
         );
-        reply.code(200).send(production.lines);
+        const allLinesResponse: LineResponse[] = [];
+        for (let i = 0; i < Math.min(production.lines.length, 50); i++) {
+          const line = production.lines[i];
+          const participantlist: User[] = productionManager.getUsersForLine(
+            production.productionid,
+            line.id
+          );
+          allLinesResponse.push({
+            name: line.name,
+            id: line.id,
+            smbconferenceid: line.smbid,
+            participants: participantlist
+          });
+        }
+        reply.code(200).send(allLinesResponse);
       } catch (err) {
         reply
           .code(500)
@@ -174,17 +210,15 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           request.params.productionid,
           request.params.lineid
         );
-
-        const participants = productionManager.getUsersForLine(
+        const participantlist: User[] = productionManager.getUsersForLine(
           request.params.productionid,
-          request.params.lineid
+          line.id
         );
-
         const lineResponse: LineResponse = {
           name: line.name,
           id: line.id,
           smbconferenceid: line.smbid,
-          participants
+          participants: participantlist
         };
         reply.code(200).send(lineResponse);
       } catch (err) {
