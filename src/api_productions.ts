@@ -167,7 +167,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const line: Line = coreFunctions.retrieveLineFromProduction(
+        const line: Line = coreFunctions.getLineFromProduction(
           request.params.productionid,
           request.params.lineid
         );
@@ -286,7 +286,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const line: Line = coreFunctions.retrieveLineFromProduction(
+        const line: Line = coreFunctions.getLineFromProduction(
           request.params.productionid,
           request.params.lineid
         );
@@ -401,7 +401,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const line: Line = coreFunctions.retrieveLineFromProduction(
+        const line: Line = coreFunctions.getLineFromProduction(
           request.params.productionid,
           request.params.lineid
         );
