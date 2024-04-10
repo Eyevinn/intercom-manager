@@ -11,7 +11,7 @@ import {
 
 const USER_STATUS_CHECK_TIMEOUT = 1_000;
 const USER_INACTIVE_THRESHOLD = 10_000;
-const USER_DISCONNECTED_THRESHOLD = 30_000;
+const USER_EXPIRED_THRESHOLD = 30_000;
 
 export class ProductionManager extends EventEmitter {
   private productions: Production[];
@@ -33,7 +33,7 @@ export class ProductionManager extends EventEmitter {
       for (const userSession of Object.values(this.userSessions)) {
         if (
           userSession.lastSeen.getTime() <
-          new Date().getTime() - USER_DISCONNECTED_THRESHOLD
+          new Date().getTime() - USER_EXPIRED_THRESHOLD
         ) {
           disconnectedUsersCount += 1;
         }
@@ -231,7 +231,7 @@ export class ProductionManager extends EventEmitter {
           productionId === userSession.productionId &&
           lineId === userSession.lineId &&
           userSession.lastSeen.getTime() >=
-            new Date().getTime() - USER_DISCONNECTED_THRESHOLD
+            new Date().getTime() - USER_EXPIRED_THRESHOLD
         ) {
           const isActive =
             userSession.lastSeen.getTime() >=
