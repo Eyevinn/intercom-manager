@@ -42,7 +42,7 @@ export class ProductionManager extends EventEmitter {
       }
       if (disconnectedUsersCount) {
         console.log(
-          `Clearing ${disconnectedUsersCount} disconnected user sessions`
+          `Cleared ${disconnectedUsersCount} disconnected user sessions`
         );
         this.emit('users:change');
       }
@@ -207,6 +207,15 @@ export class ProductionManager extends EventEmitter {
       lastSeen: new Date()
     };
     this.emit('users:change');
+  }
+
+  updateUserLastSeen(sessionId: string): boolean {
+    const userSession = this.userSessions[sessionId];
+    if (userSession) {
+      this.userSessions[sessionId].lastSeen = new Date();
+      return true;
+    }
+    return false;
   }
 
   removeUserSession(sessionId: string): string | undefined {

@@ -260,6 +260,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
             sessionId,
             username
           );
+          console.log(`Created user session: "${username}": ${sessionId}`);
           reply.code(200).send({ sdp: sdpOffer, sessionid: sessionId });
         } else {
           reply.code(500).send('Failed to generate sdp offer for endpoint');
@@ -422,6 +423,30 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
             'Exception thrown when trying to set connection status for session: ' +
               err
           );
+      }
+    }
+  );
+
+  fastify.get<{
+    Params: { sessionid: string };
+  }>(
+    '/heartbeat/:sessionid',
+    {
+      schema: {
+        description: 'Update user session lastSeen',
+        response: {
+          200: Type.String(),
+          410: Type.String()
+        }
+      }
+    },
+    async (request, reply) => {
+      const { sessionid } = request.params;
+      const status = productionManager.updateUserLastSeen(sessionid);
+      if (status) {
+        reply.code(200).send('ok');
+      } else {
+        reply.code(410).send(`User session id "${sessionid}" not found.`);
       }
     }
   );
