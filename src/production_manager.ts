@@ -9,8 +9,9 @@ import {
   User
 } from './models';
 
-const USER_INACTIVE_THRESHOLD = 60_000;
-const USER_EXPIRED_THRESHOLD = 120_000;
+const SESSION_INACTIVE_THRESHOLD = 60_000;
+const SESSION_EXPIRED_THRESHOLD = 120_000;
+const SESSION_PRUNE_THRESHOLD = 7_200_000;
 
 export class ProductionManager extends EventEmitter {
   private productions: Production[];
@@ -24,25 +25,26 @@ export class ProductionManager extends EventEmitter {
   }
 
   checkUserStatus(): void {
-    let disconnectedUsersCount = 0;
-    let inactiveUsersCount = 0;
+    let hasChanged = false;
     for (const [sessionId, userSession] of Object.entries(this.userSessions)) {
-      if (userSession.lastSeen < Date.now() - USER_EXPIRED_THRESHOLD) {
-        disconnectedUsersCount += 1;
+      if (userSession.lastSeen < Date.now() - SESSION_PRUNE_THRESHOLD) {
         delete this.userSessions[sessionId];
-      } else if (userSession.lastSeen < Date.now() - USER_INACTIVE_THRESHOLD) {
-        userSession.isActive = false;
-        inactiveUsersCount += 1;
+        hasChanged = true;
+      } else {
+        const isActive =
+          userSession.lastSeen > Date.now() - SESSION_INACTIVE_THRESHOLD;
+        const isExpired =
+          userSession.lastSeen < Date.now() - SESSION_EXPIRED_THRESHOLD;
+        if (
+          isActive !== userSession.isActive ||
+          isExpired !== userSession.isExpired
+        ) {
+          Object.assign(userSession, { isActive, isExpired });
+          hasChanged = true;
+        }
       }
     }
-    if (
-      disconnectedUsersCount ||
-      inactiveUsersCount !== this.inactiveUsersCount
-    ) {
-      console.log(
-        `User status change: ${inactiveUsersCount} inactive and ${disconnectedUsersCount} disconnected`
-      );
-      this.inactiveUsersCount = inactiveUsersCount;
+    if (hasChanged) {
       this.emit('users:change');
     }
   }
@@ -203,7 +205,8 @@ export class ProductionManager extends EventEmitter {
       lineId,
       name,
       lastSeen: Date.now(),
-      isActive: true
+      isActive: true,
+      isExpired: false
     };
     console.log(`Created user session: "${name}": ${sessionId}`);
     this.emit('users:change');
@@ -233,7 +236,7 @@ export class ProductionManager extends EventEmitter {
         if (
           productionId === userSession.productionId &&
           lineId === userSession.lineId &&
-          userSession.lastSeen >= Date.now() - USER_EXPIRED_THRESHOLD
+          !userSession.isExpired
         ) {
           return {
             sessionid,
