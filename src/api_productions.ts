@@ -6,8 +6,9 @@ import {
   Line,
   LineResponse,
   SmbEndpointDescription,
+  User,
   ProductionResponse,
-  User
+  DetailedProductionResponse
 } from './models';
 import { SmbProtocol } from './smb';
 import { ProductionManager } from './production_manager';
@@ -61,12 +62,13 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       try {
         const production: Production | undefined =
           productionManager.createProduction(request.body);
+
         if (production) {
-          const allProductionResponse: ProductionResponse = {
+          const productionResponse: ProductionResponse = {
             name: production.name,
             productionid: production.productionid
           };
-          reply.code(200).send(allProductionResponse);
+          reply.code(200).send(productionResponse);
         } else {
           reply.code(500).send('Failed to create production');
         }
@@ -93,15 +95,12 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     async (request, reply) => {
       try {
         const productions: Production[] = productionManager.getProductions();
-        const productionsResponse: ProductionResponse[] = [];
-        for (let i = 0; i < Math.min(productions.length, 50); i++) {
-          const production = productions[i];
-          productionsResponse.push({
-            name: production.name,
-            productionid: production.productionid
-          });
-        }
-        reply.code(200).send(productionsResponse);
+        reply.code(200).send(
+          productions.slice(-50).map(({ name, productionid }) => ({
+            name,
+            productionid
+          }))
+        );
       } catch (err) {
         reply
           .code(500)
@@ -112,14 +111,14 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
 
   fastify.get<{
     Params: { productionid: string };
-    Reply: ProductionResponse | string;
+    Reply: DetailedProductionResponse | string;
   }>(
     '/productions/:productionid',
     {
       schema: {
         description: 'Retrieves a Production.',
         response: {
-          200: ProductionResponse
+          200: DetailedProductionResponse
         }
       }
     },
@@ -128,18 +127,12 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         const production: Production = coreFunctions.getProduction(
           request.params.productionid
         );
-        const line: Line = coreFunctions.getLine(
-          production.lines,
-          production.productionid
-        );
-        const participantlist: User[] = productionManager.getUsersForLine(
-          production.productionid,
-          line.id
-        );
-        const productionResponse: ProductionResponse = {
+        const allLinesResponse: LineResponse[] =
+          coreFunctions.getAllLinesResponse(production);
+        const productionResponse: DetailedProductionResponse = {
           name: production.name,
           productionid: production.productionid,
-          participantlist: participantlist
+          lines: allLinesResponse
         };
         reply.code(200).send(productionResponse);
       } catch (err) {
@@ -168,20 +161,8 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         const production: Production = coreFunctions.getProduction(
           request.params.productionid
         );
-        const allLinesResponse: LineResponse[] = [];
-        for (let i = 0; i < Math.min(production.lines.length, 50); i++) {
-          const line = production.lines[i];
-          const participantlist: User[] = productionManager.getUsersForLine(
-            production.productionid,
-            line.id
-          );
-          allLinesResponse.push({
-            name: line.name,
-            id: line.id,
-            smbconferenceid: line.smbid,
-            participants: participantlist
-          });
-        }
+        const allLinesResponse: LineResponse[] =
+          coreFunctions.getAllLinesResponse(production);
         reply.code(200).send(allLinesResponse);
       } catch (err) {
         reply
@@ -217,7 +198,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         const lineResponse: LineResponse = {
           name: line.name,
           id: line.id,
-          smbconferenceid: line.smbid,
+          smbconferenceid: line.smbconferenceid,
           participants: participantlist
         };
         reply.code(200).send(lineResponse);
@@ -266,7 +247,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         const endpoint = await coreFunctions.createEndpoint(
           smb,
           smbServerUrl,
-          line.smbid,
+          line.smbconferenceid,
           endpointId,
           true,
           false,
@@ -347,7 +328,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         await coreFunctions.handleAnswerRequest(
           smb,
           smbServerUrl,
-          line.smbid,
+          line.smbconferenceid,
           endpointId,
           connectionEndpointDescription,
           request.body

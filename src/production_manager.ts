@@ -63,7 +63,7 @@ export class ProductionManager extends EventEmitter {
         const newProductionLine: Line = {
           name: line.name,
           id: index.toString(),
-          smbid: '',
+          smbconferenceid: '',
           connections: {}
         };
         newProductionLines.push(newProductionLine);
@@ -128,7 +128,7 @@ export class ProductionManager extends EventEmitter {
     if (matchedProduction) {
       const line = this.getLine(matchedProduction.lines, lineId);
       if (line) {
-        line.smbid = lineSmbId;
+        line.smbconferenceid = lineSmbId;
         return line;
       } else {
         return undefined;
