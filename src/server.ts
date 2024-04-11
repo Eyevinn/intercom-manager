@@ -15,7 +15,7 @@ const server = api({
   endpointIdleTimeout: ENDPOINT_IDLE_TIMEOUT_S
 });
 
-setInterval(checkUserStatus, 1000);
+setInterval(checkUserStatus, 10_000);
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8000;
 

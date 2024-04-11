@@ -9,8 +9,8 @@ import {
   User
 } from './models';
 
-const USER_INACTIVE_THRESHOLD = 10_000;
-const USER_EXPIRED_THRESHOLD = 30_000;
+const USER_INACTIVE_THRESHOLD = 60_000;
+const USER_EXPIRED_THRESHOLD = 120_000;
 
 export class ProductionManager extends EventEmitter {
   private productions: Production[];
