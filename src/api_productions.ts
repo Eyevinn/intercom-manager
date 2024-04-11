@@ -264,7 +264,6 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
             sessionId,
             username
           );
-          console.log(`Created user session: "${username}": ${sessionId}`);
           reply.code(200).send({ sdp: sdpOffer, sessionid: sessionId });
         } else {
           reply.code(500).send('Failed to generate sdp offer for endpoint');

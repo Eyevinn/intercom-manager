@@ -27,16 +27,11 @@ export class ProductionManager extends EventEmitter {
     let disconnectedUsersCount = 0;
     let inactiveUsersCount = 0;
     for (const [sessionId, userSession] of Object.entries(this.userSessions)) {
-      if (
-        userSession.lastSeen.getTime() <
-        new Date().getTime() - USER_EXPIRED_THRESHOLD
-      ) {
+      if (userSession.lastSeen < Date.now() - USER_EXPIRED_THRESHOLD) {
         disconnectedUsersCount += 1;
         delete this.userSessions[sessionId];
-      } else if (
-        userSession.lastSeen.getTime() <
-        new Date().getTime() - USER_INACTIVE_THRESHOLD
-      ) {
+      } else if (userSession.lastSeen < Date.now() - USER_INACTIVE_THRESHOLD) {
+        userSession.isActive = false;
         inactiveUsersCount += 1;
       }
     }
@@ -207,15 +202,17 @@ export class ProductionManager extends EventEmitter {
       productionId,
       lineId,
       name,
-      lastSeen: new Date()
+      lastSeen: Date.now(),
+      isActive: true
     };
+    console.log(`Created user session: "${name}": ${sessionId}`);
     this.emit('users:change');
   }
 
   updateUserLastSeen(sessionId: string): boolean {
     const userSession = this.userSessions[sessionId];
     if (userSession) {
-      this.userSessions[sessionId].lastSeen = new Date();
+      this.userSessions[sessionId].lastSeen = Date.now();
       return true;
     }
     return false;
@@ -236,17 +233,12 @@ export class ProductionManager extends EventEmitter {
         if (
           productionId === userSession.productionId &&
           lineId === userSession.lineId &&
-          userSession.lastSeen.getTime() >=
-            new Date().getTime() - USER_EXPIRED_THRESHOLD
+          userSession.lastSeen >= Date.now() - USER_EXPIRED_THRESHOLD
         ) {
-          const isActive =
-            userSession.lastSeen.getTime() >=
-            new Date().getTime() - USER_INACTIVE_THRESHOLD;
-
           return {
             sessionid,
             name: userSession.name,
-            isActive
+            isActive: userSession.isActive
           };
         }
         return [];

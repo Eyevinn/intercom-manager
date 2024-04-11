@@ -1,4 +1,5 @@
-import api, { checkUserStatus } from './api';
+import api from './api';
+import { checkUserStatus } from './api_productions';
 
 const SMB_ADDRESS: string = process.env.SMB_ADDRESS ?? 'http://localhost:8080';
 
