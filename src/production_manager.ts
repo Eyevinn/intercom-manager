@@ -16,6 +16,7 @@ export class ProductionManager extends EventEmitter {
   private productions: Production[];
   private userSessions: Record<string, UserSession>;
   private disconnectedUsersCount = 0;
+  private inactiveUsersCount = 0;
 
   constructor() {
     super();
@@ -23,22 +24,33 @@ export class ProductionManager extends EventEmitter {
     this.userSessions = {};
   }
 
-  checkUserStatus(): number {
+  checkUserStatus(): void {
     let disconnectedUsersCount = 0;
+    let inactiveUsersCount = 0;
     for (const userSession of Object.values(this.userSessions)) {
       if (
         userSession.lastSeen.getTime() <
         new Date().getTime() - USER_EXPIRED_THRESHOLD
       ) {
         disconnectedUsersCount += 1;
+      } else if (
+        userSession.lastSeen.getTime() <
+        new Date().getTime() - USER_INACTIVE_THRESHOLD
+      ) {
+        inactiveUsersCount += 1;
       }
     }
-    if (disconnectedUsersCount !== this.disconnectedUsersCount) {
-      console.log(`${disconnectedUsersCount} users disconnected`);
+    if (
+      disconnectedUsersCount !== this.disconnectedUsersCount ||
+      inactiveUsersCount !== this.inactiveUsersCount
+    ) {
+      console.log(
+        `User status change: ${inactiveUsersCount} inactive and ${disconnectedUsersCount} disconnected`
+      );
       this.disconnectedUsersCount = disconnectedUsersCount;
+      this.inactiveUsersCount = inactiveUsersCount;
       this.emit('users:change');
     }
-    return disconnectedUsersCount;
   }
 
   createProduction(newProduction: NewProduction): Production | undefined {
