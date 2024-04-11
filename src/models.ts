@@ -3,6 +3,9 @@ import { Type, Static } from '@sinclair/typebox';
 export type NewProduction = Static<typeof NewProduction>;
 export type Production = Static<typeof Production>;
 export type ProductionResponse = Static<typeof ProductionResponse>;
+export type DetailedProductionResponse = Static<
+  typeof DetailedProductionResponse
+>;
 export type Line = Static<typeof Line>;
 export type LineResponse = Static<typeof LineResponse>;
 export type SmbEndpointDescription = Static<typeof SmbEndpointDescription>;
@@ -156,8 +159,15 @@ export const UserSession = Type.Object({
 export const Line = Type.Object({
   name: Type.String(),
   id: Type.String(),
-  smbid: Type.String(),
+  smbconferenceid: Type.String(),
   connections: Connections
+});
+
+export const LineResponse = Type.Object({
+  name: Type.String(),
+  id: Type.String(),
+  smbconferenceid: Type.String(),
+  participants: Type.Array(User)
 });
 
 export const Production = Type.Object({
@@ -168,13 +178,11 @@ export const Production = Type.Object({
 
 export const ProductionResponse = Type.Object({
   name: Type.String(),
-  productionid: Type.String(),
-  participantlist: Type.Optional(Type.Array(User))
+  productionid: Type.String()
 });
 
-export const LineResponse = Type.Object({
+export const DetailedProductionResponse = Type.Object({
   name: Type.String(),
-  id: Type.String(),
-  smbconferenceid: Type.String(),
-  participants: Type.Array(User)
+  productionid: Type.String(),
+  lines: Type.Array(LineResponse)
 });
