@@ -230,7 +230,7 @@ export class CoreFunctions {
     return line;
   }
 
-  retrieveLineFromProduction(productionId: string, lineId: string): Line {
+  getLineFromProduction(productionId: string, lineId: string): Line {
     const production: Production = this.getProduction(productionId);
     const line: Line = this.getLine(production.lines, lineId);
     return line;

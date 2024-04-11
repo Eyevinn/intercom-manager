@@ -1,17 +1,52 @@
+import { EventEmitter } from 'events';
+
 import {
   NewProduction,
   Production,
   Line,
-  SmbEndpointDescription
+  SmbEndpointDescription,
+  UserSession,
+  User
 } from './models';
 
-import { UserManager } from './user_manager';
+const SESSION_INACTIVE_THRESHOLD = 60_000;
+const SESSION_EXPIRED_THRESHOLD = 120_000;
+const SESSION_PRUNE_THRESHOLD = 7_200_000;
 
-export class ProductionManager {
+export class ProductionManager extends EventEmitter {
   private productions: Production[];
+  private userSessions: Record<string, UserSession>;
+  private inactiveUsersCount = 0;
 
   constructor() {
+    super();
     this.productions = [];
+    this.userSessions = {};
+  }
+
+  checkUserStatus(): void {
+    let hasChanged = false;
+    for (const [sessionId, userSession] of Object.entries(this.userSessions)) {
+      if (userSession.lastSeen < Date.now() - SESSION_PRUNE_THRESHOLD) {
+        delete this.userSessions[sessionId];
+        hasChanged = true;
+      } else {
+        const isActive =
+          userSession.lastSeen > Date.now() - SESSION_INACTIVE_THRESHOLD;
+        const isExpired =
+          userSession.lastSeen < Date.now() - SESSION_EXPIRED_THRESHOLD;
+        if (
+          isActive !== userSession.isActive ||
+          isExpired !== userSession.isExpired
+        ) {
+          Object.assign(userSession, { isActive, isExpired });
+          hasChanged = true;
+        }
+      }
+    }
+    if (hasChanged) {
+      this.emit('users:change');
+    }
   }
 
   createProduction(newProduction: NewProduction): Production | undefined {
@@ -26,8 +61,7 @@ export class ProductionManager {
           name: line.name,
           id: index.toString(),
           smbid: '',
-          connections: {},
-          users: new UserManager()
+          connections: {}
         };
         newProductionLines.push(newProductionLine);
       }
@@ -158,5 +192,60 @@ export class ProductionManager {
         `Deleting connection failed, Production ${productionId} does not exist`
       );
     }
+  }
+
+  createUserSession(
+    productionId: string,
+    lineId: string,
+    sessionId: string,
+    name: string
+  ): void {
+    this.userSessions[sessionId] = {
+      productionId,
+      lineId,
+      name,
+      lastSeen: Date.now(),
+      isActive: true,
+      isExpired: false
+    };
+    console.log(`Created user session: "${name}": ${sessionId}`);
+    this.emit('users:change');
+  }
+
+  updateUserLastSeen(sessionId: string): boolean {
+    const userSession = this.userSessions[sessionId];
+    if (userSession) {
+      this.userSessions[sessionId].lastSeen = Date.now();
+      return true;
+    }
+    return false;
+  }
+
+  removeUserSession(sessionId: string): string | undefined {
+    if (sessionId in this.userSessions) {
+      delete this.userSessions[sessionId];
+      this.emit('users:change');
+      return sessionId;
+    }
+    return undefined;
+  }
+
+  getUsersForLine(productionId: string, lineId: string): User[] {
+    return Object.entries(this.userSessions).flatMap(
+      ([sessionid, userSession]) => {
+        if (
+          productionId === userSession.productionId &&
+          lineId === userSession.lineId &&
+          !userSession.isExpired
+        ) {
+          return {
+            sessionid,
+            name: userSession.name,
+            isActive: userSession.isActive
+          };
+        }
+        return [];
+      }
+    );
   }
 }

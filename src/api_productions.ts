@@ -15,7 +15,6 @@ import { Connection } from './connection';
 import { write, SessionDescription } from 'sdp-transform';
 import dotenv from 'dotenv';
 import { v4 as uuidv4 } from 'uuid';
-import { UserManager } from './user_manager';
 import { ConnectionQueue } from './connection_queue';
 import { CoreFunctions } from './api_productions_core_functions';
 dotenv.config();
@@ -23,6 +22,10 @@ dotenv.config();
 const productionManager = new ProductionManager();
 const connectionQueue = new ConnectionQueue();
 const coreFunctions = new CoreFunctions(productionManager, connectionQueue);
+
+export function checkUserStatus() {
+  productionManager.checkUserStatus();
+}
 
 export interface ApiProductionsOptions {
   smbServerBaseUrl: string;
@@ -167,15 +170,21 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const line: Line = coreFunctions.retrieveLineFromProduction(
+        const line: Line = coreFunctions.getLineFromProduction(
           request.params.productionid,
           request.params.lineid
         );
+
+        const participants = productionManager.getUsersForLine(
+          request.params.productionid,
+          request.params.lineid
+        );
+
         const lineResponse: LineResponse = {
           name: line.name,
           id: line.id,
           smbconferenceid: line.smbid,
-          participants: line.users.users
+          participants
         };
         reply.code(200).send(lineResponse);
       } catch (err) {
@@ -205,22 +214,19 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
+        const { lineid, productionid, username } = request.params;
         const sessionId: string = uuidv4();
-        const production: Production = coreFunctions.getProduction(
-          request.params.productionid
-        );
+        const production: Production =
+          coreFunctions.getProduction(productionid);
 
         await coreFunctions.createConferenceForLine(
           smb,
           smbServerUrl,
           production,
-          request.params.lineid
+          lineid
         );
 
-        const line: Line = coreFunctions.getLine(
-          production.lines,
-          request.params.lineid
-        );
+        const line: Line = coreFunctions.getLine(production.lines, lineid);
 
         const endpointId: string = uuidv4();
         const endpoint = await coreFunctions.createEndpoint(
@@ -243,7 +249,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           endpoint,
           production.productionid,
           line.id,
-          request.params.username,
+          username,
           endpointId,
           sessionId
         );
@@ -252,12 +258,12 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         const sdpOffer: string = write(offer);
 
         if (sdpOffer) {
-          const lineUserManager: UserManager = line.users;
-          lineUserManager.addUser({
-            name: request.params.username,
-            isActive: true,
-            sessionid: sessionId
-          });
+          productionManager.createUserSession(
+            productionid,
+            lineid,
+            sessionId,
+            username
+          );
           reply.code(200).send({ sdp: sdpOffer, sessionid: sessionId });
         } else {
           reply.code(500).send('Failed to generate sdp offer for endpoint');
@@ -286,7 +292,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const line: Line = coreFunctions.retrieveLineFromProduction(
+        const line: Line = coreFunctions.getLineFromProduction(
           request.params.productionid,
           request.params.lineid
         );
@@ -401,15 +407,13 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const line: Line = coreFunctions.retrieveLineFromProduction(
+        const participants = productionManager.getUsersForLine(
           request.params.productionid,
           request.params.lineid
         );
-        const lineUserManager: UserManager = line.users;
-        const participants: User[] = lineUserManager.getUsers();
 
         const waitForChange = new Promise<void>((resolve) => {
-          lineUserManager.once('change', () => {
+          productionManager.once('users:change', () => {
             resolve();
           });
         });
@@ -422,6 +426,30 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
             'Exception thrown when trying to set connection status for session: ' +
               err
           );
+      }
+    }
+  );
+
+  fastify.get<{
+    Params: { sessionid: string };
+  }>(
+    '/heartbeat/:sessionid',
+    {
+      schema: {
+        description: 'Update user session lastSeen',
+        response: {
+          200: Type.String(),
+          410: Type.String()
+        }
+      }
+    },
+    async (request, reply) => {
+      const { sessionid } = request.params;
+      const status = productionManager.updateUserLastSeen(sessionid);
+      if (status) {
+        reply.code(200).send('ok');
+      } else {
+        reply.code(410).send(`User session id "${sessionid}" not found.`);
       }
     }
   );
