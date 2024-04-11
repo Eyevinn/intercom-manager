@@ -15,7 +15,6 @@ const USER_EXPIRED_THRESHOLD = 120_000;
 export class ProductionManager extends EventEmitter {
   private productions: Production[];
   private userSessions: Record<string, UserSession>;
-  private disconnectedUsersCount = 0;
   private inactiveUsersCount = 0;
 
   constructor() {
@@ -27,12 +26,13 @@ export class ProductionManager extends EventEmitter {
   checkUserStatus(): void {
     let disconnectedUsersCount = 0;
     let inactiveUsersCount = 0;
-    for (const userSession of Object.values(this.userSessions)) {
+    for (const [sessionId, userSession] of Object.entries(this.userSessions)) {
       if (
         userSession.lastSeen.getTime() <
         new Date().getTime() - USER_EXPIRED_THRESHOLD
       ) {
         disconnectedUsersCount += 1;
+        delete this.userSessions[sessionId];
       } else if (
         userSession.lastSeen.getTime() <
         new Date().getTime() - USER_INACTIVE_THRESHOLD
@@ -41,13 +41,12 @@ export class ProductionManager extends EventEmitter {
       }
     }
     if (
-      disconnectedUsersCount !== this.disconnectedUsersCount ||
+      disconnectedUsersCount ||
       inactiveUsersCount !== this.inactiveUsersCount
     ) {
       console.log(
         `User status change: ${inactiveUsersCount} inactive and ${disconnectedUsersCount} disconnected`
       );
-      this.disconnectedUsersCount = disconnectedUsersCount;
       this.inactiveUsersCount = inactiveUsersCount;
       this.emit('users:change');
     }
