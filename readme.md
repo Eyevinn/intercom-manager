@@ -51,6 +51,52 @@ Start server locally
 SMB_ADDRESS=http://<smburl>:<smbport> npm start
 ```
 
+## Infrastructure
+
+Requires terraform and AWS access
+
+```
+cd infra
+terraform init -var-file="dev.tfvars"
+```
+
+### Development
+
+Create or select workspace `dev`
+
+```
+cd infra
+terraform workspace new dev
+```
+
+or
+
+```
+cd infra
+terraform workspace select dev
+```
+
+Create resources with variables for dev environment
+
+```
+terraform plan -var-file="dev.tfvars"
+terraform apply -var-file="dev.tfvars"
+```
+
+### Production
+
+Create or select workspace `prod`
+
+```
+cd infra
+terraform workspace select prod
+```
+
+```
+terraform plan -var-file="prod.tfvars"
+terraform apply -var-file="prod.tfvars"
+```
+
 ### Contributing
 
 See [CONTRIBUTING](CONTRIBUTING.md)
