@@ -301,7 +301,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         description:
           'Provide client local SDP description as request body to finalize connection protocol.',
         response: {
-          200: Line
+          200: Type.String()
         }
       }
     },
@@ -332,7 +332,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           connectionEndpointDescription,
           request.body
         );
-        reply.code(200).send(line);
+        reply.code(200);
       } catch (err) {
         reply
           .code(500)
@@ -413,8 +413,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     '/productions/:productionid/lines/:lineid/participants',
     {
       schema: {
-        description:
-          'Long Poll Endpoint to confirm client connection is active and receive participant list.',
+        description: 'Long Poll Endpoint to get participant list.',
         response: {
           200: Type.Array(User)
         }
