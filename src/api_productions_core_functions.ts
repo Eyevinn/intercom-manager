@@ -1,7 +1,12 @@
 import { parse } from 'sdp-transform';
 import { Connection } from './connection';
 import { MediaStreamsInfoSsrc } from './media_streams_info';
-import { Line, Production, SmbEndpointDescription } from './models';
+import {
+  Line,
+  LineResponse,
+  Production,
+  SmbEndpointDescription
+} from './models';
 import { SmbProtocol } from './smb';
 import { ConnectionQueue } from './connection_queue';
 import { ProductionManager } from './production_manager';
@@ -182,7 +187,7 @@ export class CoreFunctions {
 
     const line: Line = this.getLine(production.lines, lineId);
 
-    if (!activeLines.includes(line.smbid)) {
+    if (!activeLines.includes(line.smbconferenceid)) {
       const newConferenceId = await smb.allocateConference(smbServerUrl);
       if (
         !this.productionManager.setLineId(
@@ -234,5 +239,20 @@ export class CoreFunctions {
     const production: Production = this.getProduction(productionId);
     const line: Line = this.getLine(production.lines, lineId);
     return line;
+  }
+
+  getAllLinesResponse(production: Production): LineResponse[] {
+    const allLinesResponse: LineResponse[] = production.lines.map(
+      ({ name, id, smbconferenceid }) => ({
+        name,
+        id,
+        smbconferenceid: smbconferenceid,
+        participants: this.productionManager.getUsersForLine(
+          production.productionid,
+          id
+        )
+      })
+    );
+    return allLinesResponse;
   }
 }

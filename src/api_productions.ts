@@ -6,8 +6,9 @@ import {
   Line,
   LineResponse,
   SmbEndpointDescription,
+  User,
   ProductionResponse,
-  User
+  DetailedProductionResponse
 } from './models';
 import { SmbProtocol } from './smb';
 import { ProductionManager } from './production_manager';
@@ -61,11 +62,13 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       try {
         const production: Production | undefined =
           productionManager.createProduction(request.body);
+
         if (production) {
-          const productionRepsonse: ProductionResponse = {
+          const productionResponse: ProductionResponse = {
+            name: production.name,
             productionid: production.productionid
           };
-          reply.code(200).send(productionRepsonse);
+          reply.code(200).send(productionResponse);
         } else {
           reply.code(500).send('Failed to create production');
         }
@@ -78,21 +81,26 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   );
 
   fastify.get<{
-    Reply: Production[] | string;
+    Reply: ProductionResponse[] | string;
   }>(
     '/productions',
     {
       schema: {
         description: 'Retrieves all Productions.',
         response: {
-          200: Type.Array(Production)
+          200: Type.Array(ProductionResponse)
         }
       }
     },
     async (request, reply) => {
       try {
         const productions: Production[] = productionManager.getProductions();
-        reply.code(200).send(productions);
+        reply.code(200).send(
+          productions.slice(-50).map(({ name, productionid }) => ({
+            name,
+            productionid
+          }))
+        );
       } catch (err) {
         reply
           .code(500)
@@ -103,14 +111,14 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
 
   fastify.get<{
     Params: { productionid: string };
-    Reply: Production | string;
+    Reply: DetailedProductionResponse | string;
   }>(
     '/productions/:productionid',
     {
       schema: {
         description: 'Retrieves a Production.',
         response: {
-          200: Production
+          200: DetailedProductionResponse
         }
       }
     },
@@ -119,7 +127,14 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         const production: Production = coreFunctions.getProduction(
           request.params.productionid
         );
-        reply.code(200).send(production);
+        const allLinesResponse: LineResponse[] =
+          coreFunctions.getAllLinesResponse(production);
+        const productionResponse: DetailedProductionResponse = {
+          name: production.name,
+          productionid: production.productionid,
+          lines: allLinesResponse
+        };
+        reply.code(200).send(productionResponse);
       } catch (err) {
         reply
           .code(500)
@@ -130,14 +145,14 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
 
   fastify.get<{
     Params: { productionid: string };
-    Reply: Line[] | string;
+    Reply: LineResponse[] | string;
   }>(
     '/productions/:productionid/lines',
     {
       schema: {
         description: 'Retrieves all lines for a Production.',
         response: {
-          200: Type.Array(Line)
+          200: Type.Array(LineResponse)
         }
       }
     },
@@ -146,7 +161,9 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         const production: Production = coreFunctions.getProduction(
           request.params.productionid
         );
-        reply.code(200).send(production.lines);
+        const allLinesResponse: LineResponse[] =
+          coreFunctions.getAllLinesResponse(production);
+        reply.code(200).send(allLinesResponse);
       } catch (err) {
         reply
           .code(500)
@@ -174,17 +191,15 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           request.params.productionid,
           request.params.lineid
         );
-
-        const participants = productionManager.getUsersForLine(
+        const participantlist: User[] = productionManager.getUsersForLine(
           request.params.productionid,
-          request.params.lineid
+          line.id
         );
-
         const lineResponse: LineResponse = {
           name: line.name,
           id: line.id,
-          smbconferenceid: line.smbid,
-          participants
+          smbconferenceid: line.smbconferenceid,
+          participants: participantlist
         };
         reply.code(200).send(lineResponse);
       } catch (err) {
@@ -232,7 +247,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         const endpoint = await coreFunctions.createEndpoint(
           smb,
           smbServerUrl,
-          line.smbid,
+          line.smbconferenceid,
           endpointId,
           true,
           false,
@@ -286,7 +301,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         description:
           'Provide client local SDP description as request body to finalize connection protocol.',
         response: {
-          200: Line
+          200: Type.String()
         }
       }
     },
@@ -312,12 +327,12 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         await coreFunctions.handleAnswerRequest(
           smb,
           smbServerUrl,
-          line.smbid,
+          line.smbconferenceid,
           endpointId,
           connectionEndpointDescription,
           request.body
         );
-        reply.code(200).send(line);
+        reply.code(200);
       } catch (err) {
         reply
           .code(500)
@@ -398,8 +413,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     '/productions/:productionid/lines/:lineid/participants',
     {
       schema: {
-        description:
-          'Long Poll Endpoint to confirm client connection is active and receive participant list.',
+        description: 'Long Poll Endpoint to get participant list.',
         response: {
           200: Type.Array(User)
         }
