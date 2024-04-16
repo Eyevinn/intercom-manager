@@ -50,7 +50,10 @@ export class ProductionManager extends EventEmitter {
   }
 
   createProduction(newProduction: NewProduction): Production | undefined {
-    const productionId: string = (this.productions.length + 1).toString();
+    const productionIds = this.productions.map((production) =>
+      parseInt(production.productionid, 10)
+    );
+    const productionId = (Math.max(...productionIds, 0) + 1).toString();
     if (!this.getProduction(productionId)) {
       const newProductionLines: Line[] = [];
 
