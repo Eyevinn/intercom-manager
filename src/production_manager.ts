@@ -183,6 +183,11 @@ export class ProductionManager extends EventEmitter {
     if (production) {
       const matchedLine = production.lines.find((line) => line.id === lineId);
       if (matchedLine?.connections) {
+        if (!this.removeUserSession(sessionId)) {
+          throw new Error(
+            `Deleting userSession failed, Session ${sessionId} does not exist`
+          );
+        }
         delete matchedLine.connections[sessionId];
         return sessionId;
       } else {
