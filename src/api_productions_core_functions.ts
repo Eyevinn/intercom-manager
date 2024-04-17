@@ -112,6 +112,11 @@ export class CoreFunctions {
 
     const parsedAnswer = parse(answer);
     const answerMediaDescription = parsedAnswer.media[0];
+    if (!answerMediaDescription) {
+      throw new Error(
+        'Missing audio media description when handling sdp answer from endpoint'
+      );
+    }
     if (parsedAnswer.media[1].ssrcs) {
       let parsedSsrcs = parsedAnswer.media[1].ssrcs[0].id;
       if (typeof parsedSsrcs === 'string') {
@@ -119,6 +124,7 @@ export class CoreFunctions {
       }
       endpointDescription.audio.ssrcs.push(parsedSsrcs);
     }
+
     if (endpointDescription.audio.ssrcs.length === 0) {
       throw new Error(
         'Missing audio ssrcs when handling sdp answer from endpoint'
@@ -149,7 +155,9 @@ export class CoreFunctions {
     transport.dtls.type = answerFingerprint.type;
     transport.dtls.hash = answerFingerprint.hash;
     transport.dtls.setup = answerMediaDescription.setup || '';
-    transport.ice.ufrag = answerMediaDescription.iceUfrag || '';
+    transport.ice.ufrag = this.toStringIfNumber(
+      answerMediaDescription.iceUfrag
+    );
     transport.ice.pwd = answerMediaDescription.icePwd || '';
     transport.ice.candidates = !answerMediaDescription.candidates
       ? []
@@ -254,5 +262,15 @@ export class CoreFunctions {
       })
     );
     return allLinesResponse;
+  }
+
+  private toStringIfNumber(value: any): string {
+    if (typeof value === 'number') {
+      return String(value);
+    } else if (typeof value === 'string') {
+      return value;
+    } else {
+      throw new Error(`${value} has incorrect type`);
+    }
   }
 }
