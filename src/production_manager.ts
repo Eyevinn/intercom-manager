@@ -16,7 +16,6 @@ const SESSION_PRUNE_THRESHOLD = 7_200_000;
 export class ProductionManager extends EventEmitter {
   private productions: Production[];
   private userSessions: Record<string, UserSession>;
-  private inactiveUsersCount = 0;
 
   constructor() {
     super();
