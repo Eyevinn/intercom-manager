@@ -253,7 +253,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           line.smbconferenceid,
           endpointId,
           true,
-          false,
+          true,
           parseInt(opts.endpointIdleTimeout, 10)
         );
         if (!endpoint.audio) {

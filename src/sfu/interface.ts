@@ -73,6 +73,10 @@ export interface SfuEndpointDescription {
     'payload-type': AudioSmbPayloadType;
     'rtp-hdrexts': SfuRtpHeaderExtension[];
   };
+
+  data?: {
+    port: number;
+  };
 }
 
 interface Rtp {
@@ -104,12 +108,6 @@ interface RtcpFb {
   subtype?: string | undefined;
 }
 
-interface sctpmap {
-  sctpmapNumber: number;
-  app: string;
-  maxMessageSize: number;
-}
-
 interface SsrcGroup {
   semantics: string;
   ssrcs: string;
@@ -131,7 +129,8 @@ export interface MediaDescriptionBase {
     address: string;
   };
   ext: Ext[];
-  sctpmap?: sctpmap;
+  sctpPort?: number;
+  maxMessageSize?: number;
   ssrcs: Ssrc[];
   ssrcGroups?: SsrcGroup[];
   iceUfrag: string;
