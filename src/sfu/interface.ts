@@ -104,12 +104,6 @@ interface RtcpFb {
   subtype?: string | undefined;
 }
 
-interface sctpmap {
-  sctpmapNumber: number;
-  app: string;
-  maxMessageSize: number;
-}
-
 interface SsrcGroup {
   semantics: string;
   ssrcs: string;
@@ -131,7 +125,7 @@ export interface MediaDescriptionBase {
     address: string;
   };
   ext: Ext[];
-  sctpmap?: sctpmap;
+  sctpPort?: number;
   ssrcs: Ssrc[];
   ssrcGroups?: SsrcGroup[];
   iceUfrag: string;
