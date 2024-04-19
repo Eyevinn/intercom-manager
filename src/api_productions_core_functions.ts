@@ -193,7 +193,7 @@ export class CoreFunctions {
   ): Promise<void> {
     const activeLines: string[] = await smb.getConferences(smbServerUrl);
 
-    const line: Line = this.getLine(production.lines, lineId);
+    const line = this.productionManager.requireLine(production.lines, lineId);
 
     if (!activeLines.includes(line.smbconferenceid)) {
       const newConferenceId = await smb.allocateConference(smbServerUrl);
@@ -223,38 +223,12 @@ export class CoreFunctions {
     await this.connectionQueue.queueAsync(createConf);
   }
 
-  getProduction(productionId: string): Production {
-    const production: Production | undefined =
-      this.productionManager.getProduction(productionId);
-    if (!production) {
-      throw new Error('Trying to get production that does not exist');
-    }
-    return production;
-  }
-
-  getLine(productionLines: Line[], lineId: string): Line {
-    const line: Line | undefined = this.productionManager.getLine(
-      productionLines,
-      lineId
-    );
-    if (!line) {
-      throw new Error('Trying to get line that does not exist');
-    }
-    return line;
-  }
-
-  getLineFromProduction(productionId: string, lineId: string): Line {
-    const production: Production = this.getProduction(productionId);
-    const line: Line = this.getLine(production.lines, lineId);
-    return line;
-  }
-
   getAllLinesResponse(production: Production): LineResponse[] {
     const allLinesResponse: LineResponse[] = production.lines.map(
       ({ name, id, smbconferenceid }) => ({
         name,
         id,
-        smbconferenceid: smbconferenceid,
+        smbconferenceid,
         participants: this.productionManager.getUsersForLine(
           production.productionid,
           id

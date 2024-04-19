@@ -124,7 +124,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const production: Production = coreFunctions.getProduction(
+        const production = productionManager.requireProduction(
           request.params.productionid
         );
         const allLinesResponse: LineResponse[] =
@@ -158,7 +158,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const production: Production = coreFunctions.getProduction(
+        const production = productionManager.requireProduction(
           request.params.productionid
         );
         const allLinesResponse: LineResponse[] =
@@ -187,12 +187,12 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const line: Line = coreFunctions.getLineFromProduction(
-          request.params.productionid,
-          request.params.lineid
-        );
+        const { productionid, lineid } = request.params;
+        const production = productionManager.requireProduction(productionid);
+        const line = productionManager.requireLine(production.lines, lineid);
+
         const participantlist: User[] = productionManager.getUsersForLine(
-          request.params.productionid,
+          productionid,
           line.id
         );
         const lineResponse: LineResponse = {
@@ -231,8 +231,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       try {
         const { lineid, productionid, username } = request.params;
         const sessionId: string = uuidv4();
-        const production: Production =
-          coreFunctions.getProduction(productionid);
+        const production = productionManager.requireProduction(productionid);
 
         await coreFunctions.createConferenceForLine(
           smb,
@@ -241,7 +240,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           lineid
         );
 
-        const line: Line = coreFunctions.getLine(production.lines, lineid);
+        const line = productionManager.requireLine(production.lines, lineid);
 
         const endpointId: string = uuidv4();
         const endpoint = await coreFunctions.createEndpoint(
@@ -307,15 +306,13 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const line: Line = coreFunctions.getLineFromProduction(
-          request.params.productionid,
-          request.params.lineid
-        );
+        const { productionid, lineid, sessionid } = request.params;
+        const production = productionManager.requireProduction(productionid);
+        const line = productionManager.requireLine(production.lines, lineid);
 
         const connectionEndpointDescription: SmbEndpointDescription =
-          line.connections[request.params.sessionid].sessionDescription;
-        const endpointId: string =
-          line.connections[request.params.sessionid].endpointId;
+          line.connections[sessionid].sessionDescription;
+        const endpointId: string = line.connections[sessionid].endpointId;
 
         if (!connectionEndpointDescription) {
           throw new Error('Could not get connection endpoint description');

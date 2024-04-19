@@ -1,5 +1,7 @@
 import { EventEmitter } from 'events';
 
+import { strict as assert } from 'node:assert';
+
 import {
   NewProduction,
   Production,
@@ -53,32 +55,32 @@ export class ProductionManager extends EventEmitter {
       parseInt(production.productionid, 10)
     );
     const productionId = (Math.max(...productionIds, 0) + 1).toString();
-    if (!this.getProduction(productionId)) {
-      const newProductionLines: Line[] = [];
+    assert(
+      !this.getProduction(productionId),
+      `Create production failed, Production with id "${productionId}" already exists`
+    );
+    const newProductionLines: Line[] = [];
 
-      let index = 0;
-      for (const line of newProduction.lines) {
-        index++;
-        const newProductionLine: Line = {
-          name: line.name,
-          id: index.toString(),
-          smbconferenceid: '',
-          connections: {}
-        };
-        newProductionLines.push(newProductionLine);
-      }
-
-      const production: Production = {
-        name: newProduction.name,
-        productionid: productionId,
-        lines: newProductionLines
+    let index = 0;
+    for (const line of newProduction.lines) {
+      index++;
+      const newProductionLine: Line = {
+        name: line.name,
+        id: index.toString(),
+        smbconferenceid: '',
+        connections: {}
       };
+      newProductionLines.push(newProductionLine);
+    }
+
+    const production: Production = {
+      name: newProduction.name,
+      productionid: productionId,
+      lines: newProductionLines
+    };
+    if (production) {
       this.productions.push(production);
       return production;
-    } else {
-      throw new Error(
-        `Create production failed, Production with id "${productionId}" already exists`
-      );
     }
   }
 
@@ -87,29 +89,28 @@ export class ProductionManager extends EventEmitter {
   }
 
   getProduction(productionid: string): Production | undefined {
-    const matchedProduction = this.productions.find(
+    return this.productions.find(
       (production) => production.productionid === productionid
     );
-    if (matchedProduction) {
-      return matchedProduction;
-    } else {
-      return undefined;
-    }
+  }
+
+  requireProduction(productionid: string): Production {
+    const production = this.getProduction(productionid);
+    assert(production, 'Trying to get a production that does not exist');
+    return production;
   }
 
   deleteProduction(productionId: string): string | undefined {
-    const matchedProductionIndex: number = this.productions.findIndex(
+    const matchedProductionIndex = this.productions.findIndex(
       (production) => production.productionid === productionId
     );
-    if (matchedProductionIndex != -1) {
-      if (this.productions.splice(matchedProductionIndex, 1)) {
-        return productionId;
-      } else {
-        return undefined;
-      }
-    } else {
-      return undefined;
+    if (
+      matchedProductionIndex !== -1 &&
+      this.productions.splice(matchedProductionIndex, 1)
+    ) {
+      return productionId;
     }
+    return undefined;
   }
 
   setLineId(
@@ -123,20 +124,19 @@ export class ProductionManager extends EventEmitter {
       if (line) {
         line.smbconferenceid = lineSmbId;
         return line;
-      } else {
-        return undefined;
       }
-    } else {
-      return undefined;
     }
+    return undefined;
   }
 
   getLine(lines: Line[], lineId: string): Line | undefined {
-    const matchedLine = lines.find((line) => line.id === lineId);
-    if (matchedLine) {
-      return matchedLine;
-    }
-    return undefined;
+    return lines.find((line) => line.id === lineId);
+  }
+
+  requireLine(productionLines: Line[], lineId: string): Line {
+    const line = this.getLine(productionLines, lineId);
+    assert(line, 'Trying to get a line that does not exist');
+    return line;
   }
 
   addConnectionToLine(
@@ -147,24 +147,20 @@ export class ProductionManager extends EventEmitter {
     sessionId: string
   ): void {
     const production = this.getProduction(productionId);
-    if (production) {
-      const matchedLine = production.lines.find((line) => line.id === lineId);
-      if (matchedLine) {
-        matchedLine.connections[sessionId] = {
-          sessionDescription: endpointDescription,
-          endpointId: endpointId,
-          isActive: true
-        };
-      } else {
-        throw new Error(
-          `Adding connection failed, Line ${lineId} does not exist`
-        );
-      }
-    } else {
-      throw new Error(
-        `Adding connection failed, Production ${productionId} does not exist`
-      );
-    }
+    assert(
+      production,
+      `Adding connection failed, Production ${productionId} does not exist`
+    );
+    const matchedLine = production.lines.find((line) => line.id === lineId);
+    assert(
+      matchedLine,
+      `Adding connection failed, Line ${lineId} does not exist`
+    );
+    matchedLine.connections[sessionId] = {
+      sessionDescription: endpointDescription,
+      endpointId: endpointId,
+      isActive: true
+    };
   }
 
   removeConnectionFromLine(
@@ -173,26 +169,22 @@ export class ProductionManager extends EventEmitter {
     sessionId: string
   ): string | undefined {
     const production = this.getProduction(productionId);
-    if (production) {
-      const matchedLine = production.lines.find((line) => line.id === lineId);
-      if (matchedLine?.connections) {
-        if (!this.removeUserSession(sessionId)) {
-          throw new Error(
-            `Deleting userSession failed, Session ${sessionId} does not exist`
-          );
-        }
-        delete matchedLine.connections[sessionId];
-        return sessionId;
-      } else {
-        throw new Error(
-          `Deleting connection failed, Line ${lineId} does not exist`
-        );
-      }
-    } else {
-      throw new Error(
-        `Deleting connection failed, Production ${productionId} does not exist`
-      );
-    }
+    assert(
+      production,
+      `Deleting connection failed, Production ${productionId} does not exist`
+    );
+    const matchedLine = production.lines.find((line) => line.id === lineId);
+    assert(
+      matchedLine?.connections,
+      `Deleting connection failed, Line ${lineId} does not exist`
+    );
+    const deletedUserSessionId = this.removeUserSession(sessionId);
+    assert(
+      deletedUserSessionId,
+      `Deleting userSession failed, Session ${sessionId} does not exist`
+    );
+    delete matchedLine.connections[sessionId];
+    return sessionId;
   }
 
   createUserSession(
