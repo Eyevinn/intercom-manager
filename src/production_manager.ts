@@ -73,14 +73,8 @@ export class ProductionManager extends EventEmitter {
         productionid: productionId,
         lines: newProductionLines
       };
-      if (production) {
-        this.productions.push(production);
-        return production;
-      } else {
-        throw new Error(
-          `Create production failed, Production object error ${production}`
-        );
-      }
+      this.productions.push(production);
+      return production;
     } else {
       throw new Error(
         `Create production failed, Production ${newProduction} already exists`
