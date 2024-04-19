@@ -77,7 +77,7 @@ export class ProductionManager extends EventEmitter {
       return production;
     } else {
       throw new Error(
-        `Create production failed, Production ${newProduction} already exists`
+        `Create production failed, Production with id "${productionId}" already exists`
       );
     }
   }
