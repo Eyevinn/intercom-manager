@@ -1,7 +1,5 @@
 import { EventEmitter } from 'events';
 
-import { strict as assert } from 'node:assert';
-
 import {
   NewProduction,
   Production,
@@ -10,6 +8,7 @@ import {
   UserSession,
   User
 } from './models';
+import { assert } from './utils';
 
 const SESSION_INACTIVE_THRESHOLD = 60_000;
 const SESSION_EXPIRED_THRESHOLD = 120_000;
