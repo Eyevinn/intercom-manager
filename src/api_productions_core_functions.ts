@@ -1,12 +1,7 @@
 import { parse } from 'sdp-transform';
 import { Connection } from './connection';
 import { MediaStreamsInfoSsrc } from './media_streams_info';
-import {
-  Line,
-  LineResponse,
-  Production,
-  SmbEndpointDescription
-} from './models';
+import { LineResponse, Production, SmbEndpointDescription } from './models';
 import { SmbProtocol } from './smb';
 import { ConnectionQueue } from './connection_queue';
 import { ProductionManager } from './production_manager';
@@ -24,14 +19,14 @@ export class CoreFunctions {
     this.connectionQueue = connectionQueue;
   }
 
-  createConnection(
+  async createConnection(
     endpoint: SmbEndpointDescription,
     productionId: string,
     lineId: string,
     username: string,
     endpointId: string,
     sessionId: string
-  ): Connection {
+  ): Promise<Connection> {
     if (!endpoint.audio) {
       throw new Error('Missing audio when creating offer');
     }
@@ -59,7 +54,7 @@ export class CoreFunctions {
       endpointId
     );
 
-    this.productionManager.addConnectionToLine(
+    await this.productionManager.addConnectionToLine(
       productionId,
       lineId,
       endpoint,
@@ -198,11 +193,11 @@ export class CoreFunctions {
     if (!activeLines.includes(line.smbconferenceid)) {
       const newConferenceId = await smb.allocateConference(smbServerUrl);
       if (
-        !this.productionManager.setLineId(
+        !(await this.productionManager.setLineId(
           production.productionid,
           line.id,
           newConferenceId
-        )
+        ))
       ) {
         throw new Error(
           `Failed to set line smb id for line ${line.id} in production ${production.productionid}`

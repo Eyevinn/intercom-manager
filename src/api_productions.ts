@@ -3,7 +3,6 @@ import { FastifyPluginCallback } from 'fastify';
 import {
   NewProduction,
   Production,
-  Line,
   LineResponse,
   SmbEndpointDescription,
   User,
@@ -12,7 +11,6 @@ import {
 } from './models';
 import { SmbProtocol } from './smb';
 import { ProductionManager } from './production_manager';
-import { Connection } from './connection';
 import { write, SessionDescription } from 'sdp-transform';
 import dotenv from 'dotenv';
 import { v4 as uuidv4 } from 'uuid';
@@ -60,8 +58,9 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const production: Production | undefined =
-          productionManager.createProduction(request.body);
+        const production = await productionManager.createProduction(
+          request.body
+        );
 
         if (production) {
           const productionResponse: ProductionResponse = {
@@ -94,7 +93,8 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const productions: Production[] = productionManager.getProductions();
+        const productions: Production[] =
+          productionManager.getActiveProductions();
         reply.code(200).send(
           productions.slice(-50).map(({ name, productionid }) => ({
             name,
@@ -124,7 +124,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const production = productionManager.requireProduction(
+        const production = await productionManager.requireProduction(
           request.params.productionid
         );
         const allLinesResponse: LineResponse[] =
@@ -158,7 +158,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const production = productionManager.requireProduction(
+        const production = await productionManager.requireProduction(
           request.params.productionid
         );
         const allLinesResponse: LineResponse[] =
@@ -188,7 +188,9 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     async (request, reply) => {
       try {
         const { productionid, lineid } = request.params;
-        const production = productionManager.requireProduction(productionid);
+        const production = await productionManager.requireProduction(
+          productionid
+        );
         const line = productionManager.requireLine(production.lines, lineid);
 
         const participantlist: User[] = productionManager.getUsersForLine(
@@ -231,7 +233,9 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       try {
         const { lineid, productionid, username } = request.params;
         const sessionId: string = uuidv4();
-        const production = productionManager.requireProduction(productionid);
+        const production = await productionManager.requireProduction(
+          productionid
+        );
 
         await coreFunctions.createConferenceForLine(
           smb,
@@ -259,7 +263,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           throw new Error('Missing ssrcs when creating sdp offer for endpoint');
         }
 
-        const connection: Connection = coreFunctions.createConnection(
+        const connection = await coreFunctions.createConnection(
           endpoint,
           production.productionid,
           line.id,
@@ -307,7 +311,9 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     async (request, reply) => {
       try {
         const { productionid, lineid, sessionid } = request.params;
-        const production = productionManager.requireProduction(productionid);
+        const production = await productionManager.requireProduction(
+          productionid
+        );
         const line = productionManager.requireLine(production.lines, lineid);
 
         const connectionEndpointDescription: SmbEndpointDescription =
@@ -352,13 +358,12 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       }
     },
     async (request, reply) => {
+      const { productionid } = request.params;
       try {
-        if (!productionManager.deleteProduction(request.params.productionid)) {
+        if (!(await productionManager.deleteProduction(productionid))) {
           throw new Error('Could not delete production');
         }
-        reply
-          .code(204)
-          .send(`Deleted production ${request.params.productionid}`);
+        reply.code(204).send(`Deleted production ${productionid}`);
       } catch (err) {
         reply
           .code(500)
@@ -382,13 +387,13 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        if (
-          !productionManager.removeConnectionFromLine(
+        const deletedSessionId =
+          await productionManager.removeConnectionFromLine(
             request.params.productionid,
             request.params.lineid,
             request.params.sessionid
-          )
-        ) {
+          );
+        if (!deletedSessionId) {
           throw new Error(
             `Could not delete connection ${request.params.sessionid}`
           );
@@ -468,4 +473,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   next();
 };
 
-export default apiProductions;
+export async function getApiProductions() {
+  await productionManager.load();
+  return apiProductions;
+}

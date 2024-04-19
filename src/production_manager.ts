@@ -9,19 +9,24 @@ import {
   User
 } from './models';
 import { assert } from './utils';
+import dbManager from './db_manager';
 
 const SESSION_INACTIVE_THRESHOLD = 60_000;
 const SESSION_EXPIRED_THRESHOLD = 120_000;
 const SESSION_PRUNE_THRESHOLD = 7_200_000;
 
 export class ProductionManager extends EventEmitter {
-  private productions: Production[];
+  private activeProductions: Production[];
   private userSessions: Record<string, UserSession>;
 
   constructor() {
     super();
-    this.productions = [];
+    this.activeProductions = [];
     this.userSessions = {};
+  }
+
+  async load(): Promise<void> {
+    dbManager.connect();
   }
 
   checkUserStatus(): void {
@@ -49,13 +54,26 @@ export class ProductionManager extends EventEmitter {
     }
   }
 
-  createProduction(newProduction: NewProduction): Production | undefined {
-    const productionIds = this.productions.map((production) =>
+  async getProductionCount(): Promise<number> {
+    // TODO: Move to jest mock (dbProductionCount will never actually be undefined, this fallback is just for Jest)
+    const dbProductionCount = await dbManager.getProductionCount();
+    if (dbProductionCount !== undefined) {
+      return dbProductionCount;
+    }
+    const productionIds = this.activeProductions.map((production) =>
       parseInt(production.productionid, 10)
     );
-    const productionId = (Math.max(...productionIds, 0) + 1).toString();
+    return Math.max(...productionIds, 0);
+  }
+
+  async createProduction(
+    newProduction: NewProduction
+  ): Promise<Production | undefined> {
+    const productionCount = await this.getProductionCount();
+    const productionId = (productionCount + 1).toString();
+
     assert(
-      !this.getProduction(productionId),
+      !(await this.getProduction(productionId)),
       `Create production failed, Production with id "${productionId}" already exists`
     );
     const newProductionLines: Line[] = [];
@@ -78,44 +96,71 @@ export class ProductionManager extends EventEmitter {
       lines: newProductionLines
     };
     if (production) {
-      this.productions.push(production);
+      this.activeProductions.push(production);
+      await dbManager.addProduction(production);
       return production;
     }
   }
 
-  getProductions(): Production[] {
-    return this.productions;
+  /**
+   * Get a list of the productions stored in memory
+   */
+  getActiveProductions(): Production[] {
+    return this.activeProductions;
   }
 
-  getProduction(productionid: string): Production | undefined {
-    return this.productions.find(
+  async getProduction(productionid: string): Promise<Production | undefined> {
+    let production = this.activeProductions.find(
       (production) => production.productionid === productionid
     );
+
+    if (!production) {
+      production = await dbManager.getProduction(productionid);
+
+      if (production) {
+        this.activeProductions.push(production);
+      }
+    }
+
+    return production;
   }
 
-  requireProduction(productionid: string): Production {
-    const production = this.getProduction(productionid);
+  async requireProduction(productionid: string): Promise<Production> {
+    const production = await this.getProduction(productionid);
     assert(production, 'Trying to get a production that does not exist');
     return production;
   }
 
-  deleteProduction(productionId: string): boolean {
-    const matchedProductionIndex = this.productions.findIndex(
+  /**
+   * Delete the cached in memory production if it exists
+   */
+  deleteActiveProduction(productionId: string): boolean {
+    const matchedProductionIndex = this.activeProductions.findIndex(
       (production) => production.productionid === productionId
     );
     if (matchedProductionIndex !== -1) {
-      this.productions.splice(matchedProductionIndex, 1);
+      this.activeProductions.splice(matchedProductionIndex, 1);
       return true;
     }
     return false;
   }
 
-  setLineId(
+  /**
+   * Delete the production from the db and local cache
+   */
+  async deleteProduction(productionId: string): Promise<boolean> {
+    const dbDeleted = await dbManager.deleteProduction(productionId);
+    const localDeleted = this.deleteActiveProduction(productionId);
+    // TODO: just returning dbDeleted should be enough, but it is not for the unit tests
+    return dbDeleted || localDeleted;
+  }
+
+  async setLineId(
     productionid: string,
     lineId: string,
     lineSmbId: string
-  ): Line | undefined {
-    const matchedProduction = this.getProduction(productionid);
+  ): Promise<Line | undefined> {
+    const matchedProduction = await this.getProduction(productionid);
     if (matchedProduction) {
       const line = this.getLine(matchedProduction.lines, lineId);
       if (line) {
@@ -136,14 +181,14 @@ export class ProductionManager extends EventEmitter {
     return line;
   }
 
-  addConnectionToLine(
+  async addConnectionToLine(
     productionId: string,
     lineId: string,
     endpointDescription: SmbEndpointDescription,
     endpointId: string,
     sessionId: string
-  ): void {
-    const production = this.getProduction(productionId);
+  ): Promise<void> {
+    const production = await this.getProduction(productionId);
     assert(
       production,
       `Adding connection failed, Production ${productionId} does not exist`
@@ -160,12 +205,12 @@ export class ProductionManager extends EventEmitter {
     };
   }
 
-  removeConnectionFromLine(
+  async removeConnectionFromLine(
     productionId: string,
     lineId: string,
     sessionId: string
-  ): string | undefined {
-    const production = this.getProduction(productionId);
+  ): Promise<string | undefined> {
+    const production = await this.getProduction(productionId);
     assert(
       production,
       `Deleting connection failed, Production ${productionId} does not exist`

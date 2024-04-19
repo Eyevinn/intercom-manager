@@ -1,8 +1,10 @@
 import api from './api';
 
+jest.mock('./db_manager');
+
 describe('api', () => {
   it('responds with hello, world!', async () => {
-    const server = api({
+    const server = await api({
       title: 'my awesome service',
       smbServerBaseUrl: 'http://localhost',
       endpointIdleTimeout: '60'

@@ -1,6 +1,8 @@
 import { ProductionManager } from './production_manager';
 import { NewProduction, Production, SmbEndpointDescription } from './models';
 
+jest.mock('./db_manager');
+
 const SmbEndpointDescriptionMock: SmbEndpointDescription = {
   'bundle-transport': {
     dtls: {
@@ -68,8 +70,8 @@ describe('production_manager', () => {
       ]
     };
 
-    productionManagerTest.createProduction(newProduction);
-    const production = productionManagerTest.getProduction('1');
+    await productionManagerTest.createProduction(newProduction);
+    const production = await productionManagerTest.getProduction('1');
 
     expect(production).not.toBe(undefined);
     expect(production?.name).toStrictEqual('productionname');
@@ -93,11 +95,11 @@ describe('production_manager', () => {
       ]
     };
 
-    productionManagerTest.createProduction(newProduction);
+    await productionManagerTest.createProduction(newProduction);
 
     () => {
-      expect(() => {
-        productionManagerTest.createProduction(newProduction);
+      expect(async () => {
+        await productionManagerTest.createProduction(newProduction);
       }).toThrow();
     };
   });
@@ -129,9 +131,9 @@ describe('production_manager', () => {
       ]
     };
 
-    expect(productionManagerTest.getProductions()).toStrictEqual([]);
-    productionManagerTest.createProduction(newProduction);
-    const productions = productionManagerTest.getProductions();
+    expect(productionManagerTest.getActiveProductions()).toStrictEqual([]);
+    await productionManagerTest.createProduction(newProduction);
+    const productions = productionManagerTest.getActiveProductions();
     expect(productions).toStrictEqual([production]);
   });
 });
@@ -149,8 +151,10 @@ describe('production_manager', () => {
       ]
     };
 
-    productionManagerTest.createProduction(newProduction);
-    const nonExistentProduction = productionManagerTest.getProduction('null');
+    await productionManagerTest.createProduction(newProduction);
+    const nonExistentProduction = await productionManagerTest.getProduction(
+      'null'
+    );
     expect(nonExistentProduction).toStrictEqual(undefined);
   });
 });
@@ -203,14 +207,16 @@ describe('production_manager', () => {
       ]
     };
 
-    productionManagerTest.createProduction(newProduction1);
-    productionManagerTest.createProduction(newProduction2);
-    expect(productionManagerTest.getProductions()).toStrictEqual([
+    await productionManagerTest.createProduction(newProduction1);
+    await productionManagerTest.createProduction(newProduction2);
+    expect(productionManagerTest.getActiveProductions()).toStrictEqual([
       production1,
       production2
     ]);
-    productionManagerTest.deleteProduction('1');
-    expect(productionManagerTest.getProductions()).toStrictEqual([production2]);
+    await productionManagerTest.deleteProduction('1');
+    expect(productionManagerTest.getActiveProductions()).toStrictEqual([
+      production2
+    ]);
   });
 });
 
@@ -227,11 +233,17 @@ describe('production_manager', () => {
       ]
     };
 
-    const production = productionManagerTest.createProduction(newProduction);
-    expect(productionManagerTest.getProductions()).toStrictEqual([production]);
-    productionManagerTest.deleteProduction('1');
-    expect(productionManagerTest.getProductions()).toStrictEqual([]);
-    expect(productionManagerTest.deleteProduction('1')).toStrictEqual(false);
+    const production = await productionManagerTest.createProduction(
+      newProduction
+    );
+    expect(productionManagerTest.getActiveProductions()).toStrictEqual([
+      production
+    ]);
+    await productionManagerTest.deleteProduction('1');
+    expect(productionManagerTest.getActiveProductions()).toStrictEqual([]);
+    expect(await productionManagerTest.deleteProduction('1')).toStrictEqual(
+      false
+    );
   });
 });
 
@@ -248,13 +260,14 @@ describe('production_manager', () => {
       ]
     };
 
-    productionManagerTest.createProduction(newProduction);
-    const lineIdBefore =
-      productionManagerTest.getProduction('1')?.lines[0].smbconferenceid;
+    await productionManagerTest.createProduction(newProduction);
+
+    const productionBefore = await productionManagerTest.getProduction('1');
+    const lineIdBefore = productionBefore?.lines[0].smbconferenceid;
     expect(lineIdBefore).toStrictEqual('');
-    productionManagerTest.setLineId('1', '1', 'newLineId');
-    const lineIdAfter =
-      productionManagerTest.getProduction('1')?.lines[0].smbconferenceid;
+    await productionManagerTest.setLineId('1', '1', 'newLineId');
+    const productionAfter = await productionManagerTest.getProduction('1');
+    const lineIdAfter = productionAfter?.lines[0].smbconferenceid;
     expect(lineIdAfter).toStrictEqual('newLineId');
   });
 });
@@ -263,7 +276,7 @@ describe('production_manager', () => {
   it('set new line smb id returns undefined if line is not found', async () => {
     const productionManagerTest = new ProductionManager();
 
-    const noline = productionManagerTest.setLineId(
+    const noline = await productionManagerTest.setLineId(
       'productionname',
       'no_linename',
       'newLineId'
@@ -285,15 +298,16 @@ describe('production_manager', () => {
       ]
     };
 
-    productionManagerTest.createProduction(newProduction);
-    productionManagerTest.addConnectionToLine(
+    await productionManagerTest.createProduction(newProduction);
+    await productionManagerTest.addConnectionToLine(
       '1',
       '1',
       SmbEndpointDescriptionMock,
       'endpointId',
       'sessionId'
     );
-    const productionLines = productionManagerTest.getProduction('1')?.lines;
+    const production = await productionManagerTest.getProduction('1');
+    const productionLines = production?.lines;
     if (!productionLines) {
       fail('Test failed due to productionLines being undefined');
     }
