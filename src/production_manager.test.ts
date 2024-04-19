@@ -215,7 +215,7 @@ describe('production_manager', () => {
 });
 
 describe('production_manager', () => {
-  it('deleting non existent production object returns undefined', async () => {
+  it('deleting non existent production object returns false', async () => {
     const productionManagerTest = new ProductionManager();
 
     const newProduction: NewProduction = {
@@ -231,9 +231,7 @@ describe('production_manager', () => {
     expect(productionManagerTest.getProductions()).toStrictEqual([production]);
     productionManagerTest.deleteProduction('1');
     expect(productionManagerTest.getProductions()).toStrictEqual([]);
-    expect(productionManagerTest.deleteProduction('1')).toStrictEqual(
-      undefined
-    );
+    expect(productionManagerTest.deleteProduction('1')).toStrictEqual(false);
   });
 });
 

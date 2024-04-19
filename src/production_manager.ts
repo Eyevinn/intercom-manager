@@ -99,17 +99,15 @@ export class ProductionManager extends EventEmitter {
     return production;
   }
 
-  deleteProduction(productionId: string): string | undefined {
+  deleteProduction(productionId: string): boolean {
     const matchedProductionIndex = this.productions.findIndex(
       (production) => production.productionid === productionId
     );
-    if (
-      matchedProductionIndex !== -1 &&
-      this.productions.splice(matchedProductionIndex, 1)
-    ) {
-      return productionId;
+    if (matchedProductionIndex !== -1) {
+      this.productions.splice(matchedProductionIndex, 1);
+      return true;
     }
-    return undefined;
+    return false;
   }
 
   setLineId(
