@@ -8,7 +8,6 @@ const MONGODB_CONNECTION_STRING: string =
 function convertMongoDBProductionToProduction(production: any): Production {
   const lines: Line[] = production.lines.map((line: any) => ({
     ...line,
-    connections: {},
     smbconferenceid: ''
   }));
   return {
