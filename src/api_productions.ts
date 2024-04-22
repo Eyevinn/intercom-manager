@@ -314,7 +314,6 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
             'Could not get user session or session does not exist'
           );
         }
-        console.log(userSession);
         const connectionEndpointDescription:
           | SmbEndpointDescription
           | undefined = userSession.sessionDescription;
