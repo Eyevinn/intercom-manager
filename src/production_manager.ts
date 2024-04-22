@@ -84,8 +84,7 @@ export class ProductionManager extends EventEmitter {
       const newProductionLine: Line = {
         name: line.name,
         id: index.toString(),
-        smbconferenceid: '',
-        connections: {}
+        smbconferenceid: ''
       };
       newProductionLines.push(newProductionLine);
     }
@@ -181,54 +180,6 @@ export class ProductionManager extends EventEmitter {
     return line;
   }
 
-  async addConnectionToLine(
-    productionId: string,
-    lineId: string,
-    endpointDescription: SmbEndpointDescription,
-    endpointId: string,
-    sessionId: string
-  ): Promise<void> {
-    const production = await this.getProduction(productionId);
-    assert(
-      production,
-      `Adding connection failed, Production ${productionId} does not exist`
-    );
-    const matchedLine = production.lines.find((line) => line.id === lineId);
-    assert(
-      matchedLine,
-      `Adding connection failed, Line ${lineId} does not exist`
-    );
-    matchedLine.connections[sessionId] = {
-      sessionDescription: endpointDescription,
-      endpointId: endpointId,
-      isActive: true
-    };
-  }
-
-  async removeConnectionFromLine(
-    productionId: string,
-    lineId: string,
-    sessionId: string
-  ): Promise<string | undefined> {
-    const production = await this.getProduction(productionId);
-    assert(
-      production,
-      `Deleting connection failed, Production ${productionId} does not exist`
-    );
-    const matchedLine = production.lines.find((line) => line.id === lineId);
-    assert(
-      matchedLine?.connections,
-      `Deleting connection failed, Line ${lineId} does not exist`
-    );
-    const deletedUserSessionId = this.removeUserSession(sessionId);
-    assert(
-      deletedUserSessionId,
-      `Deleting userSession failed, Session ${sessionId} does not exist`
-    );
-    delete matchedLine.connections[sessionId];
-    return sessionId;
-  }
-
   createUserSession(
     productionId: string,
     lineId: string,
@@ -247,10 +198,32 @@ export class ProductionManager extends EventEmitter {
     this.emit('users:change');
   }
 
+  getUser(sessionId: string): UserSession | undefined {
+    const userSession = this.userSessions[sessionId];
+    if (userSession) {
+      return userSession;
+    }
+    return undefined;
+  }
+
   updateUserLastSeen(sessionId: string): boolean {
     const userSession = this.userSessions[sessionId];
     if (userSession) {
       this.userSessions[sessionId].lastSeen = Date.now();
+      return true;
+    }
+    return false;
+  }
+
+  updateUserEndpoint(
+    sessionId: string,
+    endpointId: string,
+    sessionDescription: SmbEndpointDescription
+  ): boolean {
+    const userSession = this.userSessions[sessionId];
+    if (userSession) {
+      this.userSessions[sessionId].endpointId = endpointId;
+      this.userSessions[sessionId].sessionDescription = sessionDescription;
       return true;
     }
     return false;
