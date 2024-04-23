@@ -248,6 +248,7 @@ export class ProductionManager extends EventEmitter {
         ) {
           return {
             sessionid,
+            endpointid: userSession.endpointId,
             name: userSession.name,
             isActive: userSession.isActive
           };

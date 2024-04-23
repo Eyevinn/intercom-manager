@@ -143,6 +143,7 @@ export const Connections = Type.Record(Type.String(), Endpoint);
 export const User = Type.Object({
   name: Type.String(),
   sessionid: Type.String(),
+  endpointid: Type.Optional(Type.String()),
   isActive: Type.Boolean()
 });
 
