@@ -1,5 +1,10 @@
 import { ProductionManager } from './production_manager';
-import { NewProduction, Production, SmbEndpointDescription } from './models';
+import {
+  NewProduction,
+  Production,
+  SmbEndpointDescription,
+  UserSession
+} from './models';
 
 jest.mock('./db_manager');
 
@@ -78,7 +83,6 @@ describe('production_manager', () => {
     expect(production?.productionid).toStrictEqual('1');
     expect(production?.lines[0].name).toStrictEqual('linename');
     expect(production?.lines[0].smbconferenceid).toStrictEqual('');
-    expect(production?.lines[0].connections).toStrictEqual({});
   });
 });
 
@@ -125,8 +129,7 @@ describe('production_manager', () => {
         {
           name: 'linename',
           id: '1',
-          smbconferenceid: '',
-          connections: {}
+          smbconferenceid: ''
         }
       ]
     };
@@ -188,8 +191,7 @@ describe('production_manager', () => {
         {
           name: 'linename1',
           id: '1',
-          smbconferenceid: '',
-          connections: {}
+          smbconferenceid: ''
         }
       ]
     };
@@ -201,8 +203,7 @@ describe('production_manager', () => {
         {
           name: 'linename2',
           id: '1',
-          smbconferenceid: '',
-          connections: {}
+          smbconferenceid: ''
         }
       ]
     };
@@ -299,12 +300,11 @@ describe('production_manager', () => {
     };
 
     await productionManagerTest.createProduction(newProduction);
-    await productionManagerTest.addConnectionToLine(
-      '1',
-      '1',
-      SmbEndpointDescriptionMock,
+    productionManagerTest.createUserSession('1', '1', 'sessionId', 'userName');
+    productionManagerTest.updateUserEndpoint(
+      'sessionId',
       'endpointId',
-      'sessionId'
+      SmbEndpointDescriptionMock
     );
     const production = await productionManagerTest.getProduction('1');
     const productionLines = production?.lines;
@@ -314,13 +314,16 @@ describe('production_manager', () => {
     const line = productionManagerTest.getLine(productionLines, '1');
     expect(line);
 
-    const endpoint = line?.connections['sessionId'];
-    expect(endpoint);
+    const userSession: UserSession | undefined =
+      productionManagerTest.getUser('sessionId');
+    expect(userSession);
 
-    expect(endpoint?.sessionDescription).toStrictEqual(
+    expect(userSession?.sessionDescription).toStrictEqual(
       SmbEndpointDescriptionMock
     );
-    expect(endpoint?.endpointId).toStrictEqual('endpointId');
-    expect(endpoint?.isActive).toStrictEqual(true);
+    expect(userSession?.endpointId).toStrictEqual('endpointId');
+    expect(userSession?.name).toStrictEqual('userName');
+    expect(userSession?.isActive).toStrictEqual(true);
+    expect(userSession?.isExpired).toStrictEqual(false);
   });
 });

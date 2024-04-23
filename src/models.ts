@@ -135,8 +135,7 @@ export const SmbEndpointDescription = Type.Object({
 
 export const Endpoint = Type.Object({
   endpointId: Type.String(),
-  sessionDescription: SmbEndpointDescription,
-  isActive: Type.Boolean()
+  sessionDescription: SmbEndpointDescription
 });
 
 export const Connections = Type.Record(Type.String(), Endpoint);
@@ -153,14 +152,15 @@ export const UserSession = Type.Object({
   lineId: Type.String(),
   lastSeen: Type.Number(),
   isActive: Type.Boolean(),
-  isExpired: Type.Boolean()
+  isExpired: Type.Boolean(),
+  endpointId: Type.Optional(Type.String()),
+  sessionDescription: Type.Optional(SmbEndpointDescription)
 });
 
 export const Line = Type.Object({
   name: Type.String(),
   id: Type.String(),
-  smbconferenceid: Type.String(),
-  connections: Connections
+  smbconferenceid: Type.String()
 });
 
 export const LineResponse = Type.Object({

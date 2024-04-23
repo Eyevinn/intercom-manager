@@ -7,11 +7,11 @@ import {
   SmbEndpointDescription,
   User,
   ProductionResponse,
-  DetailedProductionResponse
+  DetailedProductionResponse,
+  UserSession
 } from './models';
 import { SmbProtocol } from './smb';
 import { ProductionManager } from './production_manager';
-import { write, SessionDescription } from 'sdp-transform';
 import dotenv from 'dotenv';
 import { v4 as uuidv4 } from 'uuid';
 import { ConnectionQueue } from './connection_queue';
@@ -263,25 +263,16 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           throw new Error('Missing ssrcs when creating sdp offer for endpoint');
         }
 
-        const connection = await coreFunctions.createConnection(
+        const sdpOffer = await coreFunctions.createConnection(
+          productionid,
+          lineid,
           endpoint,
-          production.productionid,
-          line.id,
           username,
           endpointId,
           sessionId
         );
 
-        const offer: SessionDescription = connection.createOffer();
-        const sdpOffer: string = write(offer);
-
         if (sdpOffer) {
-          productionManager.createUserSession(
-            productionid,
-            lineid,
-            sessionId,
-            username
-          );
           reply.code(200).send({ sdp: sdpOffer, sessionid: sessionId });
         } else {
           reply.code(500).send('Failed to generate sdp offer for endpoint');
@@ -316,13 +307,20 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         );
         const line = productionManager.requireLine(production.lines, lineid);
 
-        const connectionEndpointDescription: SmbEndpointDescription =
-          line.connections[sessionid].sessionDescription;
-        const endpointId: string = line.connections[sessionid].endpointId;
-
+        const userSession: UserSession | undefined =
+          productionManager.getUser(sessionid);
+        if (!userSession) {
+          throw new Error(
+            'Could not get user session or session does not exist'
+          );
+        }
+        const connectionEndpointDescription:
+          | SmbEndpointDescription
+          | undefined = userSession.sessionDescription;
         if (!connectionEndpointDescription) {
           throw new Error('Could not get connection endpoint description');
         }
+        const endpointId: string | undefined = userSession.endpointId;
         if (!endpointId) {
           throw new Error('Could not get connection endpoint id');
         }
@@ -386,19 +384,13 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       }
     },
     async (request, reply) => {
+      const sessionId = request.params.sessionid;
       try {
-        const deletedSessionId =
-          await productionManager.removeConnectionFromLine(
-            request.params.productionid,
-            request.params.lineid,
-            request.params.sessionid
-          );
+        const deletedSessionId = productionManager.removeUserSession(sessionId);
         if (!deletedSessionId) {
-          throw new Error(
-            `Could not delete connection ${request.params.sessionid}`
-          );
+          throw new Error(`Could not delete connection ${sessionId}`);
         }
-        reply.code(204).send(`Deleted connection ${request.params.sessionid}`);
+        reply.code(204).send(`Deleted connection ${sessionId}`);
       } catch (err) {
         reply
           .code(500)

@@ -1,4 +1,4 @@
-import { parse } from 'sdp-transform';
+import { SessionDescription, parse, write } from 'sdp-transform';
 import { Connection } from './connection';
 import { MediaStreamsInfoSsrc } from './media_streams_info';
 import { LineResponse, Production, SmbEndpointDescription } from './models';
@@ -20,13 +20,13 @@ export class CoreFunctions {
   }
 
   async createConnection(
-    endpoint: SmbEndpointDescription,
     productionId: string,
     lineId: string,
+    endpoint: SmbEndpointDescription,
     username: string,
     endpointId: string,
     sessionId: string
-  ): Promise<Connection> {
+  ): Promise<string> {
     if (!endpoint.audio) {
       throw new Error('Missing audio when creating offer');
     }
@@ -54,15 +54,23 @@ export class CoreFunctions {
       endpointId
     );
 
-    await this.productionManager.addConnectionToLine(
-      productionId,
-      lineId,
-      endpoint,
-      endpointId,
-      sessionId
-    );
+    const offer: SessionDescription = connection.createOffer();
+    const sdpOffer: string = write(offer);
 
-    return connection;
+    if (sdpOffer) {
+      this.productionManager.createUserSession(
+        productionId,
+        lineId,
+        sessionId,
+        username
+      );
+      this.productionManager.updateUserEndpoint(
+        sessionId,
+        endpointId,
+        endpoint
+      );
+    }
+    return sdpOffer;
   }
 
   async createEndpoint(
