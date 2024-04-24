@@ -47,14 +47,8 @@ const dbManager = {
   },
 
   async addProduction(production: Production): Promise<void> {
-    // filter out values we don't want to store, like smbconferenceid and connections
-    const { name, productionid, lines } = production;
-    const persistedLines = lines.map(({ id, name }) => ({ id, name }));
-    // Note that insertOne mutates the object you pass in to it and adds its own ObjectId there
-    await client.connect();
-    await db
-      .collection('productions')
-      .insertOne({ name, productionid, lines: persistedLines });
+    // Making a copy of production, because insertOne otherwise mutates the object you pass in to it and adds its own ObjectId there
+    await db.collection('productions').insertOne({ ...production });
   },
 
   async deleteProduction(productionId: string): Promise<boolean> {
