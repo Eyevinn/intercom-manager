@@ -16,12 +16,10 @@ const SESSION_EXPIRED_THRESHOLD = 120_000;
 const SESSION_PRUNE_THRESHOLD = 7_200_000;
 
 export class ProductionManager extends EventEmitter {
-  private activeProductions: Production[];
   private userSessions: Record<string, UserSession>;
 
   constructor() {
     super();
-    this.activeProductions = [];
     this.userSessions = {};
   }
 
@@ -55,15 +53,7 @@ export class ProductionManager extends EventEmitter {
   }
 
   async getProductionCount(): Promise<number> {
-    // TODO: Move to jest mock (dbProductionCount will never actually be undefined, this fallback is just for Jest)
-    const dbProductionCount = await dbManager.getProductionCount();
-    if (dbProductionCount !== undefined) {
-      return dbProductionCount;
-    }
-    const productionIds = this.activeProductions.map((production) =>
-      parseInt(production.productionid, 10)
-    );
-    return Math.max(...productionIds, 0);
+    return await dbManager.getProductionCount();
   }
 
   async createProduction(
@@ -95,33 +85,17 @@ export class ProductionManager extends EventEmitter {
       lines: newProductionLines
     };
     if (production) {
-      this.activeProductions.push(production);
       await dbManager.addProduction(production);
       return production;
     }
   }
 
-  /**
-   * Get a list of the productions stored in memory
-   */
-  getActiveProductions(): Production[] {
-    return this.activeProductions;
+  async getProductions(limit = 0): Promise<Production[]> {
+    return dbManager.getProductions(limit);
   }
 
   async getProduction(productionid: string): Promise<Production | undefined> {
-    let production = this.activeProductions.find(
-      (production) => production.productionid === productionid
-    );
-
-    if (!production) {
-      production = await dbManager.getProduction(productionid);
-
-      if (production) {
-        this.activeProductions.push(production);
-      }
-    }
-
-    return production;
+    return dbManager.getProduction(productionid);
   }
 
   async requireProduction(productionid: string): Promise<Production> {
@@ -131,27 +105,10 @@ export class ProductionManager extends EventEmitter {
   }
 
   /**
-   * Delete the cached in memory production if it exists
-   */
-  deleteActiveProduction(productionId: string): boolean {
-    const matchedProductionIndex = this.activeProductions.findIndex(
-      (production) => production.productionid === productionId
-    );
-    if (matchedProductionIndex !== -1) {
-      this.activeProductions.splice(matchedProductionIndex, 1);
-      return true;
-    }
-    return false;
-  }
-
-  /**
    * Delete the production from the db and local cache
    */
   async deleteProduction(productionId: string): Promise<boolean> {
-    const dbDeleted = await dbManager.deleteProduction(productionId);
-    const localDeleted = this.deleteActiveProduction(productionId);
-    // TODO: just returning dbDeleted should be enough, but it is not for the unit tests
-    return dbDeleted || localDeleted;
+    return dbManager.deleteProduction(productionId);
   }
 
   async setLineId(

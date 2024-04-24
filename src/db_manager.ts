@@ -1,20 +1,16 @@
-import { MongoClient } from 'mongodb';
-import { Production, Line } from './models';
+import { Document, MongoClient, WithId } from 'mongodb';
+import { Production } from './models';
 
 const MONGODB_CONNECTION_STRING: string =
   process.env.MONGODB_CONNECTION_STRING ??
   'mongodb://localhost:27017/intercom-manager';
 
-function convertMongoDBProductionToProduction(production: any): Production {
-  const lines: Line[] = production.lines.map((line: any) => ({
-    ...line,
-    smbconferenceid: ''
-  }));
-  return {
-    name: production.name,
-    productionid: production.productionid,
-    lines
-  };
+function convertMongoDBProductionToProduction({
+  name,
+  productionid,
+  lines
+}: WithId<Document>): Production {
+  return { name, productionid, lines };
 }
 
 const client = new MongoClient(MONGODB_CONNECTION_STRING);
@@ -29,11 +25,14 @@ const dbManager = {
     await client.close();
   },
 
-  // We don't actually use this.
-  async getProductions(): Promise<Production[]> {
-    return (await db.collection('productions').find().toArray()).map(
-      convertMongoDBProductionToProduction
-    );
+  // TODO: Sort by recent activity
+  async getProductions(limit: number): Promise<Production[]> {
+    const productions = await db
+      .collection('productions')
+      .find()
+      .limit(limit)
+      .toArray();
+    return productions.map(convertMongoDBProductionToProduction);
   },
 
   async getProduction(productionId: string): Promise<Production | undefined> {

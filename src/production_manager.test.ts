@@ -134,9 +134,9 @@ describe('production_manager', () => {
       ]
     };
 
-    expect(productionManagerTest.getActiveProductions()).toStrictEqual([]);
+    expect(productionManagerTest.getProductions()).toStrictEqual([]);
     await productionManagerTest.createProduction(newProduction);
-    const productions = productionManagerTest.getActiveProductions();
+    const productions = productionManagerTest.getProductions();
     expect(productions).toStrictEqual([production]);
   });
 });
@@ -210,14 +210,12 @@ describe('production_manager', () => {
 
     await productionManagerTest.createProduction(newProduction1);
     await productionManagerTest.createProduction(newProduction2);
-    expect(productionManagerTest.getActiveProductions()).toStrictEqual([
+    expect(productionManagerTest.getProductions()).toStrictEqual([
       production1,
       production2
     ]);
     await productionManagerTest.deleteProduction('1');
-    expect(productionManagerTest.getActiveProductions()).toStrictEqual([
-      production2
-    ]);
+    expect(productionManagerTest.getProductions()).toStrictEqual([production2]);
   });
 });
 
@@ -237,11 +235,9 @@ describe('production_manager', () => {
     const production = await productionManagerTest.createProduction(
       newProduction
     );
-    expect(productionManagerTest.getActiveProductions()).toStrictEqual([
-      production
-    ]);
+    expect(productionManagerTest.getProductions()).toStrictEqual([production]);
     await productionManagerTest.deleteProduction('1');
-    expect(productionManagerTest.getActiveProductions()).toStrictEqual([]);
+    expect(productionManagerTest.getProductions()).toStrictEqual([]);
     expect(await productionManagerTest.deleteProduction('1')).toStrictEqual(
       false
     );
