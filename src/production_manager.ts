@@ -5,8 +5,8 @@ import {
   Production,
   Line,
   SmbEndpointDescription,
-  UserSession,
-  User
+  UserResponse,
+  UserSession
 } from './models';
 import { assert } from './utils';
 import dbManager from './db_manager';
@@ -238,7 +238,7 @@ export class ProductionManager extends EventEmitter {
     return undefined;
   }
 
-  getUsersForLine(productionId: string, lineId: string): User[] {
+  getUsersForLine(productionId: string, lineId: string): UserResponse[] {
     return Object.entries(this.userSessions).flatMap(
       ([sessionid, userSession]) => {
         if (

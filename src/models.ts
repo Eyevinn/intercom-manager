@@ -11,7 +11,7 @@ export type LineResponse = Static<typeof LineResponse>;
 export type SmbEndpointDescription = Static<typeof SmbEndpointDescription>;
 export type DetailedConference = Static<typeof DetailedConference>;
 export type Endpoint = Static<typeof Endpoint>;
-export type User = Static<typeof User>;
+export type UserResponse = Static<typeof UserResponse>;
 export type UserSession = Static<typeof UserSession>;
 
 export const Audio = Type.Object({
@@ -140,7 +140,7 @@ export const Endpoint = Type.Object({
 
 export const Connections = Type.Record(Type.String(), Endpoint);
 
-export const User = Type.Object({
+export const UserResponse = Type.Object({
   name: Type.String(),
   sessionid: Type.String(),
   isActive: Type.Boolean()
@@ -167,7 +167,7 @@ export const LineResponse = Type.Object({
   name: Type.String(),
   id: Type.String(),
   smbconferenceid: Type.String(),
-  participants: Type.Array(User)
+  participants: Type.Array(UserResponse)
 });
 
 export const Production = Type.Object({

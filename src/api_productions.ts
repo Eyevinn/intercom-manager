@@ -5,7 +5,7 @@ import {
   Production,
   LineResponse,
   SmbEndpointDescription,
-  User,
+  UserResponse,
   ProductionResponse,
   DetailedProductionResponse,
   UserSession
@@ -193,7 +193,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         );
         const line = productionManager.requireLine(production.lines, lineid);
 
-        const participantlist: User[] = productionManager.getUsersForLine(
+        const participantlist = productionManager.getUsersForLine(
           productionid,
           line.id
         );
@@ -402,14 +402,14 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   //Long poll endpoint
   fastify.post<{
     Params: { productionid: string; lineid: string; sessionid: string };
-    Reply: User[] | string;
+    Reply: UserResponse[] | string;
   }>(
     '/productions/:productionid/lines/:lineid/participants',
     {
       schema: {
         description: 'Long Poll Endpoint to get participant list.',
         response: {
-          200: Type.Array(User)
+          200: Type.Array(UserResponse)
         }
       }
     },
