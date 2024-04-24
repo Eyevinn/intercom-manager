@@ -25,11 +25,12 @@ const dbManager = {
     await client.close();
   },
 
-  // TODO: Sort by recent activity
+  /** Get all productions from the database in reverse natural order, limited by the limit parameter */
   async getProductions(limit: number): Promise<Production[]> {
     const productions = await db
       .collection('productions')
       .find()
+      .sort({ $natural: -1 })
       .limit(limit)
       .toArray();
     return productions.map(convertMongoDBProductionToProduction);
