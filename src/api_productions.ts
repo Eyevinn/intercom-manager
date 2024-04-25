@@ -93,10 +93,9 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const productions: Production[] =
-          productionManager.getActiveProductions();
+        const productions = await productionManager.getProductions(50);
         reply.code(200).send(
-          productions.slice(-50).map(({ name, productionid }) => ({
+          productions.map(({ name, productionid }) => ({
             name,
             productionid
           }))
