@@ -202,13 +202,13 @@ export class CoreFunctions {
       const newConferenceId = await smb.allocateConference(smbServerUrl);
       if (
         !(await this.productionManager.setLineId(
-          production.productionid,
+          production._id,
           line.id,
           newConferenceId
         ))
       ) {
         throw new Error(
-          `Failed to set line smb id for line ${line.id} in production ${production.productionid}`
+          `Failed to set line smb id for line ${line.id} in production ${production._id}`
         );
       }
     }
@@ -233,7 +233,7 @@ export class CoreFunctions {
         id,
         smbconferenceid,
         participants: this.productionManager.getUsersForLine(
-          production.productionid,
+          production._id.toString(),
           id
         )
       })

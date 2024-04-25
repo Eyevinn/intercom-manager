@@ -17,8 +17,8 @@ const newProduction: NewProduction = {
 };
 
 const existingProduction: Production = {
+  _id: 1,
   name: 'productionname',
-  productionid: '1',
   lines: [
     {
       name: 'linename',
@@ -85,7 +85,6 @@ const SmbEndpointDescriptionMock: SmbEndpointDescription = {
 jest.mock('./db_manager', () => ({
   addProduction: jest.fn(),
   getProduction: jest.fn(),
-  getProductionCount: jest.fn(),
   getProductions: jest.fn(),
   deleteProduction: jest.fn()
 }));
@@ -95,25 +94,16 @@ beforeEach(() => {
 });
 
 describe('production_manager', () => {
-  it('creates a production object and save it to the class instance', async () => {
+  it('calls the dbManager when you try to create a production', async () => {
     const { getProduction } = jest.requireMock('./db_manager');
     getProduction.mockReturnValueOnce(undefined).mockReturnValue(newProduction);
 
     const productionManagerTest = new ProductionManager();
 
-    const spyGetProductionCount = jest.spyOn(dbManager, 'getProductionCount');
     const spyAddProduction = jest.spyOn(dbManager, 'addProduction');
-    const spyGetProduction = jest.spyOn(dbManager, 'getProduction');
 
-    const production = await productionManagerTest.createProduction(
-      newProduction
-    );
+    await productionManagerTest.createProduction(newProduction);
     expect(spyAddProduction).toHaveBeenCalledTimes(1);
-    expect(spyGetProductionCount).toHaveBeenCalledTimes(1);
-    expect(spyGetProduction).toHaveBeenCalledTimes(1);
-    expect(production).not.toBe(undefined);
-    expect(production?.name).toStrictEqual('productionname');
-    expect(production?.lines[0].name).toStrictEqual('linename');
   });
 });
 
@@ -161,36 +151,16 @@ describe('production_manager', () => {
 
     const productionManagerTest = new ProductionManager();
 
-    const nonExistentProduction = await productionManagerTest.getProduction(
-      'null'
-    );
+    const nonExistentProduction = await productionManagerTest.getProduction(-1);
     expect(nonExistentProduction).toStrictEqual(undefined);
   });
 });
 
 describe('production_manager', () => {
   it('deleting production object removes it from class instance', async () => {
-    const newProduction1: NewProduction = {
-      name: 'productionname1',
-      lines: [
-        {
-          name: 'linename1'
-        }
-      ]
-    };
-
-    const newProduction2: NewProduction = {
-      name: 'productionname2',
-      lines: [
-        {
-          name: 'linename2'
-        }
-      ]
-    };
-
     const production1: Production = {
+      _id: 1,
       name: 'productionname1',
-      productionid: '1',
       lines: [
         {
           name: 'linename1',
@@ -201,8 +171,8 @@ describe('production_manager', () => {
     };
 
     const production2: Production = {
+      _id: 2,
       name: 'productionname2',
-      productionid: '2',
       lines: [
         {
           name: 'linename2',
@@ -212,14 +182,9 @@ describe('production_manager', () => {
       ]
     };
 
-    const {
-      getProduction,
-      getProductionCount,
-      getProductions,
-      deleteProduction
-    } = jest.requireMock('./db_manager');
+    const { getProduction, getProductions, deleteProduction } =
+      jest.requireMock('./db_manager');
     getProduction.mockReturnValueOnce(undefined).mockReturnValueOnce(undefined);
-    getProductionCount.mockReturnValueOnce(0).mockReturnValueOnce(1);
     getProductions
       .mockReturnValueOnce([production1, production2])
       .mockReturnValueOnce([production2]);
@@ -227,12 +192,6 @@ describe('production_manager', () => {
 
     const productionManagerTest = new ProductionManager();
 
-    expect(
-      await productionManagerTest.createProduction(newProduction1)
-    ).toStrictEqual(production1);
-    expect(
-      await productionManagerTest.createProduction(newProduction2)
-    ).toStrictEqual(production2);
     expect(await productionManagerTest.getProductions()).toStrictEqual([
       production1,
       production2
@@ -278,7 +237,7 @@ describe('production_manager', () => {
       'endpointId',
       SmbEndpointDescriptionMock
     );
-    const production = await productionManagerTest.getProduction('1');
+    const production = await productionManagerTest.getProduction(1);
     const productionLines = production?.lines;
     if (!productionLines) {
       fail('Test failed due to productionLines being undefined');

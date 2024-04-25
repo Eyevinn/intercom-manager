@@ -171,8 +171,8 @@ export const LineResponse = Type.Object({
 });
 
 export const Production = Type.Object({
+  _id: Type.Number(),
   name: Type.String(),
-  productionid: Type.String(),
   lines: Type.Array(Line)
 });
 

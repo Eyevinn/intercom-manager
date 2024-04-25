@@ -2,7 +2,6 @@ import { Type } from '@sinclair/typebox';
 import { FastifyPluginCallback } from 'fastify';
 import {
   NewProduction,
-  Production,
   LineResponse,
   SmbEndpointDescription,
   User,
@@ -65,7 +64,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         if (production) {
           const productionResponse: ProductionResponse = {
             name: production.name,
-            productionid: production.productionid
+            productionid: production._id.toString()
           };
           reply.code(200).send(productionResponse);
         } else {
@@ -95,9 +94,9 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       try {
         const productions = await productionManager.getProductions(50);
         reply.code(200).send(
-          productions.map(({ name, productionid }) => ({
+          productions.map(({ _id, name }) => ({
             name,
-            productionid
+            productionid: _id.toString()
           }))
         );
       } catch (err) {
@@ -124,13 +123,13 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     async (request, reply) => {
       try {
         const production = await productionManager.requireProduction(
-          request.params.productionid
+          parseInt(request.params.productionid, 10)
         );
         const allLinesResponse: LineResponse[] =
           coreFunctions.getAllLinesResponse(production);
         const productionResponse: DetailedProductionResponse = {
           name: production.name,
-          productionid: production.productionid,
+          productionid: production._id.toString(),
           lines: allLinesResponse
         };
         reply.code(200).send(productionResponse);
@@ -158,7 +157,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     async (request, reply) => {
       try {
         const production = await productionManager.requireProduction(
-          request.params.productionid
+          parseInt(request.params.productionid, 10)
         );
         const allLinesResponse: LineResponse[] =
           coreFunctions.getAllLinesResponse(production);
@@ -188,7 +187,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       try {
         const { productionid, lineid } = request.params;
         const production = await productionManager.requireProduction(
-          productionid
+          parseInt(productionid, 10)
         );
         const line = productionManager.requireLine(production.lines, lineid);
 
@@ -233,7 +232,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         const { lineid, productionid, username } = request.params;
         const sessionId: string = uuidv4();
         const production = await productionManager.requireProduction(
-          productionid
+          parseInt(productionid, 10)
         );
 
         await coreFunctions.createConferenceForLine(
@@ -302,7 +301,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       try {
         const { productionid, lineid, sessionid } = request.params;
         const production = await productionManager.requireProduction(
-          productionid
+          parseInt(productionid, 10)
         );
         const line = productionManager.requireLine(production.lines, lineid);
 
