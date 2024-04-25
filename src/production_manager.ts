@@ -52,20 +52,9 @@ export class ProductionManager extends EventEmitter {
     }
   }
 
-  async getProductionCount(): Promise<number> {
-    return await dbManager.getProductionCount();
-  }
-
   async createProduction(
     newProduction: NewProduction
   ): Promise<Production | undefined> {
-    const productionCount = await this.getProductionCount();
-    const productionId = (productionCount + 1).toString();
-
-    assert(
-      !(await this.getProduction(productionId)),
-      `Create production failed, Production with id "${productionId}" already exists`
-    );
     const newProductionLines: Line[] = [];
 
     let index = 0;
@@ -79,27 +68,19 @@ export class ProductionManager extends EventEmitter {
       newProductionLines.push(newProductionLine);
     }
 
-    const production: Production = {
-      name: newProduction.name,
-      productionid: productionId,
-      lines: newProductionLines
-    };
-    if (production) {
-      await dbManager.addProduction(production);
-      return production;
-    }
+    return dbManager.addProduction(newProduction.name, newProductionLines);
   }
 
   async getProductions(limit = 0): Promise<Production[]> {
     return dbManager.getProductions(limit);
   }
 
-  async getProduction(productionid: string): Promise<Production | undefined> {
-    return dbManager.getProduction(productionid);
+  async getProduction(id: number): Promise<Production | undefined> {
+    return dbManager.getProduction(id);
   }
 
-  async requireProduction(productionid: string): Promise<Production> {
-    const production = await this.getProduction(productionid);
+  async requireProduction(id: number): Promise<Production> {
+    const production = await this.getProduction(id);
     assert(production, 'Trying to get a production that does not exist');
     return production;
   }
@@ -112,7 +93,7 @@ export class ProductionManager extends EventEmitter {
   }
 
   async setLineId(
-    productionid: string,
+    productionid: number,
     lineId: string,
     lineSmbId: string
   ): Promise<Line | undefined> {

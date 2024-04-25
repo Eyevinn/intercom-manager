@@ -1,20 +1,23 @@
-import { Document, MongoClient, WithId } from 'mongodb';
-import { Production } from './models';
+import { MongoClient } from 'mongodb';
+import { Line, Production } from './models';
 
 const MONGODB_CONNECTION_STRING: string =
   process.env.MONGODB_CONNECTION_STRING ??
   'mongodb://localhost:27017/intercom-manager';
 
-function convertMongoDBProductionToProduction({
-  name,
-  productionid,
-  lines
-}: WithId<Document>): Production {
-  return { name, productionid, lines };
-}
-
 const client = new MongoClient(MONGODB_CONNECTION_STRING);
 const db = client.db();
+
+async function getNextSequence(collectionName: string): Promise<number> {
+  const ret = await db.command({
+    findAndModify: 'counters',
+    query: { _id: collectionName },
+    update: { $inc: { seq: 1 } },
+    new: true,
+    upsert: true
+  });
+  return ret.value.seq;
+}
 
 const dbManager = {
   async connect(): Promise<void> {
@@ -33,22 +36,20 @@ const dbManager = {
       .sort({ $natural: -1 })
       .limit(limit)
       .toArray();
-    return productions.map(convertMongoDBProductionToProduction);
+    return Array.from(productions) as any as Production[];
   },
 
-  async getProduction(productionId: string): Promise<Production | undefined> {
-    const production = await db
-      .collection('productions')
-      .findOne({ productionid: productionId });
-    if (!production) {
-      return undefined;
-    }
-    return convertMongoDBProductionToProduction(production);
+  async getProduction(id: number): Promise<Production | undefined> {
+    return db.collection('productions').findOne({ _id: id as any }) as
+      | any
+      | undefined;
   },
 
-  async addProduction(production: Production): Promise<void> {
-    // Making a copy of production, because insertOne otherwise mutates the object you pass in to it and adds its own ObjectId there
-    await db.collection('productions').insertOne({ ...production });
+  async addProduction(name: string, lines: Line[]): Promise<Production> {
+    const _id = await getNextSequence('productions');
+    const production = { name, lines, _id };
+    await db.collection('productions').insertOne(production as any);
+    return production;
   },
 
   async deleteProduction(productionId: string): Promise<boolean> {
@@ -57,10 +58,6 @@ const dbManager = {
       .deleteOne({ productionid: productionId });
 
     return result.deletedCount === 1;
-  },
-
-  async getProductionCount(): Promise<number> {
-    return db.collection('productions').countDocuments();
   }
 };
 
