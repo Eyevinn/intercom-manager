@@ -102,6 +102,7 @@ export class ProductionManager extends EventEmitter {
       const line = this.getLine(matchedProduction.lines, lineId);
       if (line) {
         line.smbconferenceid = lineSmbId;
+        await dbManager.setLineConferenceId(productionid, lineId, lineSmbId);
         return line;
       }
     }

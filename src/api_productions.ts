@@ -235,20 +235,18 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           parseInt(productionid, 10)
         );
 
-        await coreFunctions.createConferenceForLine(
+        const smbconferenceid = await coreFunctions.createConferenceForLine(
           smb,
           smbServerUrl,
           production,
           lineid
         );
 
-        const line = productionManager.requireLine(production.lines, lineid);
-
         const endpointId: string = uuidv4();
         const endpoint = await coreFunctions.createEndpoint(
           smb,
           smbServerUrl,
-          line.smbconferenceid,
+          smbconferenceid,
           endpointId,
           true,
           false,

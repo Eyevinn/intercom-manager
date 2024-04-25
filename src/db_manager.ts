@@ -1,5 +1,6 @@
 import { MongoClient } from 'mongodb';
 import { Line, Production } from './models';
+import { assert } from './utils';
 
 const MONGODB_CONNECTION_STRING: string =
   process.env.MONGODB_CONNECTION_STRING ??
@@ -59,6 +60,27 @@ const dbManager = {
       .deleteOne({ productionid: productionId });
 
     return result.deletedCount === 1;
+  },
+
+  async setLineConferenceId(
+    productionId: number,
+    lineId: string,
+    conferenceId: string
+  ): Promise<void> {
+    const production = await this.getProduction(productionId);
+    assert(production, `Production with id "${productionId}" does not exist`);
+    const line = production.lines.find((line) => line.id === lineId);
+    assert(
+      line,
+      `Line with id "${lineId}" does not exist for production with id "${productionId}"`
+    );
+    line.smbconferenceid = conferenceId;
+    await db
+      .collection('productions')
+      .updateOne(
+        { _id: productionId as any },
+        { $set: { lines: production.lines } }
+      );
   }
 };
 

@@ -188,30 +188,36 @@ export class CoreFunctions {
     );
   }
 
+  /**
+   * Create conference for a line if it does not exist, and return conference id
+   */
   private async createConference(
     smb: SmbProtocol,
     smbServerUrl: string,
     production: Production,
     lineId: string
-  ): Promise<void> {
+  ): Promise<string> {
     const activeLines: string[] = await smb.getConferences(smbServerUrl);
 
     const line = this.productionManager.requireLine(production.lines, lineId);
 
-    if (!activeLines.includes(line.smbconferenceid)) {
-      const newConferenceId = await smb.allocateConference(smbServerUrl);
-      if (
-        !(await this.productionManager.setLineId(
-          production._id,
-          line.id,
-          newConferenceId
-        ))
-      ) {
-        throw new Error(
-          `Failed to set line smb id for line ${line.id} in production ${production._id}`
-        );
-      }
+    if (activeLines.includes(line.smbconferenceid)) {
+      return line.smbconferenceid;
     }
+    const newConferenceId = await smb.allocateConference(smbServerUrl);
+    if (
+      !(await this.productionManager.setLineId(
+        production._id,
+        line.id,
+        newConferenceId
+      ))
+    ) {
+      throw new Error(
+        `Failed to set line smb id for line ${line.id} in production ${production._id}`
+      );
+    }
+
+    return newConferenceId;
   }
 
   async createConferenceForLine(
@@ -219,11 +225,11 @@ export class CoreFunctions {
     smbServerUrl: string,
     production: Production,
     lineId: string
-  ): Promise<void> {
+  ): Promise<string> {
     const createConf = () =>
       this.createConference(smb, smbServerUrl, production, lineId);
 
-    await this.connectionQueue.queueAsync(createConf);
+    return this.connectionQueue.queueAsync(createConf);
   }
 
   getAllLinesResponse(production: Production): LineResponse[] {
