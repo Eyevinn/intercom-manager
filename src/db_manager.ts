@@ -36,7 +36,8 @@ const dbManager = {
       .sort({ $natural: -1 })
       .limit(limit)
       .toArray();
-    return Array.from(productions) as any as Production[];
+
+    return productions as any as Production[];
   },
 
   async getProduction(id: number): Promise<Production | undefined> {
