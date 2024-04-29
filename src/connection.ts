@@ -241,11 +241,8 @@ export class Connection {
     const dataDescription = this.makeMediaDescription('application');
     dataDescription.protocol = 'UDP/DTLS/SCTP';
     dataDescription.payloads = 'webrtc-datachannel';
-    dataDescription.sctpmap = {
-      sctpmapNumber: 5000,
-      app: 'webrtc-datachannel',
-      maxMessageSize: 262144
-    };
+    dataDescription.sctpPort = this.endpointDescription?.data?.port;
+    dataDescription.maxMessageSize = 262144;
     offer.media.push(dataDescription);
   }
 }
