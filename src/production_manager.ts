@@ -88,7 +88,7 @@ export class ProductionManager extends EventEmitter {
   /**
    * Delete the production from the db and local cache
    */
-  async deleteProduction(productionId: string): Promise<boolean> {
+  async deleteProduction(productionId: number): Promise<boolean> {
     return dbManager.deleteProduction(productionId);
   }
 

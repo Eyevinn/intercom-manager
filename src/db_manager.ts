@@ -54,11 +54,10 @@ const dbManager = {
     return production;
   },
 
-  async deleteProduction(productionId: string): Promise<boolean> {
+  async deleteProduction(productionId: number): Promise<boolean> {
     const result = await db
       .collection('productions')
-      .deleteOne({ productionid: productionId });
-
+      .deleteOne({ _id: productionId as any });
     return result.deletedCount === 1;
   },
 

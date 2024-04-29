@@ -196,9 +196,7 @@ describe('production_manager', () => {
       production1,
       production2
     ]);
-    expect(await productionManagerTest.deleteProduction('1')).toStrictEqual(
-      true
-    );
+    expect(await productionManagerTest.deleteProduction(1)).toStrictEqual(true);
     expect(await productionManagerTest.getProductions()).toStrictEqual([
       production2
     ]);
@@ -214,11 +212,9 @@ describe('production_manager', () => {
 
     const productionManagerTest = new ProductionManager();
 
-    expect(await productionManagerTest.deleteProduction('1')).toStrictEqual(
-      true
-    );
+    expect(await productionManagerTest.deleteProduction(1)).toStrictEqual(true);
     expect(await productionManagerTest.getProductions()).toStrictEqual([]);
-    expect(await productionManagerTest.deleteProduction('1')).toStrictEqual(
+    expect(await productionManagerTest.deleteProduction(1)).toStrictEqual(
       false
     );
   });

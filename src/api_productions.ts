@@ -354,7 +354,11 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     async (request, reply) => {
       const { productionid } = request.params;
       try {
-        if (!(await productionManager.deleteProduction(productionid))) {
+        if (
+          !(await productionManager.deleteProduction(
+            parseInt(productionid, 10)
+          ))
+        ) {
           throw new Error('Could not delete production');
         }
         reply.code(204).send(`Deleted production ${productionid}`);
