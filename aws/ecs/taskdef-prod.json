@@ -18,6 +18,10 @@
         {
           "name": "SMB_ADDRESS",
           "value": "http://16.171.249.16:8280"
+        },
+        {
+          "name": "MONGODB_CONNECTION_STRING",
+          "value": "mongodb://admin:eyevinn@intercom-mongodb.prod.eyevinn.technology/"
         }
       ],
       "environmentFiles": [],
