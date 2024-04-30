@@ -1,5 +1,32 @@
 import { ProductionManager } from './production_manager';
-import { NewProduction, Production, SmbEndpointDescription } from './models';
+import {
+  NewProduction,
+  Production,
+  SmbEndpointDescription,
+  UserSession
+} from './models';
+import dbManager from './db_manager';
+
+const newProduction: NewProduction = {
+  name: 'productionname',
+  lines: [
+    {
+      name: 'linename'
+    }
+  ]
+};
+
+const existingProduction: Production = {
+  _id: 1,
+  name: 'productionname',
+  lines: [
+    {
+      name: 'linename',
+      id: '1',
+      smbconferenceid: 'smbineid'
+    }
+  ]
+};
 
 const SmbEndpointDescriptionMock: SmbEndpointDescription = {
   'bundle-transport': {
@@ -55,49 +82,46 @@ const SmbEndpointDescriptionMock: SmbEndpointDescription = {
   }
 };
 
+jest.mock('./db_manager', () => ({
+  addProduction: jest.fn(),
+  getProduction: jest.fn(),
+  getProductions: jest.fn(),
+  deleteProduction: jest.fn()
+}));
+
+beforeEach(() => {
+  jest.resetAllMocks();
+});
+
 describe('production_manager', () => {
-  it('creates a production object and save it to the class instance', async () => {
+  it('calls the dbManager when you try to create a production', async () => {
+    const { getProduction } = jest.requireMock('./db_manager');
+    getProduction.mockReturnValueOnce(undefined).mockReturnValue(newProduction);
+
     const productionManagerTest = new ProductionManager();
 
-    const newProduction: NewProduction = {
-      name: 'productionname',
-      lines: [
-        {
-          name: 'linename'
-        }
-      ]
-    };
+    const spyAddProduction = jest.spyOn(dbManager, 'addProduction');
 
-    productionManagerTest.createProduction(newProduction);
-    const production = productionManagerTest.getProduction('1');
-
-    expect(production).not.toBe(undefined);
-    expect(production?.name).toStrictEqual('productionname');
-    expect(production?.productionid).toStrictEqual('1');
-    expect(production?.lines[0].name).toStrictEqual('linename');
-    expect(production?.lines[0].smbconferenceid).toStrictEqual('');
-    expect(production?.lines[0].connections).toStrictEqual({});
+    await productionManagerTest.createProduction(newProduction);
+    expect(spyAddProduction).toHaveBeenCalledTimes(1);
   });
 });
 
 describe('production_manager', () => {
   it('creating an already existing production throws error', async () => {
+    const { getProduction } = jest.requireMock('./db_manager');
+    getProduction
+      .mockReturnValueOnce(undefined)
+      .mockReturnValueOnce(newProduction)
+      .mockReturnValueOnce(existingProduction);
+
     const productionManagerTest = new ProductionManager();
 
-    const newProduction: NewProduction = {
-      name: 'productionname',
-      lines: [
-        {
-          name: 'linename'
-        }
-      ]
-    };
-
-    productionManagerTest.createProduction(newProduction);
+    await productionManagerTest.createProduction(newProduction);
 
     () => {
-      expect(() => {
-        productionManagerTest.createProduction(newProduction);
+      expect(async () => {
+        await productionManagerTest.createProduction(newProduction);
       }).toThrow();
     };
   });
@@ -105,210 +129,126 @@ describe('production_manager', () => {
 
 describe('production_manager', () => {
   it('creates production object then gets entire productions list from class instance', async () => {
+    const { getProduction, getProductions } = jest.requireMock('./db_manager');
+    getProduction.mockReturnValueOnce(undefined);
+    getProductions
+      .mockReturnValueOnce([])
+      .mockReturnValueOnce([existingProduction]);
+
     const productionManagerTest = new ProductionManager();
 
-    const newProduction: NewProduction = {
-      name: 'productionname',
-      lines: [
-        {
-          name: 'linename'
-        }
-      ]
-    };
-
-    const production: Production = {
-      name: 'productionname',
-      productionid: '1',
-      lines: [
-        {
-          name: 'linename',
-          id: '1',
-          smbconferenceid: '',
-          connections: {}
-        }
-      ]
-    };
-
-    expect(productionManagerTest.getProductions()).toStrictEqual([]);
-    productionManagerTest.createProduction(newProduction);
-    const productions = productionManagerTest.getProductions();
-    expect(productions).toStrictEqual([production]);
+    expect(await productionManagerTest.getProductions()).toStrictEqual([]);
+    await productionManagerTest.createProduction(newProduction);
+    const productions = await productionManagerTest.getProductions();
+    expect(productions).toStrictEqual([existingProduction]);
   });
 });
 
 describe('production_manager', () => {
   it('getting non existent production object returns undefined', async () => {
+    const { getProduction } = jest.requireMock('./db_manager');
+    getProduction.mockReturnValueOnce(undefined);
+
     const productionManagerTest = new ProductionManager();
 
-    const newProduction: NewProduction = {
-      name: 'productionname',
-      lines: [
-        {
-          name: 'linename'
-        }
-      ]
-    };
-
-    productionManagerTest.createProduction(newProduction);
-    const nonExistentProduction = productionManagerTest.getProduction('null');
+    const nonExistentProduction = await productionManagerTest.getProduction(-1);
     expect(nonExistentProduction).toStrictEqual(undefined);
   });
 });
 
 describe('production_manager', () => {
   it('deleting production object removes it from class instance', async () => {
-    const productionManagerTest = new ProductionManager();
-
-    const newProduction1: NewProduction = {
-      name: 'productionname1',
-      lines: [
-        {
-          name: 'linename1'
-        }
-      ]
-    };
-
-    const newProduction2: NewProduction = {
-      name: 'productionname2',
-      lines: [
-        {
-          name: 'linename2'
-        }
-      ]
-    };
-
     const production1: Production = {
+      _id: 1,
       name: 'productionname1',
-      productionid: '1',
       lines: [
         {
           name: 'linename1',
           id: '1',
-          smbconferenceid: '',
-          connections: {}
+          smbconferenceid: ''
         }
       ]
     };
 
     const production2: Production = {
+      _id: 2,
       name: 'productionname2',
-      productionid: '2',
       lines: [
         {
           name: 'linename2',
           id: '1',
-          smbconferenceid: '',
-          connections: {}
+          smbconferenceid: ''
         }
       ]
     };
 
-    productionManagerTest.createProduction(newProduction1);
-    productionManagerTest.createProduction(newProduction2);
-    expect(productionManagerTest.getProductions()).toStrictEqual([
+    const { getProduction, getProductions, deleteProduction } =
+      jest.requireMock('./db_manager');
+    getProduction.mockReturnValueOnce(undefined).mockReturnValueOnce(undefined);
+    getProductions
+      .mockReturnValueOnce([production1, production2])
+      .mockReturnValueOnce([production2]);
+    deleteProduction.mockReturnValueOnce(true);
+
+    const productionManagerTest = new ProductionManager();
+
+    expect(await productionManagerTest.getProductions()).toStrictEqual([
       production1,
       production2
     ]);
-    productionManagerTest.deleteProduction('1');
-    expect(productionManagerTest.getProductions()).toStrictEqual([production2]);
+    expect(await productionManagerTest.deleteProduction(1)).toStrictEqual(true);
+    expect(await productionManagerTest.getProductions()).toStrictEqual([
+      production2
+    ]);
   });
 });
 
 describe('production_manager', () => {
-  it('deleting non existent production object returns undefined', async () => {
+  it('deleting non existent production object returns false', async () => {
+    const { getProductions, deleteProduction } =
+      jest.requireMock('./db_manager');
+    getProductions.mockReturnValueOnce([]);
+    deleteProduction.mockReturnValueOnce(true).mockReturnValueOnce(false);
+
     const productionManagerTest = new ProductionManager();
 
-    const newProduction: NewProduction = {
-      name: 'productionname',
-      lines: [
-        {
-          name: 'linename'
-        }
-      ]
-    };
-
-    const production = productionManagerTest.createProduction(newProduction);
-    expect(productionManagerTest.getProductions()).toStrictEqual([production]);
-    productionManagerTest.deleteProduction('1');
-    expect(productionManagerTest.getProductions()).toStrictEqual([]);
-    expect(productionManagerTest.deleteProduction('1')).toStrictEqual(
-      undefined
+    expect(await productionManagerTest.deleteProduction(1)).toStrictEqual(true);
+    expect(await productionManagerTest.getProductions()).toStrictEqual([]);
+    expect(await productionManagerTest.deleteProduction(1)).toStrictEqual(
+      false
     );
-  });
-});
-
-describe('production_manager', () => {
-  it('get lines, set new id, then get lines and confirm change', async () => {
-    const productionManagerTest = new ProductionManager();
-
-    const newProduction: NewProduction = {
-      name: 'productionname',
-      lines: [
-        {
-          name: 'linename'
-        }
-      ]
-    };
-
-    productionManagerTest.createProduction(newProduction);
-    const lineIdBefore =
-      productionManagerTest.getProduction('1')?.lines[0].smbconferenceid;
-    expect(lineIdBefore).toStrictEqual('');
-    productionManagerTest.setLineId('1', '1', 'newLineId');
-    const lineIdAfter =
-      productionManagerTest.getProduction('1')?.lines[0].smbconferenceid;
-    expect(lineIdAfter).toStrictEqual('newLineId');
-  });
-});
-
-describe('production_manager', () => {
-  it('set new line smb id returns undefined if line is not found', async () => {
-    const productionManagerTest = new ProductionManager();
-
-    const noline = productionManagerTest.setLineId(
-      'productionname',
-      'no_linename',
-      'newLineId'
-    );
-    expect(noline).toStrictEqual(undefined);
   });
 });
 
 describe('production_manager', () => {
   it('add an endpoint description to line connections', async () => {
+    const { getProduction } = jest.requireMock('./db_manager');
+    getProduction.mockReturnValueOnce(existingProduction);
+
     const productionManagerTest = new ProductionManager();
 
-    const newProduction: NewProduction = {
-      name: 'productionname',
-      lines: [
-        {
-          name: 'linename_addConnection'
-        }
-      ]
-    };
-
-    productionManagerTest.createProduction(newProduction);
-    productionManagerTest.addConnectionToLine(
-      '1',
-      '1',
-      SmbEndpointDescriptionMock,
+    productionManagerTest.createUserSession('1', '1', 'sessionId', 'userName');
+    productionManagerTest.updateUserEndpoint(
+      'sessionId',
       'endpointId',
-      'sessionId'
+      SmbEndpointDescriptionMock
     );
-    const productionLines = productionManagerTest.getProduction('1')?.lines;
+    const production = await productionManagerTest.getProduction(1);
+    const productionLines = production?.lines;
     if (!productionLines) {
       fail('Test failed due to productionLines being undefined');
     }
-    const line = productionManagerTest.getLine(productionLines, '1');
-    expect(line);
 
-    const endpoint = line?.connections['sessionId'];
-    expect(endpoint);
+    const userSession: UserSession | undefined =
+      productionManagerTest.getUser('sessionId');
+    expect(userSession);
 
-    expect(endpoint?.sessionDescription).toStrictEqual(
+    expect(userSession?.sessionDescription).toStrictEqual(
       SmbEndpointDescriptionMock
     );
-    expect(endpoint?.endpointId).toStrictEqual('endpointId');
-    expect(endpoint?.isActive).toStrictEqual(true);
+    expect(userSession?.endpointId).toStrictEqual('endpointId');
+    expect(userSession?.name).toStrictEqual('userName');
+    expect(userSession?.isActive).toStrictEqual(true);
+    expect(userSession?.isExpired).toStrictEqual(false);
   });
 });

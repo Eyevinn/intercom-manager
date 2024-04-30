@@ -11,7 +11,7 @@ export type LineResponse = Static<typeof LineResponse>;
 export type SmbEndpointDescription = Static<typeof SmbEndpointDescription>;
 export type DetailedConference = Static<typeof DetailedConference>;
 export type Endpoint = Static<typeof Endpoint>;
-export type User = Static<typeof User>;
+export type UserResponse = Static<typeof UserResponse>;
 export type UserSession = Static<typeof UserSession>;
 
 export const Audio = Type.Object({
@@ -135,15 +135,15 @@ export const SmbEndpointDescription = Type.Object({
 
 export const Endpoint = Type.Object({
   endpointId: Type.String(),
-  sessionDescription: SmbEndpointDescription,
-  isActive: Type.Boolean()
+  sessionDescription: SmbEndpointDescription
 });
 
 export const Connections = Type.Record(Type.String(), Endpoint);
 
-export const User = Type.Object({
+export const UserResponse = Type.Object({
   name: Type.String(),
   sessionid: Type.String(),
+  endpointid: Type.Optional(Type.String()),
   isActive: Type.Boolean()
 });
 
@@ -153,26 +153,27 @@ export const UserSession = Type.Object({
   lineId: Type.String(),
   lastSeen: Type.Number(),
   isActive: Type.Boolean(),
-  isExpired: Type.Boolean()
+  isExpired: Type.Boolean(),
+  endpointId: Type.Optional(Type.String()),
+  sessionDescription: Type.Optional(SmbEndpointDescription)
 });
 
 export const Line = Type.Object({
   name: Type.String(),
   id: Type.String(),
-  smbconferenceid: Type.String(),
-  connections: Connections
+  smbconferenceid: Type.String()
 });
 
 export const LineResponse = Type.Object({
   name: Type.String(),
   id: Type.String(),
   smbconferenceid: Type.String(),
-  participants: Type.Array(User)
+  participants: Type.Array(UserResponse)
 });
 
 export const Production = Type.Object({
+  _id: Type.Number(),
   name: Type.String(),
-  productionid: Type.String(),
   lines: Type.Array(Line)
 });
 

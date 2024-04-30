@@ -2,18 +2,15 @@ import { Type } from '@sinclair/typebox';
 import { FastifyPluginCallback } from 'fastify';
 import {
   NewProduction,
-  Production,
-  Line,
   LineResponse,
   SmbEndpointDescription,
-  User,
+  UserResponse,
   ProductionResponse,
-  DetailedProductionResponse
+  DetailedProductionResponse,
+  UserSession
 } from './models';
 import { SmbProtocol } from './smb';
 import { ProductionManager } from './production_manager';
-import { Connection } from './connection';
-import { write, SessionDescription } from 'sdp-transform';
 import dotenv from 'dotenv';
 import { v4 as uuidv4 } from 'uuid';
 import { ConnectionQueue } from './connection_queue';
@@ -60,13 +57,14 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const production: Production | undefined =
-          productionManager.createProduction(request.body);
+        const production = await productionManager.createProduction(
+          request.body
+        );
 
         if (production) {
           const productionResponse: ProductionResponse = {
             name: production.name,
-            productionid: production.productionid
+            productionid: production._id.toString()
           };
           reply.code(200).send(productionResponse);
         } else {
@@ -94,11 +92,11 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const productions: Production[] = productionManager.getProductions();
+        const productions = await productionManager.getProductions(50);
         reply.code(200).send(
-          productions.slice(-50).map(({ name, productionid }) => ({
+          productions.map(({ _id, name }) => ({
             name,
-            productionid
+            productionid: _id.toString()
           }))
         );
       } catch (err) {
@@ -124,14 +122,14 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const production: Production = coreFunctions.getProduction(
-          request.params.productionid
+        const production = await productionManager.requireProduction(
+          parseInt(request.params.productionid, 10)
         );
         const allLinesResponse: LineResponse[] =
           coreFunctions.getAllLinesResponse(production);
         const productionResponse: DetailedProductionResponse = {
           name: production.name,
-          productionid: production.productionid,
+          productionid: production._id.toString(),
           lines: allLinesResponse
         };
         reply.code(200).send(productionResponse);
@@ -158,8 +156,8 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const production: Production = coreFunctions.getProduction(
-          request.params.productionid
+        const production = await productionManager.requireProduction(
+          parseInt(request.params.productionid, 10)
         );
         const allLinesResponse: LineResponse[] =
           coreFunctions.getAllLinesResponse(production);
@@ -187,12 +185,14 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const line: Line = coreFunctions.getLineFromProduction(
-          request.params.productionid,
-          request.params.lineid
+        const { productionid, lineid } = request.params;
+        const production = await productionManager.requireProduction(
+          parseInt(productionid, 10)
         );
-        const participantlist: User[] = productionManager.getUsersForLine(
-          request.params.productionid,
+        const line = productionManager.requireLine(production.lines, lineid);
+
+        const participantlist = productionManager.getUsersForLine(
+          productionid,
           line.id
         );
         const lineResponse: LineResponse = {
@@ -231,26 +231,25 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       try {
         const { lineid, productionid, username } = request.params;
         const sessionId: string = uuidv4();
-        const production: Production =
-          coreFunctions.getProduction(productionid);
+        const production = await productionManager.requireProduction(
+          parseInt(productionid, 10)
+        );
 
-        await coreFunctions.createConferenceForLine(
+        const smbconferenceid = await coreFunctions.createConferenceForLine(
           smb,
           smbServerUrl,
           production,
           lineid
         );
 
-        const line: Line = coreFunctions.getLine(production.lines, lineid);
-
         const endpointId: string = uuidv4();
         const endpoint = await coreFunctions.createEndpoint(
           smb,
           smbServerUrl,
-          line.smbconferenceid,
+          smbconferenceid,
           endpointId,
           true,
-          false,
+          true,
           parseInt(opts.endpointIdleTimeout, 10)
         );
         if (!endpoint.audio) {
@@ -260,25 +259,16 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           throw new Error('Missing ssrcs when creating sdp offer for endpoint');
         }
 
-        const connection: Connection = coreFunctions.createConnection(
+        const sdpOffer = await coreFunctions.createConnection(
+          productionid,
+          lineid,
           endpoint,
-          production.productionid,
-          line.id,
           username,
           endpointId,
           sessionId
         );
 
-        const offer: SessionDescription = connection.createOffer();
-        const sdpOffer: string = write(offer);
-
         if (sdpOffer) {
-          productionManager.createUserSession(
-            productionid,
-            lineid,
-            sessionId,
-            username
-          );
           reply.code(200).send({ sdp: sdpOffer, sessionid: sessionId });
         } else {
           reply.code(500).send('Failed to generate sdp offer for endpoint');
@@ -307,19 +297,26 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const line: Line = coreFunctions.getLineFromProduction(
-          request.params.productionid,
-          request.params.lineid
+        const { productionid, lineid, sessionid } = request.params;
+        const production = await productionManager.requireProduction(
+          parseInt(productionid, 10)
         );
+        const line = productionManager.requireLine(production.lines, lineid);
 
-        const connectionEndpointDescription: SmbEndpointDescription =
-          line.connections[request.params.sessionid].sessionDescription;
-        const endpointId: string =
-          line.connections[request.params.sessionid].endpointId;
-
+        const userSession: UserSession | undefined =
+          productionManager.getUser(sessionid);
+        if (!userSession) {
+          throw new Error(
+            'Could not get user session or session does not exist'
+          );
+        }
+        const connectionEndpointDescription:
+          | SmbEndpointDescription
+          | undefined = userSession.sessionDescription;
         if (!connectionEndpointDescription) {
           throw new Error('Could not get connection endpoint description');
         }
+        const endpointId: string | undefined = userSession.endpointId;
         if (!endpointId) {
           throw new Error('Could not get connection endpoint id');
         }
@@ -355,13 +352,16 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       }
     },
     async (request, reply) => {
+      const { productionid } = request.params;
       try {
-        if (!productionManager.deleteProduction(request.params.productionid)) {
+        if (
+          !(await productionManager.deleteProduction(
+            parseInt(productionid, 10)
+          ))
+        ) {
           throw new Error('Could not delete production');
         }
-        reply
-          .code(204)
-          .send(`Deleted production ${request.params.productionid}`);
+        reply.code(204).send(`Deleted production ${productionid}`);
       } catch (err) {
         reply
           .code(500)
@@ -384,19 +384,13 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       }
     },
     async (request, reply) => {
+      const sessionId = request.params.sessionid;
       try {
-        if (
-          !productionManager.removeConnectionFromLine(
-            request.params.productionid,
-            request.params.lineid,
-            request.params.sessionid
-          )
-        ) {
-          throw new Error(
-            `Could not delete connection ${request.params.sessionid}`
-          );
+        const deletedSessionId = productionManager.removeUserSession(sessionId);
+        if (!deletedSessionId) {
+          throw new Error(`Could not delete connection ${sessionId}`);
         }
-        reply.code(204).send(`Deleted connection ${request.params.sessionid}`);
+        reply.code(204).send(`Deleted connection ${sessionId}`);
       } catch (err) {
         reply
           .code(500)
@@ -408,14 +402,14 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   //Long poll endpoint
   fastify.post<{
     Params: { productionid: string; lineid: string; sessionid: string };
-    Reply: User[] | string;
+    Reply: UserResponse[] | string;
   }>(
     '/productions/:productionid/lines/:lineid/participants',
     {
       schema: {
         description: 'Long Poll Endpoint to get participant list.',
         response: {
-          200: Type.Array(User)
+          200: Type.Array(UserResponse)
         }
       }
     },
@@ -471,4 +465,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   next();
 };
 
-export default apiProductions;
+export async function getApiProductions() {
+  await productionManager.load();
+  return apiProductions;
+}

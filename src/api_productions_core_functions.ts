@@ -1,12 +1,7 @@
-import { parse } from 'sdp-transform';
+import { SessionDescription, parse, write } from 'sdp-transform';
 import { Connection } from './connection';
 import { MediaStreamsInfoSsrc } from './media_streams_info';
-import {
-  Line,
-  LineResponse,
-  Production,
-  SmbEndpointDescription
-} from './models';
+import { LineResponse, Production, SmbEndpointDescription } from './models';
 import { SmbProtocol } from './smb';
 import { ConnectionQueue } from './connection_queue';
 import { ProductionManager } from './production_manager';
@@ -24,14 +19,14 @@ export class CoreFunctions {
     this.connectionQueue = connectionQueue;
   }
 
-  createConnection(
-    endpoint: SmbEndpointDescription,
+  async createConnection(
     productionId: string,
     lineId: string,
+    endpoint: SmbEndpointDescription,
     username: string,
     endpointId: string,
     sessionId: string
-  ): Connection {
+  ): Promise<string> {
     if (!endpoint.audio) {
       throw new Error('Missing audio when creating offer');
     }
@@ -59,15 +54,23 @@ export class CoreFunctions {
       endpointId
     );
 
-    this.productionManager.addConnectionToLine(
-      productionId,
-      lineId,
-      endpoint,
-      endpointId,
-      sessionId
-    );
+    const offer: SessionDescription = connection.createOffer();
+    const sdpOffer: string = write(offer);
 
-    return connection;
+    if (sdpOffer) {
+      this.productionManager.createUserSession(
+        productionId,
+        lineId,
+        sessionId,
+        username
+      );
+      this.productionManager.updateUserEndpoint(
+        sessionId,
+        endpointId,
+        endpoint
+      );
+    }
+    return sdpOffer;
   }
 
   async createEndpoint(
@@ -185,30 +188,36 @@ export class CoreFunctions {
     );
   }
 
+  /**
+   * Create conference for a line if it does not exist, and return conference id
+   */
   private async createConference(
     smb: SmbProtocol,
     smbServerUrl: string,
     production: Production,
     lineId: string
-  ): Promise<void> {
+  ): Promise<string> {
     const activeLines: string[] = await smb.getConferences(smbServerUrl);
 
-    const line: Line = this.getLine(production.lines, lineId);
+    const line = this.productionManager.requireLine(production.lines, lineId);
 
-    if (!activeLines.includes(line.smbconferenceid)) {
-      const newConferenceId = await smb.allocateConference(smbServerUrl);
-      if (
-        !this.productionManager.setLineId(
-          production.productionid,
-          line.id,
-          newConferenceId
-        )
-      ) {
-        throw new Error(
-          `Failed to set line smb id for line ${line.id} in production ${production.productionid}`
-        );
-      }
+    if (activeLines.includes(line.smbconferenceid)) {
+      return line.smbconferenceid;
     }
+    const newConferenceId = await smb.allocateConference(smbServerUrl);
+    if (
+      !(await this.productionManager.setLineId(
+        production._id,
+        line.id,
+        newConferenceId
+      ))
+    ) {
+      throw new Error(
+        `Failed to set line smb id for line ${line.id} in production ${production._id}`
+      );
+    }
+
+    return newConferenceId;
   }
 
   async createConferenceForLine(
@@ -216,37 +225,11 @@ export class CoreFunctions {
     smbServerUrl: string,
     production: Production,
     lineId: string
-  ): Promise<void> {
+  ): Promise<string> {
     const createConf = () =>
       this.createConference(smb, smbServerUrl, production, lineId);
 
-    await this.connectionQueue.queueAsync(createConf);
-  }
-
-  getProduction(productionId: string): Production {
-    const production: Production | undefined =
-      this.productionManager.getProduction(productionId);
-    if (!production) {
-      throw new Error('Trying to get production that does not exist');
-    }
-    return production;
-  }
-
-  getLine(productionLines: Line[], lineId: string): Line {
-    const line: Line | undefined = this.productionManager.getLine(
-      productionLines,
-      lineId
-    );
-    if (!line) {
-      throw new Error('Trying to get line that does not exist');
-    }
-    return line;
-  }
-
-  getLineFromProduction(productionId: string, lineId: string): Line {
-    const production: Production = this.getProduction(productionId);
-    const line: Line = this.getLine(production.lines, lineId);
-    return line;
+    return this.connectionQueue.queueAsync(createConf);
   }
 
   getAllLinesResponse(production: Production): LineResponse[] {
@@ -254,9 +237,9 @@ export class CoreFunctions {
       ({ name, id, smbconferenceid }) => ({
         name,
         id,
-        smbconferenceid: smbconferenceid,
+        smbconferenceid,
         participants: this.productionManager.getUsersForLine(
-          production.productionid,
+          production._id.toString(),
           id
         )
       })

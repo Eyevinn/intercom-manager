@@ -10,21 +10,21 @@ if (!process.env.SMB_ADDRESS) {
 const ENDPOINT_IDLE_TIMEOUT_S: string =
   process.env.ENDPOINT_IDLE_TIMEOUT_S ?? '60';
 
-const server = api({
-  title: 'intercom-manager',
-  smbServerBaseUrl: SMB_ADDRESS,
-  endpointIdleTimeout: ENDPOINT_IDLE_TIMEOUT_S
-});
-
-setInterval(checkUserStatus, 10_000);
+setInterval(checkUserStatus, 2_000);
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8000;
 
-server.listen({ port: PORT, host: '0.0.0.0' }, (err, address) => {
-  if (err) {
-    throw err;
-  }
-  console.log(`Server listening on ${address}`);
-});
+(async function startServer() {
+  const server = await api({
+    title: 'intercom-manager',
+    smbServerBaseUrl: SMB_ADDRESS,
+    endpointIdleTimeout: ENDPOINT_IDLE_TIMEOUT_S
+  });
 
-export default server;
+  server.listen({ port: PORT, host: '0.0.0.0' }, (err, address) => {
+    if (err) {
+      throw err;
+    }
+    console.log(`Server listening on ${address}`);
+  });
+})();
