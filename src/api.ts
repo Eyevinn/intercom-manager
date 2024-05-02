@@ -68,6 +68,7 @@ export default async (opts: ApiOptions) => {
   api.register(healthcheck, { title: opts.title });
   // register other API routes here
   api.register(await getApiProductions(), {
+    prefix: 'api/v1',
     smbServerBaseUrl: opts.smbServerBaseUrl,
     endpointIdleTimeout: opts.endpointIdleTimeout
   });

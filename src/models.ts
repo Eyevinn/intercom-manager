@@ -13,6 +13,9 @@ export type DetailedConference = Static<typeof DetailedConference>;
 export type Endpoint = Static<typeof Endpoint>;
 export type UserResponse = Static<typeof UserResponse>;
 export type UserSession = Static<typeof UserSession>;
+export type NewSession = Static<typeof NewSession>;
+export type SessionResponse = Static<typeof SessionResponse>;
+export type SdpAnswer = Static<typeof SdpAnswer>;
 
 export const Audio = Type.Object({
   'relay-type': Type.Array(
@@ -186,4 +189,19 @@ export const DetailedProductionResponse = Type.Object({
   name: Type.String(),
   productionid: Type.String(),
   lines: Type.Array(LineResponse)
+});
+
+export const NewSession = Type.Object({
+  productionid: Type.String(),
+  lineid: Type.String(),
+  username: Type.String()
+});
+
+export const SessionResponse = Type.Object({
+  sdp: Type.String(),
+  sessionid: Type.String()
+});
+
+export const SdpAnswer = Type.Object({
+  sdpAnswer: Type.String()
 });
