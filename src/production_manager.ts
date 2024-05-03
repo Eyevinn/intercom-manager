@@ -92,7 +92,7 @@ export class ProductionManager extends EventEmitter {
     return dbManager.deleteProduction(productionId);
   }
 
-  async setlineId(
+  async setLineId(
     productionId: number,
     lineId: string,
     lineSmbId: string

@@ -206,7 +206,7 @@ export class CoreFunctions {
     }
     const newConferenceId = await smb.allocateConference(smbServerUrl);
     if (
-      !(await this.productionManager.setlineId(
+      !(await this.productionManager.setLineId(
         production._id,
         line.id,
         newConferenceId
