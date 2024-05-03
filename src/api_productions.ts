@@ -269,10 +269,11 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           sessionId
         );
 
+        const sessionInfo = { sessionId: sessionId, sdp: sdpOffer };
+        console.log(sessionInfo);
         if (sdpOffer) {
           reply
             .code(201)
-            .redirect(`/session/${sessionId}`)
             .type('application/json')
             .send({ sessionId: sessionId, sdp: sdpOffer });
         } else {
