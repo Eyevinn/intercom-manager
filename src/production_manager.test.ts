@@ -23,7 +23,7 @@ const existingProduction: Production = {
     {
       name: 'linename',
       id: '1',
-      smbconferenceid: 'smbineid'
+      smbConferenceId: 'smbineid'
     }
   ]
 };
@@ -165,7 +165,7 @@ describe('production_manager', () => {
         {
           name: 'linename1',
           id: '1',
-          smbconferenceid: ''
+          smbConferenceId: ''
         }
       ]
     };
@@ -177,7 +177,7 @@ describe('production_manager', () => {
         {
           name: 'linename2',
           id: '1',
-          smbconferenceid: ''
+          smbConferenceId: ''
         }
       ]
     };

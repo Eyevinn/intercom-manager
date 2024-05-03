@@ -63,7 +63,7 @@ export class ProductionManager extends EventEmitter {
       const newProductionLine: Line = {
         name: line.name,
         id: index.toString(),
-        smbconferenceid: ''
+        smbConferenceId: ''
       };
       newProductionLines.push(newProductionLine);
     }
@@ -93,16 +93,16 @@ export class ProductionManager extends EventEmitter {
   }
 
   async setLineId(
-    productionid: number,
+    productionId: number,
     lineId: string,
     lineSmbId: string
   ): Promise<Line | undefined> {
-    const matchedProduction = await this.getProduction(productionid);
+    const matchedProduction = await this.getProduction(productionId);
     if (matchedProduction) {
       const line = this.getLine(matchedProduction.lines, lineId);
       if (line) {
-        line.smbconferenceid = lineSmbId;
-        await dbManager.setLineConferenceId(productionid, lineId, lineSmbId);
+        line.smbConferenceId = lineSmbId;
+        await dbManager.setLineConferenceId(productionId, lineId, lineSmbId);
         return line;
       }
     }
@@ -179,15 +179,15 @@ export class ProductionManager extends EventEmitter {
 
   getUsersForLine(productionId: string, lineId: string): UserResponse[] {
     return Object.entries(this.userSessions).flatMap(
-      ([sessionid, userSession]) => {
+      ([sessionId, userSession]) => {
         if (
           productionId === userSession.productionId &&
           lineId === userSession.lineId &&
           !userSession.isExpired
         ) {
           return {
-            sessionid,
-            endpointid: userSession.endpointId,
+            sessionId,
+            endpointId: userSession.endpointId,
             name: userSession.name,
             isActive: userSession.isActive
           };
