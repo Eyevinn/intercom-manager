@@ -269,8 +269,6 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           sessionId
         );
 
-        const sessionInfo = { sessionId: sessionId, sdp: sdpOffer };
-        console.log(sessionInfo);
         if (sdpOffer) {
           reply
             .code(201)
@@ -340,7 +338,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           connectionEndpointDescription,
           request.body.sdpAnswer
         );
-        reply.code(204).type('application/json');
+        reply.code(204);
       } catch (err) {
         reply
           .code(500)
@@ -382,10 +380,10 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   );
 
   fastify.delete<{
-    Params: { productionId: string; lineId: string; sessionId: string };
+    Params: { sessionId: string };
     Reply: string;
   }>(
-    '/production/:productionId/line/:lineId/session/:sessionId',
+    '/session/:sessionId',
     {
       schema: {
         description: 'Deletes a Connection from ProductionManager.',
