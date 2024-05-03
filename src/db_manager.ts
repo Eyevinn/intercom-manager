@@ -73,7 +73,7 @@ const dbManager = {
       line,
       `Line with id "${lineId}" does not exist for production with id "${productionId}"`
     );
-    line.smbconferenceid = conferenceId;
+    line.smbConferenceId = conferenceId;
     await db
       .collection('productions')
       .updateOne(

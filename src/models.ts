@@ -145,8 +145,8 @@ export const Connections = Type.Record(Type.String(), Endpoint);
 
 export const UserResponse = Type.Object({
   name: Type.String(),
-  sessionid: Type.String(),
-  endpointid: Type.Optional(Type.String()),
+  sessionId: Type.String(),
+  endpointId: Type.Optional(Type.String()),
   isActive: Type.Boolean()
 });
 
@@ -164,13 +164,13 @@ export const UserSession = Type.Object({
 export const Line = Type.Object({
   name: Type.String(),
   id: Type.String(),
-  smbconferenceid: Type.String()
+  smbConferenceId: Type.String()
 });
 
 export const LineResponse = Type.Object({
   name: Type.String(),
   id: Type.String(),
-  smbconferenceid: Type.String(),
+  smbConferenceId: Type.String(),
   participants: Type.Array(UserResponse)
 });
 
@@ -182,24 +182,24 @@ export const Production = Type.Object({
 
 export const ProductionResponse = Type.Object({
   name: Type.String(),
-  productionid: Type.String()
+  productionId: Type.String()
 });
 
 export const DetailedProductionResponse = Type.Object({
   name: Type.String(),
-  productionid: Type.String(),
+  productionId: Type.String(),
   lines: Type.Array(LineResponse)
 });
 
 export const NewSession = Type.Object({
-  productionid: Type.String(),
-  lineid: Type.String(),
+  productionId: Type.String(),
+  lineId: Type.String(),
   username: Type.String()
 });
 
 export const SessionResponse = Type.Object({
   sdp: Type.String(),
-  sessionid: Type.String()
+  sessionId: Type.String()
 });
 
 export const SdpAnswer = Type.Object({

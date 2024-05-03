@@ -201,12 +201,12 @@ export class CoreFunctions {
 
     const line = this.productionManager.requireLine(production.lines, lineId);
 
-    if (activeLines.includes(line.smbconferenceid)) {
-      return line.smbconferenceid;
+    if (activeLines.includes(line.smbConferenceId)) {
+      return line.smbConferenceId;
     }
     const newConferenceId = await smb.allocateConference(smbServerUrl);
     if (
-      !(await this.productionManager.setLineId(
+      !(await this.productionManager.setlineId(
         production._id,
         line.id,
         newConferenceId
@@ -234,10 +234,10 @@ export class CoreFunctions {
 
   getAllLinesResponse(production: Production): LineResponse[] {
     const allLinesResponse: LineResponse[] = production.lines.map(
-      ({ name, id, smbconferenceid }) => ({
+      ({ name, id, smbConferenceId }) => ({
         name,
         id,
-        smbconferenceid,
+        smbConferenceId,
         participants: this.productionManager.getUsersForLine(
           production._id.toString(),
           id
