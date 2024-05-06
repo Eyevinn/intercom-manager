@@ -232,14 +232,11 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       try {
         const { lineId, productionId, username } = request.body;
         const sessionId: string = uuidv4();
-        const production = await productionManager.requireProduction(
-          parseInt(productionId, 10)
-        );
 
         const smbConferenceId = await coreFunctions.createConferenceForLine(
           smb,
           smbServerUrl,
-          production,
+          productionId,
           lineId
         );
 

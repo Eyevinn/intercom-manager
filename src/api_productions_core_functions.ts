@@ -190,21 +190,31 @@ export class CoreFunctions {
 
   /**
    * Create conference for a line if it does not exist, and return conference id
+   *
+   * This method MUST be queued. Multiple simultaneous calls to this method
+   * will result in creating different conferences for each request, overwriting
+   * previously created conference IDs, if the function call targets the same line.
    */
   private async createConference(
     smb: SmbProtocol,
     smbServerUrl: string,
-    production: Production,
+    productionId: string,
     lineId: string
   ): Promise<string> {
     const activeLines: string[] = await smb.getConferences(smbServerUrl);
+
+    const production = await this.productionManager.requireProduction(
+      parseInt(productionId, 10)
+    );
 
     const line = this.productionManager.requireLine(production.lines, lineId);
 
     if (activeLines.includes(line.smbConferenceId)) {
       return line.smbConferenceId;
     }
+
     const newConferenceId = await smb.allocateConference(smbServerUrl);
+
     if (
       !(await this.productionManager.setLineId(
         production._id,
@@ -223,11 +233,11 @@ export class CoreFunctions {
   async createConferenceForLine(
     smb: SmbProtocol,
     smbServerUrl: string,
-    production: Production,
+    productionId: string,
     lineId: string
   ): Promise<string> {
     const createConf = () =>
-      this.createConference(smb, smbServerUrl, production, lineId);
+      this.createConference(smb, smbServerUrl, productionId, lineId);
 
     return this.connectionQueue.queueAsync(createConf);
   }
