@@ -1,7 +1,0 @@
-aws_region = "eu-north-1"
-customer = "intercompoc"
-vpc_id = "vpc-0e7c07e499ca69298"
-vpc_subnet_1 = "subnet-00671eb3fb0a2263e"
-vpc_subnet_2 = "subnet-05d98882c13408e16"
-route53_zone_id = "ZCUEXYVVHZPPX"
-mongodb_ssh_pub_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC32c/LQcSx8Ln+i9Y2YrvI/zdPN9QtzM0v75fd5jGyWKPd5VZD7istt5G5SvgtTrFfN5tvpx90AIUZulVKo+aVjLnIA7mCDrbu/OzDTL8UyUlC8KfVbQb5ZKVRdyEF77w9f2YPF9+HV1bQ8m3JYhdErRUvMlX87npREPq+Wr1BOkSrxejsSq7/I0HXfvCGNWmkuEu7qdheKMCY8Q01W/3res/+37oWEhjQwsj6a1TUDkEzP9mGq8FEhUi5nicbHYYqF3uqEE7Cuhl7Or5NanWL+dIi+zkNUIp57l+EI2jaDmrXGbfgbjDpEpSmjcYyjoCu8B87CYECvO4FdL2+0gH91Jl9YK2f+qWmWkUNpGF1DfBJOxYLnHurnJGjR0pYTHzBG6viWDN6k/p0O9CNdA7ojQySdaS8vw4ZlhDWiRG4VLAUwPDoPU6tlFBXSEOFXsS29WQmUPqU8AbSks2LjRmziXU0rQDvQBAbWihfVgZVLXLxgw49PXt61k6WzMUpuz8= birme@Jonas-work-Pink-Air.local"
