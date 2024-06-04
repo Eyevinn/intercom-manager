@@ -134,6 +134,9 @@ jobs:
           task-definition: ${{ env.ECS_PROD_TASK_DEFINITION }}
           container-name: ${{ env.CONTAINER_NAME }}
           image: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ inputs.version  }}
+          environment-variables: |
+            SMB_ADDRESS=${{ secrets.PROD_SMB_ADDRESS }}
+            MONGODB_CONNECTION_STRING=${{ secrets.PROD_MONGODB_CONNECTION_STRING }}
 
       - name: Deploy Amazon ECS task definition
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
