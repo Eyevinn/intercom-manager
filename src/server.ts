@@ -18,7 +18,8 @@ const PORT = process.env.PORT ? Number(process.env.PORT) : 8000;
   const server = await api({
     title: 'intercom-manager',
     smbServerBaseUrl: SMB_ADDRESS,
-    endpointIdleTimeout: ENDPOINT_IDLE_TIMEOUT_S
+    endpointIdleTimeout: ENDPOINT_IDLE_TIMEOUT_S,
+    smbServerApiKey: process.env.SMB_APIKEY
   });
 
   server.listen({ port: PORT, host: '0.0.0.0' }, (err, address) => {
