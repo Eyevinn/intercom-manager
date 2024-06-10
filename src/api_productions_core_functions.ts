@@ -76,6 +76,7 @@ export class CoreFunctions {
   async createEndpoint(
     smb: SmbProtocol,
     smbServerUrl: string,
+    smbServerApiKey: string,
     lineId: string,
     endpointId: string,
     audio: boolean,
@@ -88,7 +89,8 @@ export class CoreFunctions {
       endpointId,
       audio,
       data,
-      endpointIdleTimeout
+      endpointIdleTimeout,
+      smbServerApiKey
     );
     return endpoint;
   }
@@ -96,6 +98,7 @@ export class CoreFunctions {
   async handleAnswerRequest(
     smb: SmbProtocol,
     smbServerUrl: string,
+    smbServerApiKey: string,
     lineId: string,
     endpointId: string,
     endpointDescription: SmbEndpointDescription,
@@ -184,7 +187,8 @@ export class CoreFunctions {
       smbServerUrl,
       lineId,
       endpointId,
-      endpointDescription
+      endpointDescription,
+      smbServerApiKey
     );
   }
 
@@ -198,10 +202,14 @@ export class CoreFunctions {
   private async createConference(
     smb: SmbProtocol,
     smbServerUrl: string,
+    smbServerApiKey: string,
     productionId: string,
     lineId: string
   ): Promise<string> {
-    const activeLines: string[] = await smb.getConferences(smbServerUrl);
+    const activeLines: string[] = await smb.getConferences(
+      smbServerUrl,
+      smbServerApiKey
+    );
 
     const production = await this.productionManager.requireProduction(
       parseInt(productionId, 10)
@@ -213,7 +221,10 @@ export class CoreFunctions {
       return line.smbConferenceId;
     }
 
-    const newConferenceId = await smb.allocateConference(smbServerUrl);
+    const newConferenceId = await smb.allocateConference(
+      smbServerUrl,
+      smbServerApiKey
+    );
 
     if (
       !(await this.productionManager.setLineId(
@@ -233,11 +244,18 @@ export class CoreFunctions {
   async createConferenceForLine(
     smb: SmbProtocol,
     smbServerUrl: string,
+    smbServerApiKey: string,
     productionId: string,
     lineId: string
   ): Promise<string> {
     const createConf = () =>
-      this.createConference(smb, smbServerUrl, productionId, lineId);
+      this.createConference(
+        smb,
+        smbServerUrl,
+        smbServerApiKey,
+        productionId,
+        lineId
+      );
 
     return this.connectionQueue.queueAsync(createConf);
   }

@@ -41,6 +41,7 @@ export interface ApiOptions {
   title: string;
   smbServerBaseUrl: string;
   endpointIdleTimeout: string;
+  smbServerApiKey?: string;
 }
 
 export default async (opts: ApiOptions) => {
@@ -70,7 +71,8 @@ export default async (opts: ApiOptions) => {
   api.register(await getApiProductions(), {
     prefix: 'api/v1',
     smbServerBaseUrl: opts.smbServerBaseUrl,
-    endpointIdleTimeout: opts.endpointIdleTimeout
+    endpointIdleTimeout: opts.endpointIdleTimeout,
+    smbServerApiKey: opts.smbServerApiKey
   });
 
   return api;

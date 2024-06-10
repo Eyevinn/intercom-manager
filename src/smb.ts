@@ -18,11 +18,12 @@ interface BaseAllocationRequest {
 }
 
 export class SmbProtocol {
-  async allocateConference(smbUrl: string): Promise<string> {
+  async allocateConference(smbUrl: string, smbKey: string): Promise<string> {
     const allocateResponse = await fetch(smbUrl, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        ...(smbKey !== '' && { Authorization: `Bearer ${smbKey}` })
       },
       body: '{}'
     });
@@ -46,7 +47,8 @@ export class SmbProtocol {
     endpointId: string,
     audio: boolean,
     data: boolean,
-    idleTimeout: number
+    idleTimeout: number,
+    smbKey: string
   ): Promise<SmbEndpointDescription> {
     const request: BaseAllocationRequest = {
       action: 'allocate',
@@ -74,7 +76,8 @@ export class SmbProtocol {
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        ...(smbKey !== '' && { Authorization: `Bearer ${smbKey}` })
       },
       body: JSON.stringify(request)
     });
@@ -96,7 +99,8 @@ export class SmbProtocol {
     smbUrl: string,
     conferenceId: string,
     endpointId: string,
-    endpointDescription: SmbEndpointDescription
+    endpointDescription: SmbEndpointDescription,
+    smbKey: string
   ): Promise<void> {
     const request = JSON.parse(JSON.stringify(endpointDescription));
     request['action'] = 'configure';
@@ -104,7 +108,8 @@ export class SmbProtocol {
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        ...(smbKey !== '' && { Authorization: `Bearer ${smbKey}` })
       },
       body: JSON.stringify(request)
     });
@@ -130,9 +135,12 @@ export class SmbProtocol {
     }
   }
 
-  async getConferences(smbUrl: string): Promise<string[]> {
+  async getConferences(smbUrl: string, smbKey: string): Promise<string[]> {
     const response = await fetch(smbUrl, {
-      method: 'GET'
+      method: 'GET',
+      headers: {
+        ...(smbKey !== '' && { Authorization: `Bearer ${smbKey}` })
+      }
     });
 
     if (!response.ok) {
@@ -145,11 +153,15 @@ export class SmbProtocol {
 
   async getConference(
     smbUrl: string,
-    conferenceId: string
+    conferenceId: string,
+    smbKey: string
   ): Promise<DetailedConference[]> {
     const url = smbUrl + conferenceId;
     const response = await fetch(url, {
-      method: 'GET'
+      method: 'GET',
+      headers: {
+        ...(smbKey !== '' && { Authorization: `Bearer ${smbKey}` })
+      }
     });
 
     if (!response.ok) {

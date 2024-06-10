@@ -31,6 +31,7 @@ export function checkUserStatus() {
 export interface ApiProductionsOptions {
   smbServerBaseUrl: string;
   endpointIdleTimeout: string;
+  smbServerApiKey?: string;
 }
 
 const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
@@ -43,6 +44,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     opts.smbServerBaseUrl
   ).toString();
   const smb = new SmbProtocol();
+  const smbServerApiKey = opts.smbServerApiKey || '';
 
   fastify.post<{
     Body: NewProduction;
@@ -236,6 +238,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         const smbConferenceId = await coreFunctions.createConferenceForLine(
           smb,
           smbServerUrl,
+          smbServerApiKey,
           productionId,
           lineId
         );
@@ -244,6 +247,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         const endpoint = await coreFunctions.createEndpoint(
           smb,
           smbServerUrl,
+          smbServerApiKey,
           smbConferenceId,
           endpointId,
           true,
@@ -330,6 +334,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         await coreFunctions.handleAnswerRequest(
           smb,
           smbServerUrl,
+          smbServerApiKey,
           line.smbConferenceId,
           endpointId,
           connectionEndpointDescription,
