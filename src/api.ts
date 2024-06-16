@@ -57,13 +57,13 @@ export default async (opts: ApiOptions) => {
     swagger: {
       info: {
         title: opts.title,
-        description: 'hello',
+        description: 'Intercom Manager API',
         version: 'v1'
       }
     }
   });
   api.register(swaggerUI, {
-    routePrefix: '/docs'
+    routePrefix: '/api/docs'
   });
 
   api.register(healthcheck, { title: opts.title });
