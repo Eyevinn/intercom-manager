@@ -50,7 +50,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
 
   fastify.post<{
     Body: NewProduction;
-    Reply: ProductionResponse | string;
+    Reply: ProductionResponse | ErrorResponse | string;
   }>(
     '/production',
     {
@@ -58,7 +58,8 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         description: 'Create a new Production.',
         body: NewProduction,
         response: {
-          200: ProductionResponse
+          200: ProductionResponse,
+          400: ErrorResponse
         }
       }
     },
@@ -75,7 +76,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           };
           reply.code(200).send(productionResponse);
         } else {
-          reply.code(500).send('Failed to create production');
+          reply.code(400).send({ message: 'Failed to create production' });
         }
       } catch (err) {
         reply
@@ -93,7 +94,8 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       schema: {
         description: 'Retrieves all Productions.',
         response: {
-          200: Type.Array(ProductionResponse)
+          200: Type.Array(ProductionResponse),
+          500: Type.String()
         }
       }
     },
@@ -123,7 +125,8 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       schema: {
         description: 'Retrieves a Production.',
         response: {
-          200: DetailedProductionResponse
+          200: DetailedProductionResponse,
+          500: Type.String()
         }
       }
     },
@@ -277,6 +280,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         response: {
           200: Type.String(),
           400: ErrorResponse,
+          404: ErrorResponse,
           500: Type.String()
         }
       }
@@ -288,18 +292,22 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           parseInt(productionId, 10)
         );
 
-        const line = productionManager.requireLine(production.lines, lineId);
-        const participantlist = productionManager.getUsersForLine(
-          productionId,
-          line.id
-        );
-        if (participantlist.filter((p) => p.isActive).length > 0) {
-          reply
-            .code(400)
-            .send({ message: 'Cannot remove a line with active participants' });
+        const line = productionManager.getLine(production.lines, lineId);
+        if (!line) {
+          reply.code(404).send({ message: `Line with id ${lineId} not found` });
         } else {
-          await productionManager.deleteProductionLine(production, lineId);
-          reply.code(200).send('deleted');
+          const participantlist = productionManager.getUsersForLine(
+            productionId,
+            line.id
+          );
+          if (participantlist.filter((p) => p.isActive).length > 0) {
+            reply.code(400).send({
+              message: 'Cannot remove a line with active participants'
+            });
+          } else {
+            await productionManager.deleteProductionLine(production, lineId);
+            reply.code(200).send('deleted');
+          }
         }
       } catch (err) {
         reply
@@ -311,7 +319,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
 
   fastify.post<{
     Body: NewSession;
-    Reply: SessionResponse | string;
+    Reply: SessionResponse | ErrorResponse | string;
   }>(
     '/session',
     {
@@ -320,7 +328,9 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           'Initiate connection protocol. Generates sdp offer describing remote SMB instance.',
         body: NewSession,
         response: {
-          201: SessionResponse
+          201: SessionResponse,
+          400: ErrorResponse,
+          500: Type.String()
         }
       }
     },
@@ -370,7 +380,10 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
             .type('application/json')
             .send({ sessionId: sessionId, sdp: sdpOffer });
         } else {
-          reply.code(500).send('Failed to generate sdp offer for endpoint');
+          reply.code(400).send({
+            message: 'Could not establish a media connection',
+            stackTrace: 'Failed to generate sdp offer for endpoint'
+          });
         }
       } catch (err) {
         reply
@@ -390,7 +403,8 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         description:
           'Provide client local SDP description as request body to finalize connection protocol.',
         response: {
-          200: Type.String()
+          200: Type.String(),
+          500: Type.String()
         }
       }
     },
@@ -452,7 +466,8 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       schema: {
         description: 'Deletes a Production.',
         response: {
-          204: Type.String()
+          200: Type.String(),
+          500: Type.String()
         }
       }
     },
@@ -466,7 +481,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         ) {
           throw new Error('Could not delete production');
         }
-        reply.code(204).send(`Deleted production ${productionId}`);
+        reply.code(200).send(`Deleted production ${productionId}`);
       } catch (err) {
         reply
           .code(500)
@@ -484,7 +499,8 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       schema: {
         description: 'Deletes a Connection from ProductionManager.',
         response: {
-          204: Type.String()
+          200: Type.String(),
+          500: Type.String()
         }
       }
     },
@@ -495,7 +511,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         if (!deletedSessionId) {
           throw new Error(`Could not delete connection ${sessionId}`);
         }
-        reply.code(204).send(`Deleted connection ${sessionId}`);
+        reply.code(200).send(`Deleted connection ${sessionId}`);
       } catch (err) {
         reply
           .code(500)
@@ -514,7 +530,8 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       schema: {
         description: 'Long Poll Endpoint to get participant list.',
         response: {
-          200: Type.Array(UserResponse)
+          200: Type.Array(UserResponse),
+          500: Type.String()
         }
       }
     },
