@@ -33,7 +33,7 @@ docker run -d -p 8000:8000 \
   eyevinntechnology/intercom-manager
 ```
 
-The API docs is then available on `http://localhost:8000/docs/`
+The API docs is then available on `http://localhost:8000/api/docs/`
 
 ## Development
 
@@ -54,7 +54,7 @@ npm test
 Start server locally
 
 ```sh
-SMB_ADDRESS=http://<smburl>:<smbport> npm start
+SMB_ADDRESS=http://<smburl>:<smbport> SMB_APIKEY=<smbapikey> npm start
 ```
 
 See [Environment Variables](#environment-variables) for a full list of environment variables you can set. The default `MONGODB_CONNECTION_STRING` is probably what you want to use for local development unless you use a remote db server.
