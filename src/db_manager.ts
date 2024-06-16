@@ -47,6 +47,15 @@ const dbManager = {
       | undefined;
   },
 
+  async updateProduction(
+    production: Production
+  ): Promise<Production | undefined> {
+    const result = await db
+      .collection('productions')
+      .updateOne({ _id: production._id as any }, { $set: production });
+    return result.modifiedCount === 1 ? production : undefined;
+  },
+
   async addProduction(name: string, lines: Line[]): Promise<Production> {
     const _id = await getNextSequence('productions');
     const production = { name, lines, _id };

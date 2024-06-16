@@ -71,6 +71,33 @@ export class ProductionManager extends EventEmitter {
     return dbManager.addProduction(newProduction.name, newProductionLines);
   }
 
+  async addProductionLine(
+    production: Production,
+    newLineName: string
+  ): Promise<Production | undefined> {
+    const nextLineId =
+      Math.max(...production.lines.map((line) => parseInt(line.id, 10))) + 1;
+    production.lines.push({
+      name: newLineName,
+      id: nextLineId.toString(),
+      smbConferenceId: ''
+    });
+
+    return dbManager.updateProduction(production);
+  }
+
+  async deleteProductionLine(
+    production: Production,
+    lineId: string
+  ): Promise<Production | undefined> {
+    const lineIndex = production.lines.findIndex((line) => line.id === lineId);
+    if (lineIndex !== -1) {
+      production.lines.splice(lineIndex, 1);
+      return dbManager.updateProduction(production);
+    }
+    return undefined;
+  }
+
   async getProductions(limit = 0): Promise<Production[]> {
     return dbManager.getProductions(limit);
   }

@@ -10,7 +10,9 @@ import {
   UserSession,
   NewSession,
   SessionResponse,
-  SdpAnswer
+  SdpAnswer,
+  NewProductionLine,
+  ErrorResponse
 } from './models';
 import { SmbProtocol } from './smb';
 import { ProductionManager } from './production_manager';
@@ -155,7 +157,8 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       schema: {
         description: 'Retrieves all lines for a Production.',
         response: {
-          200: Type.Array(LineResponse)
+          200: Type.Array(LineResponse),
+          500: Type.String()
         }
       }
     },
@@ -170,21 +173,66 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       } catch (err) {
         reply
           .code(500)
-          .send('Exception thrown when trying to get line: ' + err);
+          .send('Exception thrown when trying to get lines: ' + err);
+      }
+    }
+  );
+
+  fastify.post<{
+    Params: { productionId: string };
+    Body: NewProductionLine;
+    Reply: LineResponse[] | ErrorResponse | string;
+  }>(
+    '/production/:productionId/line',
+    {
+      schema: {
+        description: 'Add a new Line to a Production.',
+        body: NewProductionLine,
+        response: {
+          200: Type.Array(LineResponse),
+          400: ErrorResponse,
+          500: Type.String()
+        }
+      }
+    },
+    async (request, reply) => {
+      try {
+        const production = await productionManager.requireProduction(
+          parseInt(request.params.productionId, 10)
+        );
+        if (production.lines.find((line) => line.name === request.body.name)) {
+          reply.code(400).send({
+            message: `Line with name ${request.body.name} already exists`
+          });
+        } else {
+          await productionManager.addProductionLine(
+            production,
+            request.body.name
+          );
+          const allLinesResponse: LineResponse[] =
+            coreFunctions.getAllLinesResponse(production);
+          reply.code(200).send(allLinesResponse);
+        }
+      } catch (err) {
+        reply
+          .code(500)
+          .send('Unhandled exception thrown when trying to add line: ' + err);
       }
     }
   );
 
   fastify.get<{
     Params: { productionId: string; lineId: string };
-    Reply: LineResponse | string;
+    Reply: LineResponse | ErrorResponse | string;
   }>(
     '/production/:productionId/line/:lineId',
     {
       schema: {
         description: 'Retrieves an active Production line.',
         response: {
-          200: LineResponse
+          200: LineResponse,
+          404: ErrorResponse,
+          500: Type.String()
         }
       }
     },
@@ -194,19 +242,65 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         const production = await productionManager.requireProduction(
           parseInt(productionId, 10)
         );
-        const line = productionManager.requireLine(production.lines, lineId);
+        const line = productionManager.getLine(production.lines, lineId);
+        if (!line) {
+          reply.code(404).send({ message: `Line with id ${lineId} not found` });
+        } else {
+          const participantlist = productionManager.getUsersForLine(
+            productionId,
+            line.id
+          );
+          const lineResponse: LineResponse = {
+            name: line.name,
+            id: line.id,
+            smbConferenceId: line.smbConferenceId,
+            participants: participantlist
+          };
+          reply.code(200).send(lineResponse);
+        }
+      } catch (err) {
+        reply
+          .code(500)
+          .send('Exception thrown when trying to get line: ' + err);
+      }
+    }
+  );
 
+  fastify.delete<{
+    Params: { productionId: string; lineId: string };
+    Reply: string | ErrorResponse;
+  }>(
+    '/production/:productionId/line/:lineId',
+    {
+      schema: {
+        description: 'Removes a line from a production.',
+        response: {
+          200: Type.String(),
+          400: ErrorResponse,
+          500: Type.String()
+        }
+      }
+    },
+    async (request, reply) => {
+      try {
+        const { productionId, lineId } = request.params;
+        const production = await productionManager.requireProduction(
+          parseInt(productionId, 10)
+        );
+
+        const line = productionManager.requireLine(production.lines, lineId);
         const participantlist = productionManager.getUsersForLine(
           productionId,
           line.id
         );
-        const lineResponse: LineResponse = {
-          name: line.name,
-          id: line.id,
-          smbConferenceId: line.smbConferenceId,
-          participants: participantlist
-        };
-        reply.code(200).send(lineResponse);
+        if (participantlist.filter((p) => p.isActive).length > 0) {
+          reply
+            .code(400)
+            .send({ message: 'Cannot remove a line with active participants' });
+        } else {
+          await productionManager.deleteProductionLine(production, lineId);
+          reply.code(200).send('deleted');
+        }
       } catch (err) {
         reply
           .code(500)
