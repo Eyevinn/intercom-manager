@@ -99,6 +99,10 @@ jobs:
           task-definition: ${{ env.ECS_DEV_TASK_DEFINITION }}
           container-name: ${{ env.CONTAINER_NAME }}
           image: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:sha-${{ steps.short-sha.outputs.sha  }}
+          environment-variables: |
+            SMB_ADDRESS=${{ secrets.DEV_SMB_ADDRESS }}
+            SMB_APIKEY=${{ secrets.DEV_SMB_APIKEY }}
+            MONGODB_CONNECTION_STRING=${{ secrets.DEV_MONGODB_CONNECTION_STRING }}
 
       - name: Deploy Amazon ECS task definition
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
