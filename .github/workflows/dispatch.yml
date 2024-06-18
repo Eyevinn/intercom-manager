@@ -4,14 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: 'Environment to deploy to. Version must be specified for production deploy.'
+        description: 'Environment to deploy to.'
         type: choice
         options:
           - development
-          - production
         required: true
       version:
-        description: 'Version to deploy. Required for production deploy. (vX.X.X)'
+        description: 'Version to deploy (vX.X.X).'
         type: string
         required: false
 
@@ -21,7 +20,6 @@ env:
   ECR_REPOSITORY: intercom-manager
   ECS_SERVICE: intercom-manager
   ECS_DEV_TASK_DEFINITION: aws/ecs/taskdef-dev.json
-  ECS_PROD_TASK_DEFINITION: aws/ecs/taskdef-prod.json
   CONTAINER_NAME: intercom-manager
 
 defaults:
@@ -112,9 +110,9 @@ jobs:
           cluster: development
           wait-for-service-stability: true
 
-  deploy_prod:
-    if: ${{ inputs.environment == 'production' && inputs.version }}
-    name: Deploy to Production cluster on ECS
+  deploy_dev_version:
+    if: ${{ inputs.environment == 'development' && inputs.version }}
+    name: Deploy specific version to Dev cluster on ECS
     runs-on: ubuntu-latest
 
     steps:
@@ -135,17 +133,18 @@ jobs:
         id: task-def
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
-          task-definition: ${{ env.ECS_PROD_TASK_DEFINITION }}
+          task-definition: ${{ env.ECS_DEV_TASK_DEFINITION }}
           container-name: ${{ env.CONTAINER_NAME }}
           image: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ inputs.version  }}
           environment-variables: |
-            SMB_ADDRESS=${{ secrets.PROD_SMB_ADDRESS }}
-            MONGODB_CONNECTION_STRING=${{ secrets.PROD_MONGODB_CONNECTION_STRING }}
+            SMB_ADDRESS=${{ secrets.DEV_SMB_ADDRESS }}
+            SMB_APIKEY=${{ secrets.DEV_SMB_APIKEY }}
+            MONGODB_CONNECTION_STRING=${{ secrets.DEV_MONGODB_CONNECTION_STRING }}
 
       - name: Deploy Amazon ECS task definition
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
           task-definition: ${{ steps.task-def.outputs.task-definition }}
           service: ${{ env.ECS_SERVICE }}
-          cluster: production
+          cluster: development
           wait-for-service-stability: true
