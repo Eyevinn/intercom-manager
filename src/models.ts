@@ -1,6 +1,7 @@
 import { Type, Static } from '@sinclair/typebox';
 
 export type NewProduction = Static<typeof NewProduction>;
+export type NewProductionLine = Static<typeof NewProductionLine>;
 export type Production = Static<typeof Production>;
 export type ProductionResponse = Static<typeof ProductionResponse>;
 export type DetailedProductionResponse = Static<
@@ -16,6 +17,7 @@ export type UserSession = Static<typeof UserSession>;
 export type NewSession = Static<typeof NewSession>;
 export type SessionResponse = Static<typeof SessionResponse>;
 export type SdpAnswer = Static<typeof SdpAnswer>;
+export type ErrorResponse = Static<typeof ErrorResponse>;
 
 export const Audio = Type.Object({
   'relay-type': Type.Array(
@@ -67,6 +69,10 @@ export const NewProduction = Type.Object({
       name: Type.String()
     })
   )
+});
+
+export const NewProductionLine = Type.Object({
+  name: Type.String()
 });
 
 const SmbCandidate = Type.Object({
@@ -204,4 +210,9 @@ export const SessionResponse = Type.Object({
 
 export const SdpAnswer = Type.Object({
   sdpAnswer: Type.String()
+});
+
+export const ErrorResponse = Type.Object({
+  message: Type.String(),
+  stackTrace: Type.Optional(Type.String())
 });

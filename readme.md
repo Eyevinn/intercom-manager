@@ -37,7 +37,7 @@ The API docs is then available on `http://localhost:8000/api/docs/`
 
 ## Development
 
-Requires Node JS engine >= v18 and [MongoDB](https://www.mongodb.com/docs/manual/administration/install-community/) (tested with MondoDB v7).
+Requires Node JS engine >= v18 and [MongoDB](https://www.mongodb.com/docs/manual/administration/install-community/) (tested with MongoDB v7).
 
 Install dependencies
 
