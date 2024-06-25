@@ -20,6 +20,7 @@ interface BaseAllocationRequest {
 
 export class SmbProtocol {
   async allocateConference(smbUrl: string, smbKey: string): Promise<string> {
+    console.log('Allocate conference', smbUrl);
     const allocateResponse = await fetch(smbUrl, {
       method: 'POST',
       headers: {
@@ -70,10 +71,9 @@ export class SmbProtocol {
     if (idleTimeout) {
       request['idleTimeout'] = idleTimeout;
     }
-    Log().debug(request);
 
     const url = smbUrl + conferenceId + '/' + endpointId;
-    Log().debug(url);
+    Log().debug('Allocate endpoint', url, request);
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -114,7 +114,7 @@ export class SmbProtocol {
       },
       body: JSON.stringify(request)
     });
-    Log().debug(request);
+    Log().debug('Configure endpoint', url, request);
 
     if (!response.ok) {
       Log().debug(JSON.stringify(request));

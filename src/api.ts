@@ -5,7 +5,10 @@ import swaggerUI from '@fastify/swagger-ui';
 import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import { Static, Type } from '@sinclair/typebox';
 import { FastifyPluginCallback } from 'fastify';
-import { getApiProductions } from './api_productions';
+import apiProductions, { ApiProductionsOptions } from './api_productions';
+import apiWhip, { ApiWhipOptions } from './api_whip';
+import { ProductionManager } from './production_manager';
+import { CoreFunctions } from './api_productions_core_functions';
 
 const HelloWorld = Type.String({
   description: 'The magical words!'
@@ -37,12 +40,12 @@ const healthcheck: FastifyPluginCallback<HealthcheckOptions> = (
   next();
 };
 
-export interface ApiOptions {
+export interface ApiGeneralOptions {
   title: string;
-  smbServerBaseUrl: string;
-  endpointIdleTimeout: string;
-  smbServerApiKey?: string;
 }
+export type ApiOptions = ApiGeneralOptions &
+  ApiProductionsOptions &
+  ApiWhipOptions;
 
 export default async (opts: ApiOptions) => {
   const api = fastify({
@@ -50,7 +53,11 @@ export default async (opts: ApiOptions) => {
   }).withTypeProvider<TypeBoxTypeProvider>();
 
   // register the cors plugin, configure it for better security
-  api.register(cors);
+  api.register(cors, {
+    methods: ['OPTIONS', 'GET', 'POST', 'PATCH', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-jwt'],
+    exposedHeaders: ['Content-Type', 'Location']
+  });
 
   // register the swagger plugins, it will automagically do magic
   api.register(swagger, {
@@ -68,11 +75,21 @@ export default async (opts: ApiOptions) => {
 
   api.register(healthcheck, { title: opts.title });
   // register other API routes here
-  api.register(await getApiProductions(), {
+  api.register(apiProductions, {
     prefix: 'api/v1',
     smbServerBaseUrl: opts.smbServerBaseUrl,
     endpointIdleTimeout: opts.endpointIdleTimeout,
-    smbServerApiKey: opts.smbServerApiKey
+    smbServerApiKey: opts.smbServerApiKey,
+    productionManager: opts.productionManager,
+    coreFunctions: opts.coreFunctions
+  });
+  api.register(apiWhip, {
+    prefix: 'whip',
+    whipApiKey: opts.whipApiKey,
+    smbServerBaseUrl: opts.smbServerBaseUrl,
+    endpointIdleTimeout: opts.endpointIdleTimeout,
+    smbServerApiKey: opts.smbServerApiKey,
+    coreFunctions: opts.coreFunctions
   });
 
   return api;
