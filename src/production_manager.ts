@@ -86,6 +86,19 @@ export class ProductionManager extends EventEmitter {
     return dbManager.updateProduction(production);
   }
 
+  async updateProductionLine(
+    production: Production,
+    lineId: string,
+    lineName: string
+  ): Promise<Production | undefined> {
+    const line = production.lines.find((line) => line.id === lineId);
+    if (line) {
+      line.name = lineName;
+      return dbManager.updateProduction(production);
+    }
+    return undefined;
+  }
+
   async deleteProductionLine(
     production: Production,
     lineId: string
