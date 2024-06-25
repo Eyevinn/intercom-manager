@@ -86,6 +86,7 @@ jest.mock('./db_manager', () => ({
   addProduction: jest.fn(),
   getProduction: jest.fn(),
   getProductions: jest.fn(),
+  updateProduction: jest.fn(),
   deleteProduction: jest.fn()
 }));
 
@@ -250,5 +251,81 @@ describe('production_manager', () => {
     expect(userSession?.name).toStrictEqual('userName');
     expect(userSession?.isActive).toStrictEqual(true);
     expect(userSession?.isExpired).toStrictEqual(false);
+  });
+
+  describe('production_manager', () => {
+    beforeEach(() => {
+      jest.resetAllMocks();
+    });
+
+    it('add a line to a production', async () => {
+      const { getProduction, updateProduction } =
+        jest.requireMock('./db_manager');
+      getProduction.mockReturnValueOnce(structuredClone(existingProduction));
+
+      const productionManagerTest = new ProductionManager();
+      const production = await productionManagerTest.getProduction(1);
+      if (production) {
+        await productionManagerTest.addProductionLine(production, 'newName');
+        expect(updateProduction).toHaveBeenLastCalledWith({
+          _id: 1,
+          name: 'productionname',
+          lines: [
+            {
+              name: 'linename',
+              id: '1',
+              smbConferenceId: 'smbineid'
+            },
+            {
+              name: 'newName',
+              id: '2',
+              smbConferenceId: ''
+            }
+          ]
+        });
+      }
+    });
+
+    it('remove a line from a production', async () => {
+      const { getProduction, updateProduction } =
+        jest.requireMock('./db_manager');
+      getProduction.mockReturnValueOnce(structuredClone(existingProduction));
+      const productionManagerTest = new ProductionManager();
+      const production = await productionManagerTest.getProduction(1);
+      if (production) {
+        await productionManagerTest.deleteProductionLine(production, '1');
+        expect(updateProduction).toHaveBeenLastCalledWith({
+          _id: 1,
+          name: 'productionname',
+          lines: []
+        });
+      }
+    });
+
+    it('change the name of a line in a production', async () => {
+      const { getProduction, updateProduction } =
+        jest.requireMock('./db_manager');
+      getProduction.mockReturnValueOnce(structuredClone(existingProduction));
+      const productionManagerTest = new ProductionManager();
+      const production = await productionManagerTest.getProduction(1);
+      if (production) {
+        await productionManagerTest.updateProductionLine(
+          production,
+          '1',
+          'newName'
+        );
+        expect(updateProduction).toHaveBeenLastCalledWith({
+          _id: 1,
+          name: 'productionname',
+          lines: [
+            {
+              name: 'newName',
+              id: '1',
+              smbConferenceId: 'smbineid'
+            }
+          ]
+        });
+      }
+    });
   });
 });
