@@ -9,6 +9,8 @@ export type DetailedProductionResponse = Static<
 >;
 export type Line = Static<typeof Line>;
 export type LineResponse = Static<typeof LineResponse>;
+export type PatchLine = Static<typeof PatchLine>;
+export type PatchLineResponse = Static<typeof PatchLineResponse>;
 export type SmbEndpointDescription = Static<typeof SmbEndpointDescription>;
 export type DetailedConference = Static<typeof DetailedConference>;
 export type Endpoint = Static<typeof Endpoint>;
@@ -179,6 +181,9 @@ export const LineResponse = Type.Object({
   smbConferenceId: Type.String(),
   participants: Type.Array(UserResponse)
 });
+
+export const PatchLine = Type.Omit(Line, ['id', 'smbConferenceId']);
+export const PatchLineResponse = Type.Omit(Line, ['smbConferenceId']);
 
 export const Production = Type.Object({
   _id: Type.Number(),
