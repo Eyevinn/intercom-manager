@@ -18,25 +18,16 @@ import {
 } from './models';
 import { SmbProtocol } from './smb';
 import { ProductionManager } from './production_manager';
-import dotenv from 'dotenv';
 import { v4 as uuidv4 } from 'uuid';
-import { ConnectionQueue } from './connection_queue';
 import { CoreFunctions } from './api_productions_core_functions';
 import { Log } from './log';
-dotenv.config();
-
-const productionManager = new ProductionManager();
-const connectionQueue = new ConnectionQueue();
-const coreFunctions = new CoreFunctions(productionManager, connectionQueue);
-
-export function checkUserStatus() {
-  productionManager.checkUserStatus();
-}
 
 export interface ApiProductionsOptions {
   smbServerBaseUrl: string;
   endpointIdleTimeout: string;
   smbServerApiKey?: string;
+  productionManager: ProductionManager;
+  coreFunctions: CoreFunctions;
 }
 
 const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
@@ -50,6 +41,8 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   ).toString();
   const smb = new SmbProtocol();
   const smbServerApiKey = opts.smbServerApiKey || '';
+  const productionManager = opts.productionManager;
+  const coreFunctions = opts.coreFunctions;
 
   fastify.post<{
     Body: NewProduction;
@@ -667,7 +660,4 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   next();
 };
 
-export async function getApiProductions() {
-  await productionManager.load();
-  return apiProductions;
-}
+export default apiProductions;

@@ -73,6 +73,97 @@ export class CoreFunctions {
     return sdpOffer;
   }
 
+  /**
+   * When handshake is initiated by the client (e.g. with WHIP)
+   */
+  async createConnectionFromOffer(
+    productionId: string,
+    lineId: string,
+    endpointDescription: SmbEndpointDescription,
+    username: string,
+    endpointId: string,
+    sessionId: string,
+    offer: string,
+    smb: SmbProtocol,
+    smbServerUrl: string,
+    smbServerApiKey: string,
+    smbConferenceId: string
+  ): Promise<string> {
+    const ssrcs: MediaStreamsInfoSsrc[] = [];
+    endpointDescription.audio.ssrcs.forEach((ssrcsNr) => {
+      ssrcs.push({
+        ssrc: ssrcsNr.toString(),
+        cname: uuidv4(),
+        mslabel: uuidv4(),
+        label: uuidv4()
+      });
+    });
+    const endpointMediaStreamInfo = {
+      audio: {
+        ssrcs: ssrcs
+      }
+    };
+    const connection = new Connection(
+      username,
+      endpointMediaStreamInfo,
+      endpointDescription,
+      endpointId
+    );
+
+    const parsedOffer = parse(offer);
+    const answer: SessionDescription = connection.createAnswer(offer);
+    const sdpAnswer: string = write(answer);
+
+    if (sdpAnswer) {
+      for (const media of parsedOffer.media) {
+        if (media.type === 'audio') {
+          endpointDescription.audio.ssrcs = [];
+          media.ssrcs &&
+            media.ssrcs
+              .filter((ssrcs) => ssrcs.attribute === 'msid')
+              .forEach((ssrcs) =>
+                endpointDescription.audio.ssrcs.push(parseInt(`${ssrcs.id}`))
+              );
+        }
+      }
+      for (const media of answer.media) {
+        if (media.type === 'audio') {
+          endpointDescription.audio['payload-type'].id = media.rtp[0].payload;
+          endpointDescription.audio['rtp-hdrexts'] = [];
+          media.ext &&
+            media.ext.forEach((ext: any) =>
+              endpointDescription.audio['rtp-hdrexts'].push({
+                id: ext.value,
+                uri: ext.uri
+              })
+            );
+        }
+      }
+      // Configure endpoint
+      await smb.configureEndpoint(
+        smbServerUrl,
+        smbConferenceId,
+        endpointId,
+        endpointDescription,
+        smbServerApiKey
+      );
+
+      this.productionManager.createUserSession(
+        productionId,
+        lineId,
+        sessionId,
+        username
+      );
+      this.productionManager.updateUserEndpoint(
+        sessionId,
+        endpointId,
+        endpointDescription
+      );
+    }
+
+    return sdpAnswer;
+  }
+
   async createEndpoint(
     smb: SmbProtocol,
     smbServerUrl: string,
