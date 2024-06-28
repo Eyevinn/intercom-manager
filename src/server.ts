@@ -1,5 +1,6 @@
 import api from './api';
 import { checkUserStatus } from './api_productions';
+import { Log } from './log';
 
 const SMB_ADDRESS: string = process.env.SMB_ADDRESS ?? 'http://localhost:8080';
 
@@ -26,6 +27,9 @@ const PORT = process.env.PORT ? Number(process.env.PORT) : 8000;
     if (err) {
       throw err;
     }
-    console.log(`Server listening on ${address}`);
+    Log().info(`Manager listening on ${address}`);
+    Log().info(
+      `Media Bridge at ${SMB_ADDRESS} (${ENDPOINT_IDLE_TIMEOUT_S}s idle timeout)`
+    );
   });
 })();

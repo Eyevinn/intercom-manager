@@ -22,6 +22,7 @@ import dotenv from 'dotenv';
 import { v4 as uuidv4 } from 'uuid';
 import { ConnectionQueue } from './connection_queue';
 import { CoreFunctions } from './api_productions_core_functions';
+import { Log } from './log';
 dotenv.config();
 
 const productionManager = new ProductionManager();
@@ -81,6 +82,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           reply.code(400).send({ message: 'Failed to create production' });
         }
       } catch (err) {
+        Log().error(err);
         reply
           .code(500)
           .send('Exception thrown when trying to create production: ' + err);
@@ -111,6 +113,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           }))
         );
       } catch (err) {
+        Log().error(err);
         reply
           .code(500)
           .send('Exception thrown when trying to get productions: ' + err);
@@ -146,6 +149,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         };
         reply.code(200).send(productionResponse);
       } catch (err) {
+        Log().error(err);
         reply
           .code(500)
           .send('Exception thrown when trying to get productions: ' + err);
@@ -219,6 +223,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           reply.code(200).send(allLinesResponse);
         }
       } catch (err) {
+        Log().error(err);
         reply
           .code(500)
           .send('Unhandled exception thrown when trying to add line: ' + err);
@@ -264,6 +269,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           reply.code(200).send(lineResponse);
         }
       } catch (err) {
+        Log().error(err);
         reply
           .code(500)
           .send('Exception thrown when trying to get line: ' + err);
@@ -329,6 +335,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           }
         }
       } catch (err) {
+        Log().error(err);
         reply
           .code(500)
           .send('Exception thrown when trying to get line: ' + err);
@@ -377,6 +384,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           }
         }
       } catch (err) {
+        Log().error(err);
         reply
           .code(500)
           .send('Exception thrown when trying to get line: ' + err);
@@ -453,6 +461,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           });
         }
       } catch (err) {
+        Log().error(err);
         reply
           .code(500)
           .send('Exception thrown when trying to create endpoint: ' + err);
@@ -517,6 +526,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         );
         reply.code(204);
       } catch (err) {
+        Log().error(err);
         reply
           .code(500)
           .send('Exception thrown when trying to configure endpoint: ' + err);
@@ -550,6 +560,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         }
         reply.code(200).send(`Deleted production ${productionId}`);
       } catch (err) {
+        Log().error(err);
         reply
           .code(500)
           .send('Exception thrown when trying to delete production: ' + err);
@@ -580,6 +591,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         }
         reply.code(200).send(`Deleted connection ${sessionId}`);
       } catch (err) {
+        Log().error(err);
         reply
           .code(500)
           .send('Exception thrown when trying to delete connection: ' + err);
@@ -617,6 +629,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         await waitForChange;
         reply.code(200).send(participants);
       } catch (err) {
+        Log().error(err);
         reply
           .code(500)
           .send(
