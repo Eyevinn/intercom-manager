@@ -1,3 +1,4 @@
+import { Log } from './log';
 import { SmbEndpointDescription, DetailedConference } from './models';
 
 interface AllocateConferenceResponse {
@@ -69,10 +70,10 @@ export class SmbProtocol {
     if (idleTimeout) {
       request['idleTimeout'] = idleTimeout;
     }
-    console.log(request);
+    Log().debug(request);
 
     const url = smbUrl + conferenceId + '/' + endpointId;
-    console.log(url);
+    Log().debug(url);
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -113,10 +114,10 @@ export class SmbProtocol {
       },
       body: JSON.stringify(request)
     });
-    console.log(request);
+    Log().debug(request);
 
     if (!response.ok) {
-      console.log(JSON.stringify(request));
+      Log().debug(JSON.stringify(request));
 
       const contentType = response.headers.get('content-type');
 

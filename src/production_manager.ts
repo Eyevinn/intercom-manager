@@ -10,6 +10,7 @@ import {
 } from './models';
 import { assert } from './utils';
 import dbManager from './db_manager';
+import { Log } from './log';
 
 const SESSION_INACTIVE_THRESHOLD = 60_000;
 const SESSION_EXPIRED_THRESHOLD = 120_000;
@@ -173,7 +174,7 @@ export class ProductionManager extends EventEmitter {
       isActive: true,
       isExpired: false
     };
-    console.log(`Created user session: "${name}": ${sessionId}`);
+    Log().info(`Created user session: "${name}": ${sessionId}`);
     this.emit('users:change');
   }
 

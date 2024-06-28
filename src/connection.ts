@@ -6,6 +6,7 @@ import {
   SfuEndpointDescription
 } from './sfu/interface';
 import { MediaStreamsInfo } from './media_streams_info';
+import { Log } from './log';
 
 export class Connection {
   private resourceId: string;
@@ -39,11 +40,11 @@ export class Connection {
   }
 
   protected log(...args: string[] | Connection[]) {
-    console.log(`[connection ${this.connectionId}]`, ...args);
+    Log().info(`[connection ${this.connectionId}]`, ...args);
   }
 
   protected error(...args: string[] | Connection[]) {
-    console.error(`[connection ${this.connectionId}]`, ...args);
+    Log().error(`[connection ${this.connectionId}]`, ...args);
   }
 
   createOffer(): SessionDescription {
