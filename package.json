@@ -1,6 +1,6 @@
 {
   "name": "intercom-manager",
-  "version": "0.5.0",
+  "version": "1.0.0",
   "description": "Intercom manager",
   "scripts": {
     "test": "jest",
