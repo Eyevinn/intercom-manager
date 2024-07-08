@@ -76,8 +76,10 @@ export class ProductionManager extends EventEmitter {
     production: Production,
     newLineName: string
   ): Promise<Production | undefined> {
-    const nextLineId =
-      Math.max(...production.lines.map((line) => parseInt(line.id, 10))) + 1;
+    const nextLineId = production.lines.length
+      ? Math.max(...production.lines.map((line) => parseInt(line.id, 10))) + 1
+      : 1;
+
     production.lines.push({
       name: newLineName,
       id: nextLineId.toString(),
