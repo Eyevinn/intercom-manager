@@ -112,8 +112,12 @@ export class ProductionManager extends EventEmitter {
     return undefined;
   }
 
-  async getProductions(limit = 0): Promise<Production[]> {
-    return dbManager.getProductions(limit);
+  async getProductions(limit = 0, offset = 0): Promise<Production[]> {
+    return dbManager.getProductions(limit, offset);
+  }
+
+  async getNumberOfProductions(): Promise<number> {
+    return dbManager.getProductionsLength();
   }
 
   async getProduction(id: number): Promise<Production | undefined> {

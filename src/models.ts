@@ -4,6 +4,7 @@ export type NewProduction = Static<typeof NewProduction>;
 export type NewProductionLine = Static<typeof NewProductionLine>;
 export type Production = Static<typeof Production>;
 export type ProductionResponse = Static<typeof ProductionResponse>;
+export type ProductionListResponse = Static<typeof ProductionListResponse>;
 export type DetailedProductionResponse = Static<
   typeof DetailedProductionResponse
 >;
@@ -194,6 +195,13 @@ export const Production = Type.Object({
 export const ProductionResponse = Type.Object({
   name: Type.String(),
   productionId: Type.String()
+});
+
+export const ProductionListResponse = Type.Object({
+  productions: Type.Array(ProductionResponse),
+  offset: Type.Number(),
+  limit: Type.Number(),
+  totalItems: Type.Number()
 });
 
 export const DetailedProductionResponse = Type.Object({
