@@ -14,7 +14,8 @@ import {
   NewProductionLine,
   ErrorResponse,
   PatchLineResponse,
-  PatchLine
+  PatchLine,
+  ProductionListResponse
 } from './models';
 import { SmbProtocol } from './smb';
 import { ProductionManager } from './production_manager';
@@ -91,12 +92,61 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   );
 
   fastify.get<{
+    Reply: ProductionListResponse | string;
+    Querystring: { limit?: number; offset?: number };
+  }>(
+    '/productionlist',
+    {
+      schema: {
+        description: 'Paginated list of all productions.',
+        querystring: Type.Object({
+          limit: Type.Optional(Type.Number()),
+          offset: Type.Optional(Type.Number())
+        }),
+        response: {
+          200: ProductionListResponse,
+          500: Type.String()
+        }
+      }
+    },
+    async (request, reply) => {
+      try {
+        const limit = request.query.limit || 50;
+        const offset = request.query.offset || 0;
+        const productions = await productionManager.getProductions(
+          limit,
+          offset
+        );
+        const totalItems = await productionManager.getNumberOfProductions();
+        reply.code(200).send({
+          productions: productions.map(({ _id, name }) => ({
+            name,
+            productionId: _id.toString()
+          })),
+          offset,
+          limit,
+          totalItems
+        });
+      } catch (err) {
+        Log().error(err);
+        reply
+          .code(500)
+          .send(
+            'Exception thrown when trying to get paginated productions: ' + err
+          );
+      }
+    }
+  );
+
+  fastify.get<{
     Reply: ProductionResponse[] | string;
   }>(
     '/production',
     {
       schema: {
-        description: 'Retrieves all Productions.',
+        description:
+          'Retrieves 50 most recently created productions. Deprecated. Use /productionlist instead.',
+        deprecated: true,
         response: {
           200: Type.Array(ProductionResponse),
           500: Type.String()
@@ -105,7 +155,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const productions = await productionManager.getProductions(50);
+        const productions = await productionManager.getProductions(50, 0);
         reply.code(200).send(
           productions.map(({ _id, name }) => ({
             name,

@@ -30,15 +30,20 @@ const dbManager = {
   },
 
   /** Get all productions from the database in reverse natural order, limited by the limit parameter */
-  async getProductions(limit: number): Promise<Production[]> {
+  async getProductions(limit: number, offset: number): Promise<Production[]> {
     const productions = await db
       .collection('productions')
       .find()
       .sort({ $natural: -1 })
+      .skip(offset)
       .limit(limit)
       .toArray();
 
     return productions as any as Production[];
+  },
+
+  async getProductionsLength(): Promise<number> {
+    return await db.collection('productions').countDocuments();
   },
 
   async getProduction(id: number): Promise<Production | undefined> {
