@@ -1,4 +1,5 @@
-import { SessionDescription } from 'sdp-transform';
+import { SessionDescription, parse } from 'sdp-transform';
+import { inspect } from 'util';
 
 import {
   AudioSmbPayloadParameters,
@@ -90,7 +91,113 @@ export class Connection {
       }
     ];
 
+    Log().debug('Offer created: ', offer);
     return offer;
+  }
+
+  createAnswer(offer: string): SessionDescription {
+    if (!this.endpointDescription) {
+      throw new Error('Missing endpointDescription');
+    }
+    if (!this.endpointDescription['bundle-transport']) {
+      throw new Error('Missing bundle-transport in endpointDescription');
+    }
+
+    const transport = this.endpointDescription['bundle-transport'];
+
+    if (!transport.ice) {
+      throw new Error('Missing ice in endpointDescription');
+    }
+    if (!transport.dtls) {
+      throw new Error('Missing dtls in endpointDescription');
+    }
+
+    const parsedSDP = parse(offer);
+    Log().debug('Offer received: ', parsedSDP);
+
+    parsedSDP.origin && parsedSDP.origin.sessionVersion++;
+
+    let bundleGroupMids = '';
+    let candidatesAdded = false;
+
+    for (const media of parsedSDP.media) {
+      bundleGroupMids =
+        bundleGroupMids === ''
+          ? `${media.mid}`
+          : `${bundleGroupMids} ${media.mid}`;
+
+      media.iceUfrag = transport.ice.ufrag;
+      media.icePwd = transport.ice.pwd;
+      media.fingerprint = {
+        type: transport.dtls.type,
+        hash: transport.dtls.hash
+      };
+      media.setup = media.setup === 'actpass' ? 'active' : 'actpass';
+      media.ssrcGroups = [];
+      media.msid = undefined;
+      media.port = 9;
+      media.rtcp = {
+        port: 9,
+        netType: 'IN',
+        ipVer: 4,
+        address: '0.0.0.0'
+      };
+      media.ssrcs = [];
+      if (!candidatesAdded) {
+        media.candidates = transport.ice.candidates.map((element) => {
+          return {
+            foundation: element.foundation,
+            component: element.component,
+            transport: element.protocol,
+            priority: element.priority,
+            ip: element.ip,
+            port: element.port,
+            type: element.type,
+            raddr: element['rel-addr'],
+            rport: element['rel-port'],
+            generation: element.generation,
+            'network-id': element.network
+          };
+        });
+        candidatesAdded = true;
+      }
+      media.connection = {
+        version: 4,
+        ip: '0.0.0.0'
+      };
+
+      if (media.type === 'audio') {
+        media.rtp = media.rtp.filter(
+          (rtp) => rtp.codec.toLowerCase() === 'opus'
+        );
+        const opusPayloadType = media.rtp.at(0)?.payload;
+        media.fmtp = media.fmtp.filter(
+          (fmtp) => fmtp.payload === opusPayloadType
+        );
+        media.payloads = `${opusPayloadType}`;
+        media.direction = 'recvonly';
+        media.rtcpFb = undefined;
+        media.ext =
+          media.ext &&
+          media.ext.filter(
+            (ext) =>
+              ext.uri === 'urn:ietf:params:rtp-hdrext:ssrc-audio-level' ||
+              ext.uri ===
+                'http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time'
+          );
+      } else {
+        media.port = 0;
+      }
+    }
+    parsedSDP.groups = [
+      {
+        type: 'BUNDLE',
+        mids: bundleGroupMids
+      }
+    ];
+
+    Log().debug('Answer negotiated: ', parsedSDP);
+    return parsedSDP;
   }
 
   protected makeMediaDescription(type: string): MediaDescriptionBase {
