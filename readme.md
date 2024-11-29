@@ -14,13 +14,13 @@ Intercom solution powered by Symphony Media Bridge. This is the Intercom manager
 
 ## Environment variables
 
-| Variable name               | Description                                                                       |
-| --------------------------- | --------------------------------------------------------------------------------- |
-| `PORT`                      | Intercom-Manager API port                                                         |
-| `SMB_ADDRESS`               | The address:port of the Symphony Media Bridge instance                            |
-| `SMB_APIKEY`                | When set, provide this API key for the Symphony Media Bridge (optional)           |
-| `DB_CONNECTION_STRING`      | DB connection string (default: `mongodb://localhost:27017/intercom-manager`)      |
-| `MONGODB_CONNECTION_STRING` | DEPRECATED: MongoDB connection string                                             |
+| Variable name               | Description                                                                  |
+| --------------------------- | ---------------------------------------------------------------------------- |
+| `PORT`                      | Intercom-Manager API port                                                    |
+| `SMB_ADDRESS`               | The address:port of the Symphony Media Bridge instance                       |
+| `SMB_APIKEY`                | When set, provide this API key for the Symphony Media Bridge (optional)      |
+| `DB_CONNECTION_STRING`      | DB connection string (default: `mongodb://localhost:27017/intercom-manager`) |
+| `MONGODB_CONNECTION_STRING` | DEPRECATED: MongoDB connection string                                        |
 
 ## Installation / Usage
 

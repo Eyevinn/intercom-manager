@@ -10,7 +10,8 @@ const DB_CONNECTION_STRING: string =
 
 const dbProtocol = DB_CONNECTION_STRING.split(':')[0];
 
-const mongoClient = dbProtocol === 'mongodb' ? new MongoClient(DB_CONNECTION_STRING) : null;
+const mongoClient =
+  dbProtocol === 'mongodb' ? new MongoClient(DB_CONNECTION_STRING) : null;
 const mongoDb = dbProtocol === 'mongodb' ? client.db() : null;
 const nanoDb = dbProtocol === 'mongodb' ? null : Nano(DB_CONNECTION_STRING);
 
@@ -32,7 +33,7 @@ async function getNextSequence(collectionName: string): Promise<number> {
       counterDoc = await nanoDb.get(counterDocId);
       counterDoc.value = (parseInt(counterDoc.value) + 1).toString();
     } catch (error) {
-//      assert.strictEqual(error.statusCode, 404, 'Unexpected error getting counter document');
+      //      assert.strictEqual(error.statusCode, 404, 'Unexpected error getting counter document');
       counterDoc = { _id: counterDocId, value: '1' };
     }
     await nanoDb.insert(counterDoc);
@@ -42,13 +43,11 @@ async function getNextSequence(collectionName: string): Promise<number> {
 
 const dbManager = {
   async connect(): Promise<void> {
-    if (dbProtocol === 'mongodb')
-      await mongoClient.connect();
+    if (dbProtocol === 'mongodb') await mongoClient.connect();
   },
 
   async disconnect(): Promise<void> {
-    if (dbProtocol === 'mongodb')
-      await mongoClient.close();
+    if (dbProtocol === 'mongodb') await mongoClient.close();
   },
 
   /** Get all productions from the database in reverse natural order, limited by the limit parameter */
@@ -63,14 +62,14 @@ const dbManager = {
         .limit(limit)
         .toArray();
     } else {
-      const response = await nanoDb.list({ 
+      const response = await nanoDb.list({
         limit: limit,
         skip: offset,
-        sort: [{ 'name': 'desc' }],
+        sort: [{ name: 'desc' }],
         include_docs: true
       });
-      response.rows.forEach(row => {
-        if (row.doc._id.toLowerCase().indexOf("counter") === -1)
+      response.rows.forEach((row) => {
+        if (row.doc._id.toLowerCase().indexOf('counter') === -1)
           productions.push(row.doc);
       });
     }
@@ -89,7 +88,9 @@ const dbManager = {
 
   async getProduction(id: number): Promise<Production | undefined> {
     if (dbProtocol === 'mongodb') {
-      return mongoDb.collection('productions').findOne({ _id: id as any }) as any | undefined;
+      return mongoDb.collection('productions').findOne({ _id: id as any }) as
+        | any
+        | undefined;
     } else {
       const production = await nanoDb.get(id.toString());
       return production as any | undefined;
@@ -101,8 +102,8 @@ const dbManager = {
   ): Promise<Production | undefined> {
     if (dbProtocol === 'mongodb') {
       const result = await mongoDb
-      .collection('productions')
-      .updateOne({ _id: production._id as any }, { $set: production });
+        .collection('productions')
+        .updateOne({ _id: production._id as any }, { $set: production });
       return result.modifiedCount === 1 ? production : undefined;
     } else {
       const existingProduction = await nanoDb.get(production._id.toString());
@@ -118,8 +119,8 @@ const dbManager = {
       throw new Error('Failed to get next sequence');
     }
     const production = { name, lines, _id };
-      if (dbProtocol === 'mongodb') {
-        await mongoDb.collection('productions').insertOne(production as any);
+    if (dbProtocol === 'mongodb') {
+      await mongoDb.collection('productions').insertOne(production as any);
       return production;
     } else {
       const production = { name, lines, _id };
@@ -156,16 +157,22 @@ const dbManager = {
     line.smbConferenceId = conferenceId;
     if (dbProtocol === 'mongodb') {
       await mongoDb
-      .collection('productions')
-      .updateOne(
-        { _id: productionId as any },
-        { $set: { lines: production.lines } }
-      );
+        .collection('productions')
+        .updateOne(
+          { _id: productionId as any },
+          { $set: { lines: production.lines } }
+        );
     } else {
       const existingProduction = await nanoDb.get(productionId.toString());
-      const updatedProduction = { ...existingProduction, lines: production.lines };
+      const updatedProduction = {
+        ...existingProduction,
+        lines: production.lines
+      };
       const response = await nanoDb.insert(updatedProduction);
-      assert(response.ok, `Failed to update production with id "${productionId}"`);
+      assert(
+        response.ok,
+        `Failed to update production with id "${productionId}"`
+      );
     }
   }
 };
