@@ -194,7 +194,8 @@ export const Production = Type.Object({
 
 export const ProductionResponse = Type.Object({
   name: Type.String(),
-  productionId: Type.String()
+  productionId: Type.String(),
+  lines: Type.Optional(Type.Array(LineResponse))
 });
 
 export const ProductionListResponse = Type.Object({

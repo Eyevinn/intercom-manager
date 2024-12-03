@@ -93,7 +93,11 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
 
   fastify.get<{
     Reply: ProductionListResponse | string;
-    Querystring: { limit?: number; offset?: number };
+    Querystring: {
+      limit?: number;
+      offset?: number;
+      extended?: boolean;
+    };
   }>(
     '/productionlist',
     {
@@ -101,7 +105,8 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         description: 'Paginated list of all productions.',
         querystring: Type.Object({
           limit: Type.Optional(Type.Number()),
-          offset: Type.Optional(Type.Number())
+          offset: Type.Optional(Type.Number()),
+          extended: Type.Optional(Type.Boolean())
         }),
         response: {
           200: ProductionListResponse,
@@ -113,16 +118,43 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       try {
         const limit = request.query.limit || 50;
         const offset = request.query.offset || 0;
+        const extended = request.query.extended || false;
         const productions = await productionManager.getProductions(
           limit,
           offset
         );
         const totalItems = await productionManager.getNumberOfProductions();
-        reply.code(200).send({
-          productions: productions.map(({ _id, name }) => ({
+        let responseProductions: ProductionResponse[];
+        if (!extended) {
+          responseProductions = productions.map(({ _id, name }) => ({
             name,
             productionId: _id.toString()
-          })),
+          }));
+        } else {
+          const extendedProductions = await Promise.all(
+            productions.map(async (production) => {
+              const extendedProduction =
+                await productionManager.requireProduction(
+                  parseInt(production._id.toString(), 10)
+                );
+              const allLinesResponse: LineResponse[] =
+                coreFunctions.getAllLinesResponse(extendedProduction);
+              return {
+                ...production,
+                lines: allLinesResponse
+              };
+            })
+          );
+          responseProductions = extendedProductions.map(
+            ({ _id, name, lines }) => ({
+              name,
+              productionId: _id.toString(),
+              lines
+            })
+          );
+        }
+        reply.code(200).send({
+          productions: responseProductions,
           offset,
           limit,
           totalItems
