@@ -12,7 +12,8 @@ const dbProtocol = DB_CONNECTION_STRING.split(':')[0];
 
 const mongoClient =
   dbProtocol === 'mongodb' ? new MongoClient(DB_CONNECTION_STRING) : null;
-const mongoDb = (dbProtocol === 'mongodb' && mongoClient) ? mongoClient.db() : null;
+const mongoDb =
+  dbProtocol === 'mongodb' && mongoClient ? mongoClient.db() : null;
 const nanoDb = dbProtocol === 'mongodb' ? null : Nano(DB_CONNECTION_STRING);
 
 async function getNextSequence(collectionName: string): Promise<number> {
