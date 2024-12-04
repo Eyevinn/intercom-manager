@@ -36,7 +36,7 @@ let dbManager;
 const dbUrl = new URL(DB_CONNECTION_STRING);
 if (dbUrl.protocol === 'mongodb:') {
   dbManager = new DbManagerMongoDb(dbUrl);
-} else if (dbUrl.protocol === 'couchdb:') {
+} else if (dbUrl.protocol === 'http:' || dbUrl.protocol === 'https:') {
   dbManager = new DbManagerCouchDb(dbUrl);
 } else {
   throw new Error('Unsupported database protocol');

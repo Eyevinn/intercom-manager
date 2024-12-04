@@ -8,8 +8,11 @@ export class DbManagerCouchDb implements DbManager {
   private nanoDb;
 
   constructor(dbConnectionUrl: URL) {
-    this.client = nano(dbConnectionUrl.toString());
-    this.nanoDb = this.client.db.use(dbConnectionUrl.pathname);
+    const server = new URL('/', dbConnectionUrl).toString();
+    this.client = nano(server);
+    this.nanoDb = this.client.db.use(
+      dbConnectionUrl.pathname.replace(/^\//, '')
+    );
   }
 
   async connect(): Promise<void> {
@@ -22,26 +25,27 @@ export class DbManagerCouchDb implements DbManager {
 
   private async getNextSequence(collectionName: string): Promise<number> {
     const counterDocId = `counter_${collectionName}`;
-    let counterDoc;
+    interface CounterDoc {
+      _id: string;
+      _rev?: string;
+      value: string;
+    }
+    let counterDoc: CounterDoc;
 
     try {
-      counterDoc = await this.nanoDb.get(counterDocId);
+      counterDoc = (await this.nanoDb.get(counterDocId)) as CounterDoc;
       counterDoc.value = (parseInt(counterDoc.value) + 1).toString();
     } catch (error) {
-      //      assert.strictEqual(error.statusCode, 404, 'Unexpected error getting counter document');
       counterDoc = { _id: counterDocId, value: '1' };
     }
     await this.nanoDb.insert(counterDoc);
-    return counterDoc.value;
+    return parseInt(counterDoc.value, 10);
   }
 
   /** Get all productions from the database in reverse natural order, limited by the limit parameter */
   async getProductions(limit: number, offset: number): Promise<Production[]> {
     const productions: Production[] = [];
     const response = await this.nanoDb.list({
-      limit: limit,
-      skip: offset,
-      sort: [{ name: 'desc' }],
       include_docs: true
     });
     response.rows.forEach((row: any) => {
@@ -65,7 +69,11 @@ export class DbManagerCouchDb implements DbManager {
     production: Production
   ): Promise<Production | undefined> {
     const existingProduction = await this.nanoDb.get(production._id.toString());
-    const updatedProduction = { ...existingProduction, ...production };
+    const updatedProduction = {
+      ...existingProduction,
+      ...production,
+      _id: production._id.toString()
+    };
     const response = await this.nanoDb.insert(updatedProduction);
     return response.ok ? production : undefined;
   }
@@ -75,16 +83,18 @@ export class DbManagerCouchDb implements DbManager {
     if (_id === -1) {
       throw new Error('Failed to get next sequence');
     }
-    const production = { name, lines, _id };
-    const response = await this.nanoDb.insert(production);
+    const insertProduction = { name, lines, _id: _id.toString() };
+    const response = await this.nanoDb.insert(
+      insertProduction as unknown as nano.MaybeDocument
+    );
     if (!response.ok) throw new Error('Failed to insert production');
+    return { name, lines, _id } as Production;
   }
 
   async deleteProduction(productionId: number): Promise<boolean> {
     const production = await this.nanoDb.get(productionId.toString());
     const response = await this.nanoDb.destroy(production._id, production._rev);
     return response.ok;
-
   }
 
   async setLineConferenceId(
