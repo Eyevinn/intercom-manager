@@ -1,6 +1,6 @@
 import api from './api';
 
-jest.mock('./db_manager');
+jest.mock('./db/interface');
 
 describe('api', () => {
   it('responds with hello, world!', async () => {
