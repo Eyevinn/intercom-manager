@@ -9,8 +9,8 @@ import {
   UserSession
 } from './models';
 import { assert } from './utils';
-import dbManager from './db_manager';
 import { Log } from './log';
+import { DbManager } from './db/interface';
 
 const SESSION_INACTIVE_THRESHOLD = 60_000;
 const SESSION_EXPIRED_THRESHOLD = 120_000;
@@ -18,14 +18,16 @@ const SESSION_PRUNE_THRESHOLD = 7_200_000;
 
 export class ProductionManager extends EventEmitter {
   private userSessions: Record<string, UserSession>;
+  private dbManager: DbManager;
 
-  constructor() {
+  constructor(dbManager: DbManager) {
     super();
+    this.dbManager = dbManager;
     this.userSessions = {};
   }
 
   async load(): Promise<void> {
-    dbManager.connect();
+    this.dbManager.connect();
   }
 
   checkUserStatus(): void {
@@ -69,7 +71,7 @@ export class ProductionManager extends EventEmitter {
       newProductionLines.push(newProductionLine);
     }
 
-    return dbManager.addProduction(newProduction.name, newProductionLines);
+    return this.dbManager.addProduction(newProduction.name, newProductionLines);
   }
 
   async addProductionLine(
@@ -86,7 +88,7 @@ export class ProductionManager extends EventEmitter {
       smbConferenceId: ''
     });
 
-    return dbManager.updateProduction(production);
+    return this.dbManager.updateProduction(production);
   }
 
   async updateProductionLine(
@@ -97,7 +99,7 @@ export class ProductionManager extends EventEmitter {
     const line = production.lines.find((line) => line.id === lineId);
     if (line) {
       line.name = lineName;
-      return dbManager.updateProduction(production);
+      return this.dbManager.updateProduction(production);
     }
     return undefined;
   }
@@ -109,21 +111,21 @@ export class ProductionManager extends EventEmitter {
     const lineIndex = production.lines.findIndex((line) => line.id === lineId);
     if (lineIndex !== -1) {
       production.lines.splice(lineIndex, 1);
-      return dbManager.updateProduction(production);
+      return this.dbManager.updateProduction(production);
     }
     return undefined;
   }
 
   async getProductions(limit = 0, offset = 0): Promise<Production[]> {
-    return dbManager.getProductions(limit, offset);
+    return this.dbManager.getProductions(limit, offset);
   }
 
   async getNumberOfProductions(): Promise<number> {
-    return dbManager.getProductionsLength();
+    return this.dbManager.getProductionsLength();
   }
 
   async getProduction(id: number): Promise<Production | undefined> {
-    return dbManager.getProduction(id);
+    return this.dbManager.getProduction(id);
   }
 
   async requireProduction(id: number): Promise<Production> {
@@ -136,7 +138,7 @@ export class ProductionManager extends EventEmitter {
    * Delete the production from the db and local cache
    */
   async deleteProduction(productionId: number): Promise<boolean> {
-    return dbManager.deleteProduction(productionId);
+    return this.dbManager.deleteProduction(productionId);
   }
 
   async setLineId(
@@ -149,7 +151,11 @@ export class ProductionManager extends EventEmitter {
       const line = this.getLine(matchedProduction.lines, lineId);
       if (line) {
         line.smbConferenceId = lineSmbId;
-        await dbManager.setLineConferenceId(productionId, lineId, lineSmbId);
+        await this.dbManager.setLineConferenceId(
+          productionId,
+          lineId,
+          lineSmbId
+        );
         return line;
       }
     }

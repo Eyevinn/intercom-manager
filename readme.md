@@ -9,17 +9,18 @@ Intercom solution powered by Symphony Media Bridge. This is the Intercom manager
 ## Requirements
 
 - A Symphony Media Bridge running and reachable
-- A MongoDB server
+- A MongoDB server or CouchDB server
 - Docker engine
 
 ## Environment variables
 
-| Variable name               | Description                                                                       |
-| --------------------------- | --------------------------------------------------------------------------------- |
-| `PORT`                      | Intercom-Manager API port                                                         |
-| `SMB_ADDRESS`               | The address:port of the Symphony Media Bridge instance                            |
-| `SMB_APIKEY`                | When set, provide this API key for the Symphony Media Bridge (optional)           |
-| `MONGODB_CONNECTION_STRING` | MongoDB connection string (default: `mongodb://localhost:27017/intercom-manager`) |
+| Variable name               | Description                                                                  |
+| --------------------------- | ---------------------------------------------------------------------------- |
+| `PORT`                      | Intercom-Manager API port                                                    |
+| `SMB_ADDRESS`               | The address:port of the Symphony Media Bridge instance                       |
+| `SMB_APIKEY`                | When set, provide this API key for the Symphony Media Bridge (optional)      |
+| `DB_CONNECTION_STRING`      | DB connection string (default: `mongodb://localhost:27017/intercom-manager`) |
+| `MONGODB_CONNECTION_STRING` | DEPRECATED: MongoDB connection string                                        |
 
 ## Installation / Usage
 
@@ -29,7 +30,7 @@ Start an Intercom Manager instance:
 docker run -d -p 8000:8000 \
   -e PORT=8000 \
   -e SMB_ADDRESS=http://<smburl>:<smbport> \
-  -e MONGODB_CONNECTION_STRING=mongodb://<host>:<port>/<db-name> \
+  -e DB_CONNECTION_STRING=<mongodb|http>://<host>:<port>/<db-name> \
   eyevinntechnology/intercom-manager
 ```
 
@@ -37,7 +38,7 @@ The API docs is then available on `http://localhost:8000/api/docs/`
 
 ## Development
 
-Requires Node JS engine >= v18 and [MongoDB](https://www.mongodb.com/docs/manual/administration/install-community/) (tested with MongoDB v7).
+Requires Node JS engine >= v18 and [MongoDB](https://www.mongodb.com/docs/manual/administration/install-community/) (tested with MongoDB v7) or [CouchDB](https://docs.couchdb.org/en/stable/index.html).
 
 Install dependencies
 
@@ -57,7 +58,7 @@ Start server locally
 SMB_ADDRESS=http://<smburl>:<smbport> SMB_APIKEY=<smbapikey> npm start
 ```
 
-See [Environment Variables](#environment-variables) for a full list of environment variables you can set. The default `MONGODB_CONNECTION_STRING` is probably what you want to use for local development unless you use a remote db server.
+See [Environment Variables](#environment-variables) for a full list of environment variables you can set. The default `DB_CONNECTION_STRING` is probably what you want to use for local development unless you use a remote db server.
 
 ## Terraform infrastructure
 

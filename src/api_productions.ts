@@ -24,9 +24,25 @@ import { v4 as uuidv4 } from 'uuid';
 import { ConnectionQueue } from './connection_queue';
 import { CoreFunctions } from './api_productions_core_functions';
 import { Log } from './log';
+import { DbManagerMongoDb } from './db/mongodb';
+import { DbManagerCouchDb } from './db/couchdb';
 dotenv.config();
 
-const productionManager = new ProductionManager();
+const DB_CONNECTION_STRING: string =
+  process.env.DB_CONNECTION_STRING ??
+  process.env.MONGODB_CONNECTION_STRING ??
+  'mongodb://localhost:27017/intercom-manager';
+let dbManager;
+const dbUrl = new URL(DB_CONNECTION_STRING);
+if (dbUrl.protocol === 'mongodb:') {
+  dbManager = new DbManagerMongoDb(dbUrl);
+} else if (dbUrl.protocol === 'http:' || dbUrl.protocol === 'https:') {
+  dbManager = new DbManagerCouchDb(dbUrl);
+} else {
+  throw new Error('Unsupported database protocol');
+}
+
+const productionManager = new ProductionManager(dbManager);
 const connectionQueue = new ConnectionQueue();
 const coreFunctions = new CoreFunctions(productionManager, connectionQueue);
 
