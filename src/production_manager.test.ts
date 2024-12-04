@@ -81,7 +81,7 @@ const SmbEndpointDescriptionMock: SmbEndpointDescription = {
   }
 };
 
-jest.mock('./db_manager', () => ({
+jest.mock('./db/interface', () => ({
   addProduction: jest.fn(),
   getProduction: jest.fn(),
   getProductions: jest.fn(),
