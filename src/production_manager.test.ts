@@ -282,14 +282,13 @@ describe('production_manager', () => {
             {
               name: 'linename',
               id: '1',
-              smbConferenceId: 'smbineid',
-              programOutputLine: false
+              smbConferenceId: 'smbineid'
             },
             {
               name: 'newName',
+              programOutputLine: false,
               id: '2',
-              smbConferenceId: '',
-              programOutputLine: false
+              smbConferenceId: ''
             }
           ]
         });
