@@ -69,13 +69,15 @@ export const NewProduction = Type.Object({
   name: Type.String(),
   lines: Type.Array(
     Type.Object({
-      name: Type.String()
+      name: Type.String(),
+      programOutputLine: Type.Optional(Type.Boolean())
     })
   )
 });
 
 export const NewProductionLine = Type.Object({
-  name: Type.String()
+  name: Type.String(),
+  programOutputLine: Type.Optional(Type.Boolean())
 });
 
 const SmbCandidate = Type.Object({
@@ -173,14 +175,16 @@ export const UserSession = Type.Object({
 export const Line = Type.Object({
   name: Type.String(),
   id: Type.String(),
-  smbConferenceId: Type.String()
+  smbConferenceId: Type.String(),
+  programOutputLine: Type.Optional(Type.Boolean())
 });
 
 export const LineResponse = Type.Object({
   name: Type.String(),
   id: Type.String(),
   smbConferenceId: Type.String(),
-  participants: Type.Array(UserResponse)
+  participants: Type.Array(UserResponse),
+  programOutputLine: Type.Optional(Type.Boolean())
 });
 
 export const PatchLine = Type.Omit(Line, ['id', 'smbConferenceId']);
