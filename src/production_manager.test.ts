@@ -270,7 +270,11 @@ describe('production_manager', () => {
       const productionManagerTest = new ProductionManager(dbManager);
       const production = await productionManagerTest.getProduction(1);
       if (production) {
-        await productionManagerTest.addProductionLine(production, 'newName');
+        await productionManagerTest.addProductionLine(
+          production,
+          'newName',
+          false
+        );
         expect(dbManager.updateProduction).toHaveBeenLastCalledWith({
           _id: 1,
           name: 'productionname',
@@ -278,12 +282,14 @@ describe('production_manager', () => {
             {
               name: 'linename',
               id: '1',
-              smbConferenceId: 'smbineid'
+              smbConferenceId: 'smbineid',
+              programOutputLine: false
             },
             {
               name: 'newName',
               id: '2',
-              smbConferenceId: ''
+              smbConferenceId: '',
+              programOutputLine: false
             }
           ]
         });

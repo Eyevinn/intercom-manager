@@ -314,7 +314,8 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         } else {
           await productionManager.addProductionLine(
             production,
-            request.body.name
+            request.body.name,
+            request.body.programOutputLine || false
           );
           const allLinesResponse: LineResponse[] =
             coreFunctions.getAllLinesResponse(production);
@@ -362,7 +363,8 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
             name: line.name,
             id: line.id,
             smbConferenceId: line.smbConferenceId,
-            participants: participantlist
+            participants: participantlist,
+            programOutputLine: line.programOutputLine || false
           };
           reply.code(200).send(lineResponse);
         }
@@ -428,7 +430,11 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
                 message: `Failed to update line with id ${lineId} in production ${productionId}`
               });
             } else {
-              reply.code(200).send({ name: request.body.name, id: lineId });
+              reply.code(200).send({
+                name: request.body.name,
+                id: lineId,
+                programOutputLine: line.programOutputLine || false
+              });
             }
           }
         }

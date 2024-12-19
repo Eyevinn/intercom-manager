@@ -262,14 +262,15 @@ export class CoreFunctions {
 
   getAllLinesResponse(production: Production): LineResponse[] {
     const allLinesResponse: LineResponse[] = production.lines.map(
-      ({ name, id, smbConferenceId }) => ({
+      ({ name, id, smbConferenceId, programOutputLine }) => ({
         name,
         id,
         smbConferenceId,
         participants: this.productionManager.getUsersForLine(
           production._id.toString(),
           id
-        )
+        ),
+        programOutputLine
       })
     );
     return allLinesResponse;

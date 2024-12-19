@@ -66,7 +66,8 @@ export class ProductionManager extends EventEmitter {
       const newProductionLine: Line = {
         name: line.name,
         id: index.toString(),
-        smbConferenceId: ''
+        smbConferenceId: '',
+        programOutputLine: line.programOutputLine || false
       };
       newProductionLines.push(newProductionLine);
     }
@@ -76,7 +77,8 @@ export class ProductionManager extends EventEmitter {
 
   async addProductionLine(
     production: Production,
-    newLineName: string
+    newLineName: string,
+    programOutputLine: boolean
   ): Promise<Production | undefined> {
     const nextLineId = production.lines.length
       ? Math.max(...production.lines.map((line) => parseInt(line.id, 10))) + 1
@@ -85,7 +87,8 @@ export class ProductionManager extends EventEmitter {
     production.lines.push({
       name: newLineName,
       id: nextLineId.toString(),
-      smbConferenceId: ''
+      smbConferenceId: '',
+      programOutputLine: programOutputLine || false
     });
 
     return this.dbManager.updateProduction(production);
