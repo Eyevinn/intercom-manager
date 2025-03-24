@@ -6,6 +6,7 @@ import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import { Static, Type } from '@sinclair/typebox';
 import { FastifyPluginCallback } from 'fastify';
 import { getApiProductions } from './api_productions';
+import apiShare from './api_share';
 
 const HelloWorld = Type.String({
   description: 'The magical words!'
@@ -42,6 +43,7 @@ export interface ApiOptions {
   smbServerBaseUrl: string;
   endpointIdleTimeout: string;
   smbServerApiKey?: string;
+  publicHost: string;
 }
 
 export default async (opts: ApiOptions) => {
@@ -74,6 +76,7 @@ export default async (opts: ApiOptions) => {
     endpointIdleTimeout: opts.endpointIdleTimeout,
     smbServerApiKey: opts.smbServerApiKey
   });
+  api.register(apiShare, { publicHost: opts.publicHost, prefix: 'api/v1' });
 
   return api;
 };

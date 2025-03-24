@@ -234,3 +234,13 @@ export const ErrorResponse = Type.Object({
   message: Type.String(),
   stackTrace: Type.Optional(Type.String())
 });
+
+export const ShareRequest = Type.Object({
+  path: Type.String({ description: 'The application path to share' })
+});
+export type ShareRequest = Static<typeof ShareRequest>;
+
+export const ShareResponse = Type.Object({
+  url: Type.String({ description: 'The share URL' })
+});
+export type ShareResponse = Static<typeof ShareResponse>;
