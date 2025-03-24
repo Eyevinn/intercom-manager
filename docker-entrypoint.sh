@@ -16,6 +16,8 @@ if [ ! -z "$OSC_HOSTNAME" ]; then
   if [ -z "$OSC_ACCESS_TOKEN" ]; then
     echo "OSC_ACCESS_TOKEN is not set. Limited functionality will be available."
   fi
+
+  echo "Setting OSC_ENVIRONMENT to $OSC_ENVIRONMENT"
 fi
 
 exec "$@"
