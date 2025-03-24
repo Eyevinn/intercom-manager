@@ -20,6 +20,7 @@ Intercom solution powered by Symphony Media Bridge. This is the Intercom manager
 | `SMB_ADDRESS`               | The address:port of the Symphony Media Bridge instance                       |
 | `SMB_APIKEY`                | When set, provide this API key for the Symphony Media Bridge (optional)      |
 | `DB_CONNECTION_STRING`      | DB connection string (default: `mongodb://localhost:27017/intercom-manager`) |
+| `PUBLIC_HOST`               | Hostname for frontend application for generating URLs to share               |
 | `MONGODB_CONNECTION_STRING` | DEPRECATED: MongoDB connection string                                        |
 
 ## Installation / Usage
