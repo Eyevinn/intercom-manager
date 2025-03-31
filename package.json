@@ -23,7 +23,7 @@
     "@fastify/type-provider-typebox": "^2.4.0",
     "@sinclair/typebox": "^0.25.24",
     "dotenv": "^16.3.1",
-    "fastify": "4.23.2",
+    "fastify": "4.29.0",
     "mongodb": "^6.5.0",
     "nano": "^10.1.4",
     "nodemon": "^2.0.20",
