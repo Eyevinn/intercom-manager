@@ -1,0 +1,39 @@
+publiccodeYmlVersion: '0.4'
+name: Eyevinn Open Intercom Manager
+applicationSuite: Eyevinn Open Source Cloud
+url: https://github.com/Eyevinn/intercom-manager.git
+landingUrl: https://www.osaas.io/use-cases/intercom
+softwareVersion: 1.2.0
+releaseDate: 2025-04-02
+logo: https://www.osaas.io/images/osc-logo.svg
+platforms:
+  - web
+categories:
+  - communications
+  - collaboration
+  - voip
+usedBy:
+  - Sveriges Television
+developmnentStatus: stable
+softwareType: standalone/backend
+description:
+  en:
+    localisedName: Eyevinn Open Intercom Manager
+    shortDescription: Low latency, web based, open source, high quality, voice-over-ip intercom solution.
+    longDescription: >-
+      Eyevinn Open Intercom Manager is a low latency, web based, open source, high quality, voice-over-ip intercom solution.
+      It is designed to be used in broadcast and media production environments, where low latency and high quality audio are critical. 
+      The solution is built on top of WebRTC technology and provides a user-friendly interface for managing intercom channels and users.
+    documentation: https://docs.osaas.io/osaas.wiki/Service%3A-Intercom.html
+legal:
+  license: MIT
+maintenance:
+  type: community
+  contacts:
+    - name: Jonas Birmé
+      email: jonas.birme@eyevinn.se
+      affiliation: VP R&D Eyevinn Technology
+localisation:
+  localisationReady: false
+  availableLanguages:
+    - en
