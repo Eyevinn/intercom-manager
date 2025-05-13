@@ -1,5 +1,5 @@
 {
   "watch": ["src"],
   "ext": "ts",
-  "exec": "node --inspect -r ts-node/register ./src/server.ts"
+  "exec": "node --inspect --env-file=.env -r ts-node/register ./src/server.ts"
 }
