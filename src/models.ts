@@ -244,3 +244,8 @@ export const ShareResponse = Type.Object({
   url: Type.String({ description: 'The share URL' })
 });
 export type ShareResponse = Static<typeof ShareResponse>;
+
+export const ReAuthResponse = Type.Object({
+  token: Type.String({ description: 'The new OSC Service Access Token' })
+});
+export type ReAuthResponse = Static<typeof ReAuthResponse>;
