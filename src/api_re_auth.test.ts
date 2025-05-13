@@ -12,7 +12,7 @@ describe('reAuth api', () => {
     });
     const response = await server.inject({
       method: 'GET',
-      url: '/api/v1/reauth',
+      url: '/api/v1/reauth'
     });
     expect(response.statusCode).toBe(500);
   });
