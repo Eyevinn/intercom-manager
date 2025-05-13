@@ -7,6 +7,7 @@ import { Static, Type } from '@sinclair/typebox';
 import { FastifyPluginCallback } from 'fastify';
 import { getApiProductions } from './api_productions';
 import apiShare from './api_share';
+import apiReAuth from './api_re_auth';
 
 const HelloWorld = Type.String({
   description: 'The magical words!'
@@ -77,6 +78,6 @@ export default async (opts: ApiOptions) => {
     smbServerApiKey: opts.smbServerApiKey
   });
   api.register(apiShare, { publicHost: opts.publicHost, prefix: 'api/v1' });
-
+  api.register(apiReAuth, { prefix: 'api/v1' });
   return api;
 };
