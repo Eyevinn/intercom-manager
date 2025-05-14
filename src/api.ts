@@ -2,6 +2,7 @@ import fastify from 'fastify';
 import cors from '@fastify/cors';
 import swagger from '@fastify/swagger';
 import swaggerUI from '@fastify/swagger-ui';
+import cookie from '@fastify/cookie';
 import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import { Static, Type } from '@sinclair/typebox';
 import { FastifyPluginCallback } from 'fastify';
@@ -54,6 +55,9 @@ export default async (opts: ApiOptions) => {
 
   // register the cors plugin, configure it for better security
   api.register(cors);
+
+  // register cookie plugin
+  api.register(cookie);
 
   // register the swagger plugins, it will automagically do magic
   api.register(swagger, {

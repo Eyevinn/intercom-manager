@@ -255,6 +255,76 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     }
   );
 
+  // fastify.patch<{
+  //   Params: { productionId: string };
+  //   Body: PatchLine;
+  //   Reply: PatchLineResponse | ErrorResponse | string;
+  // }>(
+  //   '/production/:productionId',
+  //   {
+  //     schema: {
+  //       description: 'Modify an existing Production line.',
+  //       body: PatchLine,
+  //       response: {
+  //         200: PatchLineResponse,
+  //         400: ErrorResponse,
+  //         404: ErrorResponse,
+  //         500: Type.String()
+  //       }
+  //     }
+  //   },
+  //   async (request, reply) => {
+  //     try {
+  //       const { productionId, lineId } = request.params;
+  //       let production;
+  //       try {
+  //         production = await productionManager.requireProduction(
+  //           parseInt(productionId, 10)
+  //         );
+  //       } catch (err) {
+  //         console.warn(
+  //           'Trying to patch a production line in a production that does not exist'
+  //         );
+  //       }
+  //       if (!production) {
+  //         reply.code(404).send({
+  //           message: `Production with id ${productionId} not found`
+  //         });
+  //       } else {
+  //         const line = productionManager.getLine(production.lines, lineId);
+  //         if (!line) {
+  //           reply
+  //             .code(404)
+  //             .send({ message: `Line with id ${lineId} not found` });
+  //         } else {
+  //           const updatedProduction =
+  //             await productionManager.updateProductionLine(
+  //               production,
+  //               lineId,
+  //               request.body.name
+  //             );
+  //           if (!updatedProduction) {
+  //             reply.code(400).send({
+  //               message: `Failed to update line with id ${lineId} in production ${productionId}`
+  //             });
+  //           } else {
+  //             reply.code(200).send({
+  //               name: request.body.name,
+  //               id: lineId,
+  //               programOutputLine: line.programOutputLine || false
+  //             });
+  //           }
+  //         }
+  //       }
+  //     } catch (err) {
+  //       Log().error(err);
+  //       reply
+  //         .code(500)
+  //         .send('Exception thrown when trying to get line: ' + err);
+  //     }
+  //   }
+  // );
+
   fastify.get<{
     Params: { productionId: string };
     Reply: LineResponse[] | string;

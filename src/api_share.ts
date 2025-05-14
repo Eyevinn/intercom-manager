@@ -43,9 +43,9 @@ const apiShare: FastifyPluginCallback<ApiShareOptions> = (
           }
         );
         if (response.ok) {
-          const json = await response.json();
+          const json = (await response.json()) as { shareUrl?: string };
           if (json.shareUrl) {
-            shareLinkUrl = json.shareUrl;
+            shareLinkUrl = new URL(json.shareUrl);
           }
         }
       }
