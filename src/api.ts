@@ -1,19 +1,17 @@
-import fastify from 'fastify';
+import fastifyCookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import swagger from '@fastify/swagger';
 import swaggerUI from '@fastify/swagger-ui';
-import cookie from '@fastify/cookie';
 import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import { Static, Type } from '@sinclair/typebox';
-import { FastifyPluginCallback } from 'fastify';
-import { getApiProductions } from './api_productions';
-import apiShare from './api_share';
-import apiReAuth from './api_re_auth';
-import fastifyCookie from '@fastify/cookie';
+import fastify, { FastifyPluginCallback } from 'fastify';
 import { getApiIngests } from './api_ingests';
+import { getApiProductions } from './api_productions';
+import apiReAuth from './api_re_auth';
+import apiShare from './api_share';
 import { DbManager } from './db/interface';
-import { ProductionManager } from './production_manager';
 import { IngestManager } from './ingest_manager';
+import { ProductionManager } from './production_manager';
 
 const HelloWorld = Type.String({
   description: 'The magical words!'
