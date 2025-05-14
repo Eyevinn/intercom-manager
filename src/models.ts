@@ -12,6 +12,8 @@ export type Line = Static<typeof Line>;
 export type LineResponse = Static<typeof LineResponse>;
 export type PatchLine = Static<typeof PatchLine>;
 export type PatchLineResponse = Static<typeof PatchLineResponse>;
+export type PatchProduction = Static<typeof PatchProduction>;
+export type PatchProductionResponse = Static<typeof PatchProductionResponse>;
 export type SmbEndpointDescription = Static<typeof SmbEndpointDescription>;
 export type DetailedConference = Static<typeof DetailedConference>;
 export type Endpoint = Static<typeof Endpoint>;
@@ -201,6 +203,9 @@ export const ProductionResponse = Type.Object({
   productionId: Type.String(),
   lines: Type.Optional(Type.Array(LineResponse))
 });
+
+export const PatchProduction = Type.Omit(Production, ['_id', 'lines']);
+export const PatchProductionResponse = Type.Omit(Production, ['lines']);
 
 export const ProductionListResponse = Type.Object({
   productions: Type.Array(ProductionResponse),
