@@ -41,7 +41,7 @@ export class DbManagerMongoDb implements DbManager {
       .limit(limit)
       .toArray();
 
-    return productions as any as Production[];
+    return productions as unknown as Production[];
   }
 
   async getProductionsLength(): Promise<number> {
@@ -51,6 +51,7 @@ export class DbManagerMongoDb implements DbManager {
 
   async getProduction(id: number): Promise<Production | undefined> {
     const db = this.client.db();
+    // eslint-disable-next-line
     return db.collection('productions').findOne({ _id: id as any }) as
       | any
       | undefined;

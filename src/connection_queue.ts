@@ -2,6 +2,7 @@ import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
 
 export class ConnectionQueue {
+  // eslint-disable-next-line
   private queue: Array<[string, () => Promise<any>]>;
   private emitter = new EventEmitter();
 
@@ -43,6 +44,7 @@ export class ConnectionQueue {
     this.queue.push([id, item]);
 
     const queuePromise = new Promise<T>((resolve, reject) => {
+      // eslint-disable-next-line
       const cb = (data: any) => {
         if (data.error) {
           reject(data.error);

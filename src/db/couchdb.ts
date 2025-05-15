@@ -43,11 +43,12 @@ export class DbManagerCouchDb implements DbManager {
   }
 
   /** Get all productions from the database in reverse natural order, limited by the limit parameter */
-  async getProductions(limit: number, offset: number): Promise<Production[]> {
+  async getProductions(): Promise<Production[]> {
     const productions: Production[] = [];
     const response = await this.nanoDb.list({
       include_docs: true
     });
+    // eslint-disable-next-line
     response.rows.forEach((row: any) => {
       if (row.doc._id.toLowerCase().indexOf('counter') === -1)
         productions.push(row.doc);
@@ -62,6 +63,7 @@ export class DbManagerCouchDb implements DbManager {
 
   async getProduction(id: number): Promise<Production | undefined> {
     const production = await this.nanoDb.get(id.toString());
+    // eslint-disable-next-line
     return production as any | undefined;
   }
 

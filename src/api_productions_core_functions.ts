@@ -276,7 +276,7 @@ export class CoreFunctions {
     return allLinesResponse;
   }
 
-  private toStringIfNumber(value: any): string {
+  private toStringIfNumber(value: string | number | undefined): string {
     if (typeof value === 'number') {
       return String(value);
     } else if (typeof value === 'string') {
