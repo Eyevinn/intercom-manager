@@ -38,7 +38,7 @@ export class SmbProtocol {
     }
 
     const allocateResponseJson: AllocateConferenceResponse =
-      await allocateResponse.json();
+      (await allocateResponse.json()) as AllocateConferenceResponse;
     return allocateResponseJson['id'];
   }
 
@@ -92,7 +92,7 @@ export class SmbProtocol {
     }
 
     const smbEndpointDescription: SmbEndpointDescription =
-      await response.json();
+      (await response.json()) as SmbEndpointDescription;
     return smbEndpointDescription;
   }
 
@@ -148,7 +148,7 @@ export class SmbProtocol {
       return [];
     }
 
-    const responseBody: string[] = await response.json();
+    const responseBody: string[] = (await response.json()) as string[];
     return responseBody;
   }
 
@@ -169,7 +169,8 @@ export class SmbProtocol {
       return [];
     }
 
-    const responseBody: DetailedConference[] = await response.json();
+    const responseBody: DetailedConference[] =
+      (await response.json()) as DetailedConference[];
     return responseBody;
   }
 }

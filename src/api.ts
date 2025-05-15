@@ -8,6 +8,7 @@ import { FastifyPluginCallback } from 'fastify';
 import { getApiProductions } from './api_productions';
 import apiShare from './api_share';
 import apiReAuth from './api_re_auth';
+import fastifyCookie from '@fastify/cookie';
 
 const HelloWorld = Type.String({
   description: 'The magical words!'
@@ -52,8 +53,13 @@ export default async (opts: ApiOptions) => {
     ignoreTrailingSlash: true
   }).withTypeProvider<TypeBoxTypeProvider>();
 
+  // register the cookie plugin
+  api.register(fastifyCookie);
+
   // register the cors plugin, configure it for better security
-  api.register(cors);
+  api.register(cors, {
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
+  });
 
   // register the swagger plugins, it will automagically do magic
   api.register(swagger, {

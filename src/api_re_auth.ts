@@ -33,8 +33,15 @@ const apiReAuth: FastifyPluginCallback = (fastify, _, next) => {
           }
         );
         if (response.ok) {
-          const json = await response.json();
-          reply.send({ token: json.token });
+          const json = (await response.json()) as { token: string };
+          reply
+            .cookie('eyevinn-intercom-manager.sat', json.token, {
+              httpOnly: true,
+              secure: true,
+              sameSite: 'strict',
+              maxAge: 60 * 60 * 2 // 2 Hours
+            })
+            .send({ token: json.token });
         } else {
           reply.code(500).send({
             error: 'ServiceToken Service failed to generate new SAT Token'

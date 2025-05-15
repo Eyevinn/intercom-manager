@@ -15,7 +15,9 @@ import {
   ErrorResponse,
   PatchLineResponse,
   PatchLine,
-  ProductionListResponse
+  ProductionListResponse,
+  PatchProduction,
+  PatchProductionResponse
 } from './models';
 import { SmbProtocol } from './smb';
 import { ProductionManager } from './production_manager';
@@ -251,6 +253,66 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         reply
           .code(500)
           .send('Exception thrown when trying to get productions: ' + err);
+      }
+    }
+  );
+
+  fastify.patch<{
+    Params: { productionId: string };
+    Body: PatchProduction;
+    Reply: PatchProductionResponse | ErrorResponse | string;
+  }>(
+    '/production/:productionId',
+    {
+      schema: {
+        description: 'Modify an existing Production line.',
+        body: PatchProduction,
+        response: {
+          200: PatchProductionResponse,
+          400: ErrorResponse,
+          404: ErrorResponse,
+          500: Type.String()
+        }
+      }
+    },
+    async (request, reply) => {
+      try {
+        const { productionId } = request.params;
+        let production;
+        try {
+          production = await productionManager.requireProduction(
+            parseInt(productionId, 10)
+          );
+        } catch (err) {
+          console.warn(
+            'Trying to patch a production line in a production that does not exist'
+          );
+        }
+        if (!production) {
+          reply.code(404).send({
+            message: `Production with id ${productionId} not found`
+          });
+        } else {
+          const updatedProduction = await productionManager.updateProduction(
+            production,
+            request.body.name
+          );
+          if (!updatedProduction) {
+            reply.code(400).send({
+              message: `Failed to update production with id ${productionId}`
+            });
+          } else {
+            reply.code(200).send({
+              name: request.body.name,
+              _id: updatedProduction._id
+            });
+          }
+        }
+      } catch (err) {
+        Log().error(err);
+        reply
+          .code(500)
+          .send('Exception thrown when trying to get production: ' + err);
       }
     }
   );

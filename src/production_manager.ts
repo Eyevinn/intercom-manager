@@ -75,6 +75,14 @@ export class ProductionManager extends EventEmitter {
     return this.dbManager.addProduction(newProduction.name, newProductionLines);
   }
 
+  async updateProduction(
+    production: Production,
+    productionName: string
+  ): Promise<Production | undefined> {
+    production.name = productionName;
+    return this.dbManager.updateProduction(production);
+  }
+
   async addProductionLine(
     production: Production,
     newLineName: string,

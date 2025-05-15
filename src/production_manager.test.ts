@@ -338,5 +338,28 @@ describe('production_manager', () => {
         });
       }
     });
+
+    it('change the name of a production', async () => {
+      const dbManager = jest.requireMock('./db/interface');
+      dbManager.getProduction.mockReturnValueOnce(
+        structuredClone(existingProduction)
+      );
+      const productionManagerTest = new ProductionManager(dbManager);
+      const production = await productionManagerTest.getProduction(1);
+      if (production) {
+        await productionManagerTest.updateProduction(production, 'newName');
+        expect(dbManager.updateProduction).toHaveBeenLastCalledWith({
+          _id: 1,
+          name: 'newName',
+          lines: [
+            {
+              name: 'linename',
+              id: '1',
+              smbConferenceId: 'smbineid'
+            }
+          ]
+        });
+      }
+    });
   });
 });
