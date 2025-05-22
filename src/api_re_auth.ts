@@ -35,7 +35,7 @@ const apiReAuth: FastifyPluginCallback = (fastify, _, next) => {
         if (response.ok) {
           const json = (await response.json()) as { token: string };
           reply
-            .cookie('eyevinn-intercom-manager.sat', json.token, {
+            .cookie('eyevinn-intercom-manager.sat', `Bearer%20${json.token}`, {
               httpOnly: true,
               secure: true,
               sameSite: 'strict',
