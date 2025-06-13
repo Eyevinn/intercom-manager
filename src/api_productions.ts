@@ -17,7 +17,9 @@ import {
   PatchLine,
   ProductionListResponse,
   PatchProduction,
-  PatchProductionResponse
+  PatchProductionResponse,
+  WhipResponse,
+  WhipRequest
 } from './models';
 import { SmbProtocol } from './smb';
 import { ProductionManager } from './production_manager';
@@ -826,6 +828,123 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         reply.code(200).send('ok');
       } else {
         reply.code(410).send(`User session id "${sessionId}" not found.`);
+      }
+    }
+  );
+
+  // WHIP endpoint for ingesting WebRTC streams
+  fastify.post<{
+    Params: { productionId: string; lineId: string };
+    Body: { sdpOffer: string };
+    Reply: { sdpAnswer: string } | { error: string };
+  }>(
+    '/whip/:productionId/:lineId',
+    {
+      schema: {
+        description: 'WHIP endpoint for ingesting WebRTC streams',
+        body: WhipRequest,
+        response: {
+          201: WhipResponse,
+          400: Type.Object({ error: Type.String() }),
+          500: Type.Object({ error: Type.String() })
+        }
+      }
+    },
+    async (request, reply) => {
+      try {
+        const { productionId, lineId } = request.params;
+        const { sdpOffer } = request.body;
+
+        // Create a unique session ID for this WHIP connection
+        const sessionId = uuidv4();
+        const endpointId = uuidv4();
+
+        // Create conference and endpoint in SMB
+        const smbConferenceId = await coreFunctions.createConferenceForLine(
+          smb,
+          smbServerUrl,
+          smbServerApiKey,
+          productionId,
+          lineId
+        );
+
+        // Allocate endpoint with audio support
+        const endpoint = await coreFunctions.createEndpoint(
+          smb,
+          smbServerUrl,
+          smbServerApiKey,
+          smbConferenceId,
+          endpointId,
+          true, // audio
+          false, // no data channel needed for WHIP
+          parseInt(opts.endpointIdleTimeout, 10)
+        );
+
+        // Handle the SDP answer
+        const sdpAnswer = await coreFunctions.createOffer(
+          smb,
+          smbServerUrl,
+          smbServerApiKey,
+          smbConferenceId,
+          endpointId,
+          endpoint,
+          sdpOffer
+        );
+
+        // Create user session in production manager
+        productionManager.createUserSession(
+          productionId,
+          lineId,
+          sessionId,
+          `whip-${endpointId}`
+        );
+
+        // Update user endpoint information
+        productionManager.updateUserEndpoint(sessionId, endpointId, endpoint);
+
+        // Return 201 Created with the SDP answer
+        reply.code(201).send({ sdpAnswer });
+      } catch (err) {
+        Log().error(err);
+        reply
+          .code(500)
+          .send({ error: `Failed to process WHIP request: ${err}` });
+      }
+    }
+  );
+
+  // DELETE endpoint to terminate WHIP connection
+  fastify.delete<{
+    Params: { productionId: string; lineId: string; sessionId: string };
+  }>(
+    '/whip/:productionId/:lineId/:sessionId',
+    {
+      schema: {
+        description: 'Terminate a WHIP connection',
+        response: {
+          204: Type.Null(),
+          404: Type.Object({ error: Type.String() }),
+          500: Type.Object({ error: Type.String() })
+        }
+      }
+    },
+    async (request, reply) => {
+      try {
+        const { sessionId } = request.params;
+
+        // Remove the user session
+        const deletedSessionId = productionManager.removeUserSession(sessionId);
+        if (!deletedSessionId) {
+          reply.code(404).send({ error: 'WHIP session not found' });
+          return;
+        }
+
+        reply.code(204).send();
+      } catch (err) {
+        Log().error(err);
+        reply
+          .code(500)
+          .send({ error: `Failed to terminate WHIP connection: ${err}` });
       }
     }
   );

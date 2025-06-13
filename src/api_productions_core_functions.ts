@@ -95,6 +95,166 @@ export class CoreFunctions {
     return endpoint;
   }
 
+  async createOffer(
+    smb: SmbProtocol,
+    smbServerUrl: string,
+    smbServerApiKey: string,
+    lineId: string,
+    endpointId: string,
+    endpointDescription: SmbEndpointDescription,
+    offer: string
+  ): Promise<string> {
+    if (!endpointDescription) {
+      throw new Error('Missing endpointDescription when handling sdp offer');
+    }
+    if (!endpointDescription.audio) {
+      throw new Error(
+        'Missing endpointDescription audio when handling sdp offer'
+      );
+    }
+
+    // Parse the offer
+    const parsedOffer = parse(offer);
+    if (parsedOffer.origin) {
+      parsedOffer.origin.sessionVersion++;
+    }
+
+    // Set up MSID semantic if not present
+    if (!parsedOffer.msidSemantic) {
+      parsedOffer.msidSemantic = {
+        semantic: 'WMS',
+        token: ''
+      };
+    }
+
+    // Get the first media description (usually audio)
+    const offerMediaDescription = parsedOffer.media[0];
+    if (!offerMediaDescription) {
+      throw new Error('Missing audio media description in offer');
+    }
+
+    // Process SSRCs
+    endpointDescription.audio.ssrcs = [];
+    if (parsedOffer.media[1]?.ssrcs) {
+      let parsedSsrcs = parsedOffer.media[1].ssrcs[0].id;
+      if (typeof parsedSsrcs === 'string') {
+        parsedSsrcs = parseInt(parsedSsrcs, 10);
+      }
+      endpointDescription.audio.ssrcs.push(parsedSsrcs);
+    }
+
+    if (endpointDescription.audio.ssrcs.length === 0) {
+      throw new Error('Missing audio ssrcs in offer');
+    }
+
+    // Get transport configuration
+    const transport = endpointDescription['bundle-transport'];
+    if (!transport) {
+      throw new Error('Missing bundle-transport in endpointDescription');
+    }
+    if (!transport.dtls) {
+      throw new Error('Missing dtls in endpointDescription');
+    }
+    if (!transport.ice) {
+      throw new Error('Missing ice in endpointDescription');
+    }
+
+    // Process each media section
+    let bundleGroupMids = '';
+    for (let media of parsedOffer.media) {
+      // Add to bundle group
+      bundleGroupMids =
+        bundleGroupMids === ''
+          ? `${media.mid}`
+          : `${bundleGroupMids} ${media.mid}`;
+
+      // Set ICE and DTLS parameters
+      media.iceUfrag = transport.ice.ufrag;
+      media.icePwd = transport.ice.pwd;
+      media.fingerprint = {
+        type: transport.dtls.type,
+        hash: transport.dtls.hash
+      };
+      media.setup = media.setup === 'actpass' ? 'active' : 'actpass';
+
+      // Clear unnecessary fields
+      media.ssrcGroups = undefined;
+      media.ssrcs = undefined;
+      media.msid = undefined;
+      media.candidates = undefined;
+      media.port = 9;
+      media.rtcp = {
+        port: 9,
+        netType: 'IN',
+        ipVer: 4,
+        address: '0.0.0.0'
+      };
+
+      // Add ICE candidates
+      media.candidates = transport.ice.candidates.map((candidate) => ({
+        foundation: candidate.foundation,
+        component: candidate.component,
+        transport: candidate.protocol,
+        priority: candidate.priority,
+        ip: candidate.ip,
+        port: candidate.port,
+        type: candidate.type,
+        raddr: candidate['rel-addr'],
+        rport: candidate['rel-port'],
+        generation: candidate.generation,
+        'network-id': candidate.network
+      }));
+
+      // Handle audio media
+      if (media.type === 'audio') {
+        // Filter for Opus codec
+        media.rtp = media.rtp.filter(
+          (rtp) => rtp.codec.toLowerCase() === 'opus'
+        );
+        let opusPayloadType = media.rtp[0].payload;
+
+        // Set up audio parameters
+        media.fmtp = media.fmtp.filter(
+          (fmtp) => fmtp.payload === opusPayloadType
+        );
+        media.payloads = `${opusPayloadType}`;
+
+        // Filter RTP header extensions
+        media.ext =
+          media.ext &&
+          media.ext.filter(
+            (ext) =>
+              ext.uri === 'urn:ietf:params:rtp-hdrext:ssrc-audio-level' ||
+              ext.uri ===
+                'http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time'
+          );
+
+        media.direction = 'recvonly';
+        media.rtcpFb = undefined;
+      }
+    }
+
+    // Set up bundle group
+    parsedOffer.groups = [
+      {
+        type: 'BUNDLE',
+        mids: bundleGroupMids
+      }
+    ];
+
+    // Configure the endpoint
+    await smb.configureEndpoint(
+      smbServerUrl,
+      lineId,
+      endpointId,
+      endpointDescription,
+      smbServerApiKey
+    );
+
+    // Return the answer
+    return write(parsedOffer);
+  }
+
   async handleAnswerRequest(
     smb: SmbProtocol,
     smbServerUrl: string,
