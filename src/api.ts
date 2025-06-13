@@ -4,10 +4,9 @@ import swagger from '@fastify/swagger';
 import swaggerUI from '@fastify/swagger-ui';
 import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import { Static, Type } from '@sinclair/typebox';
-import fastify, fastify, { FastifyPluginCallback } from 'fastify';
+import fastify, { FastifyPluginCallback } from 'fastify';
 import { getApiIngests } from './api_ingests';
 import apiPermissions from './api_permissions';
-import { getApiIngests } from './api_ingests';
 import { getApiProductions } from './api_productions';
 import apiReAuth from './api_re_auth';
 import apiShare from './api_share';
@@ -68,9 +67,6 @@ export default async (opts: ApiOptions) => {
   api.register(cors, {
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
   });
-
-  // register cookie plugin
-  api.register(cookie);
 
   // register the swagger plugins, it will automagically do magic
   api.register(swagger, {
