@@ -1,0 +1,317 @@
+import { Type } from '@sinclair/typebox';
+import { FastifyPluginCallback } from 'fastify';
+import {
+  IngestListResponse,
+  Ingest,
+  ErrorResponse,
+  PatchIngestResponse,
+  PatchIngest,
+  NewIngest
+} from './models';
+import { IngestManager } from './ingest_manager';
+import dotenv from 'dotenv';
+import { Log } from './log';
+import { DbManagerMongoDb } from './db/mongodb';
+import { DbManagerCouchDb } from './db/couchdb';
+dotenv.config();
+
+const DB_CONNECTION_STRING: string =
+  process.env.DB_CONNECTION_STRING ??
+  process.env.MONGODB_CONNECTION_STRING ??
+  'mongodb://localhost:27017/intercom-manager';
+let dbManager;
+const dbUrl = new URL(DB_CONNECTION_STRING);
+if (dbUrl.protocol === 'mongodb:') {
+  dbManager = new DbManagerMongoDb(dbUrl);
+} else if (dbUrl.protocol === 'http:' || dbUrl.protocol === 'https:') {
+  dbManager = new DbManagerCouchDb(dbUrl);
+} else {
+  throw new Error('Unsupported database protocol');
+}
+
+const ingestManager = new IngestManager(dbManager);
+
+const apiIngests: FastifyPluginCallback = (fastify, opts, next) => {
+  fastify.post<{
+    Body: NewIngest;
+    Reply: { success: boolean; message: string };
+  }>(
+    '/ingest',
+    {
+      schema: {
+        description:
+          'Create a new Ingest. The device data will be fetched from the specified IP address.',
+        body: NewIngest,
+        response: {
+          200: Type.Object({
+            success: Type.Boolean(),
+            message: Type.String()
+          }),
+          400: ErrorResponse
+        }
+      }
+    },
+    async (request, reply) => {
+      try {
+        const ingest = await ingestManager.createIngest(request.body);
+
+        if (ingest) {
+          await ingestManager.load();
+          reply.code(200).send({
+            success: true,
+            message: `Successfully created ingest with ID ${ingest._id}`
+          });
+        } else {
+          reply.code(400).send({
+            success: false,
+            message: 'Failed to create ingest - could not connect to device'
+          });
+        }
+      } catch (err) {
+        Log().error(err);
+        reply.code(500).send({
+          success: false,
+          message: 'Exception thrown when trying to create ingest: ' + err
+        });
+      }
+    }
+  );
+
+  fastify.get<{
+    Reply: IngestListResponse | string;
+    Querystring: {
+      limit?: number;
+      offset?: number;
+      extended?: boolean;
+    };
+  }>(
+    '/ingestlist',
+    {
+      schema: {
+        description: 'Paginated list of all ingests.',
+        querystring: Type.Object({
+          limit: Type.Optional(Type.Number()),
+          offset: Type.Optional(Type.Number())
+        }),
+        response: {
+          200: IngestListResponse,
+          500: Type.String()
+        }
+      }
+    },
+    async (request, reply) => {
+      try {
+        const limit = request.query.limit || 50;
+        const offset = request.query.offset || 0;
+        const ingests = await ingestManager.getIngests(limit, offset);
+        const totalItems = await ingestManager.getNumberOfIngests();
+        const responseIngests: Ingest[] = ingests.map(
+          ({ _id, name, ipAddress, deviceOutput, deviceInput }) => ({
+            _id,
+            name,
+            ipAddress,
+            deviceOutput,
+            deviceInput
+          })
+        );
+
+        reply.code(200).send({
+          ingests: responseIngests,
+          offset,
+          limit,
+          totalItems
+        });
+      } catch (err) {
+        Log().error(err);
+        reply
+          .code(500)
+          .send(
+            'Exception thrown when trying to get paginated ingests: ' + err
+          );
+      }
+    }
+  );
+
+  fastify.get<{
+    Params: { ingestId: string };
+    Reply: Ingest | string;
+  }>(
+    '/ingest/:ingestId',
+    {
+      schema: {
+        description: 'Retrieves a Ingest.',
+        response: {
+          200: Ingest,
+          500: Type.String()
+        }
+      }
+    },
+    async (request, reply) => {
+      try {
+        const ingest = await ingestManager.getIngest(
+          parseInt(request.params.ingestId, 10)
+        );
+        if (!ingest) {
+          reply.code(404).send('Ingest not found');
+          return;
+        }
+        const ingestResponse: Ingest = {
+          _id: ingest._id,
+          name: ingest.name,
+          ipAddress: ingest.ipAddress,
+          deviceOutput: ingest.deviceOutput,
+          deviceInput: ingest.deviceInput
+        };
+        reply.code(200).send(ingestResponse);
+      } catch (err) {
+        Log().error(err);
+        reply
+          .code(500)
+          .send('Exception thrown when trying to get ingests: ' + err);
+      }
+    }
+  );
+
+  fastify.patch<{
+    Params: { ingestId: string };
+    Body:
+      | { name: string }
+      | { deviceOutput: { name: string; label: string } }
+      | { deviceInput: { name: string; label: string } };
+    Reply: PatchIngestResponse | ErrorResponse | string;
+  }>(
+    '/ingest/:ingestId',
+    {
+      schema: {
+        description:
+          'Modify an existing Ingest. By changing the name, the deviceOutput or the deviceInput, the ingest is updated and the new ingest is returned.',
+        body: PatchIngest,
+        response: {
+          200: PatchIngestResponse,
+          400: ErrorResponse,
+          404: ErrorResponse,
+          500: Type.String()
+        }
+      }
+    },
+    async (request, reply) => {
+      try {
+        const { ingestId } = request.params;
+        let ingest;
+        try {
+          ingest = await ingestManager.getIngest(parseInt(ingestId, 10));
+        } catch (err) {
+          console.warn(
+            'Trying to patch a ingest in a ingest that does not exist'
+          );
+        }
+        if (!ingest) {
+          reply.code(404).send({
+            message: `Ingest with id ${ingestId} not found`
+          });
+        } else {
+          if ('name' in request.body) {
+            const updatedIngest = await ingestManager.updateIngest(
+              ingest,
+              request.body.name
+            );
+            if (!updatedIngest) {
+              reply.code(400).send({
+                message: `Failed to update ingest with id ${ingestId}`
+              });
+            } else {
+              reply.code(200).send({
+                _id: updatedIngest._id,
+                name: updatedIngest.name,
+                deviceOutput: updatedIngest.deviceOutput,
+                deviceInput: updatedIngest.deviceInput
+              });
+            }
+          } else if ('deviceOutput' in request.body) {
+            const updatedIngest = await ingestManager.updateIngestDeviceOutput(
+              ingest,
+              request.body.deviceOutput.name,
+              request.body.deviceOutput.label
+            );
+            if (!updatedIngest) {
+              reply.code(400).send({
+                message: `Failed to update ingest with id ${ingestId}`
+              });
+            } else {
+              reply.code(200).send({
+                _id: updatedIngest._id,
+                name: updatedIngest.name,
+                deviceOutput: updatedIngest.deviceOutput,
+                deviceInput: updatedIngest.deviceInput
+              });
+            }
+          } else if ('deviceInput' in request.body) {
+            const updatedIngest = await ingestManager.updateIngestDeviceInput(
+              ingest,
+              request.body.deviceInput.name,
+              request.body.deviceInput.label
+            );
+            if (!updatedIngest) {
+              reply.code(400).send({
+                message: `Failed to update ingest with id ${ingestId}`
+              });
+            } else {
+              reply.code(200).send({
+                _id: updatedIngest._id,
+                name: updatedIngest.name,
+                deviceOutput: updatedIngest.deviceOutput,
+                deviceInput: updatedIngest.deviceInput
+              });
+            }
+          } else {
+            reply.code(400).send({
+              message: 'Invalid request body'
+            });
+          }
+        }
+      } catch (err) {
+        Log().error(err);
+        reply
+          .code(500)
+          .send('Exception thrown when trying to get ingest: ' + err);
+      }
+    }
+  );
+
+  fastify.delete<{
+    Params: { ingestId: string };
+    Reply: string;
+  }>(
+    '/ingest/:ingestId',
+    {
+      schema: {
+        description: 'Deletes a Ingest.',
+        response: {
+          200: Type.String(),
+          500: Type.String()
+        }
+      }
+    },
+    async (request, reply) => {
+      const { ingestId } = request.params;
+      try {
+        if (!(await ingestManager.deleteIngest(parseInt(ingestId, 10)))) {
+          throw new Error('Could not delete ingest');
+        }
+        reply.code(200).send(`Deleted ingest ${ingestId}`);
+      } catch (err) {
+        Log().error(err);
+        reply
+          .code(500)
+          .send('Exception thrown when trying to delete ingest: ' + err);
+      }
+    }
+  );
+
+  next();
+};
+
+export async function getApiIngests() {
+  await ingestManager.load();
+  return apiIngests;
+}

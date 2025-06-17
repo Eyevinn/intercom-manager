@@ -1,4 +1,4 @@
-import { Line, Production } from '../models';
+import { Ingest, Line, NewIngest, Production } from '../models';
 import { assert } from '../utils';
 import { DbManager } from './interface';
 import nano from 'nano';
@@ -122,5 +122,63 @@ export class DbManagerCouchDb implements DbManager {
       response.ok,
       `Failed to update production with id "${productionId}"`
     );
+  }
+
+  async addIngest(newIngest: NewIngest): Promise<Ingest> {
+    const _id = await this.getNextSequence('ingests');
+    if (_id === -1) {
+      throw new Error('Failed to get next sequence');
+    }
+    const insertIngest = {
+      ...newIngest,
+      _id: _id.toString()
+    };
+    const response = await this.nanoDb.insert(
+      insertIngest as unknown as nano.MaybeDocument
+    );
+    if (!response.ok) throw new Error('Failed to insert ingest');
+    return { ...newIngest, _id } as any;
+  }
+
+  /** Get all ingests from the database in reverse natural order, limited by the limit parameter */
+  async getIngests(): Promise<Ingest[]> {
+    const ingests: Ingest[] = [];
+    const response = await this.nanoDb.list({
+      include_docs: true
+    });
+    // eslint-disable-next-line
+    response.rows.forEach((row: any) => {
+      if (row.doc._id.toLowerCase().indexOf('counter') === -1)
+        ingests.push(row.doc);
+    });
+    return ingests as any as Ingest[];
+  }
+
+  async getIngestsLength(): Promise<number> {
+    const ingests = await this.nanoDb.list({ include_docs: false });
+    return ingests.rows.length;
+  }
+
+  async getIngest(id: number): Promise<Ingest | undefined> {
+    const ingest = await this.nanoDb.get(id.toString());
+    // eslint-disable-next-line
+    return ingest as any | undefined;
+  }
+
+  async updateIngest(ingest: Ingest): Promise<Ingest | undefined> {
+    const existingIngest = await this.nanoDb.get(ingest._id.toString());
+    const updatedIngest = {
+      ...existingIngest,
+      ...ingest,
+      _id: ingest._id.toString()
+    };
+    const response = await this.nanoDb.insert(updatedIngest);
+    return response.ok ? ingest : undefined;
+  }
+
+  async deleteIngest(ingestId: number): Promise<boolean> {
+    const ingest = await this.nanoDb.get(ingestId.toString());
+    const response = await this.nanoDb.destroy(ingest._id, ingest._rev);
+    return response.ok;
   }
 }

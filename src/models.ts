@@ -24,6 +24,12 @@ export type SessionResponse = Static<typeof SessionResponse>;
 export type SdpAnswer = Static<typeof SdpAnswer>;
 export type ErrorResponse = Static<typeof ErrorResponse>;
 
+export type NewIngest = Static<typeof NewIngest>;
+export type Ingest = Static<typeof Ingest>;
+export type IngestListResponse = Static<typeof IngestListResponse>;
+export type PatchIngest = Static<typeof PatchIngest>;
+export type PatchIngestResponse = Static<typeof PatchIngestResponse>;
+
 export const Audio = Type.Object({
   'relay-type': Type.Array(
     Type.Union([
@@ -254,3 +260,51 @@ export const ReAuthResponse = Type.Object({
   token: Type.String({ description: 'The new OSC Service Access Token' })
 });
 export type ReAuthResponse = Static<typeof ReAuthResponse>;
+
+export const NewIngest = Type.Object({
+  name: Type.String(),
+  ipAddress: Type.String()
+});
+
+export const Ingest = Type.Object({
+  _id: Type.Number(),
+  name: Type.String(),
+  ipAddress: Type.String(),
+  deviceOutput: Type.Array(
+    Type.Object({
+      name: Type.String(),
+      label: Type.String()
+    })
+  ),
+  deviceInput: Type.Array(
+    Type.Object({
+      name: Type.String(),
+      label: Type.String()
+    })
+  )
+});
+
+export const IngestListResponse = Type.Object({
+  ingests: Type.Array(Ingest),
+  offset: Type.Number(),
+  limit: Type.Number(),
+  totalItems: Type.Number()
+});
+
+export const PatchIngest = Type.Union([
+  Type.Object({ name: Type.String() }),
+  Type.Object({
+    deviceOutput: Type.Object({
+      name: Type.String(),
+      label: Type.String()
+    })
+  }),
+  Type.Object({
+    deviceInput: Type.Object({
+      name: Type.String(),
+      label: Type.String()
+    })
+  })
+]);
+
+export const PatchIngestResponse = Type.Omit(Ingest, ['ipAddress']);
