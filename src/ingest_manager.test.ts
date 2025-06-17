@@ -40,7 +40,7 @@ beforeEach(() => {
 });
 
 describe('ingest_manager', () => {
-  it('calls the dbManager when you try to create a ingest', async () => {
+  it('calls the dbManager when you try to create an ingest', async () => {
     const dbManager = jest.requireMock('./db/interface');
     dbManager.addIngest
       .mockReturnValueOnce(undefined)
@@ -93,7 +93,7 @@ describe('ingest_manager', () => {
 });
 
 describe('ingest_manager', () => {
-  it('getting non existent ingest object returns undefined', async () => {
+  it('getting a non existent ingest object returns undefined', async () => {
     const dbManager = jest.requireMock('./db/interface');
     dbManager.getIngest.mockReturnValueOnce(undefined);
 
@@ -163,7 +163,7 @@ describe('ingest_manager', () => {
 });
 
 describe('ingest_manager', () => {
-  it('deleting non existent ingest object returns false', async () => {
+  it('deleting a non existent ingest object returns false', async () => {
     const dbManager = jest.requireMock('./db/interface');
     dbManager.getIngests.mockReturnValueOnce([]);
     dbManager.deleteIngest.mockReturnValueOnce(true).mockReturnValueOnce(false);
@@ -195,7 +195,7 @@ describe('ingest_manager', () => {
       jest.resetAllMocks();
     });
 
-    it('change the name of a device output in a ingest', async () => {
+    it('change the name of a device output in an ingest', async () => {
       const dbManager = jest.requireMock('./db/interface');
       dbManager.getIngest.mockReturnValueOnce(deepClone(existingIngest));
       const ingestManagerTest = new IngestManager(dbManager);
@@ -226,7 +226,7 @@ describe('ingest_manager', () => {
       }
     });
 
-    it('change the name of a device input in a ingest', async () => {
+    it('change the name of a device input in an ingest', async () => {
       const dbManager = jest.requireMock('./db/interface');
       dbManager.getIngest.mockReturnValueOnce(deepClone(existingIngest));
       const ingestManagerTest = new IngestManager(dbManager);
@@ -257,7 +257,7 @@ describe('ingest_manager', () => {
       }
     });
 
-    it('change the name of a ingest', async () => {
+    it('change the name of an ingest', async () => {
       const dbManager = jest.requireMock('./db/interface');
       dbManager.getIngest.mockReturnValueOnce(deepClone(existingIngest));
       const ingestManagerTest = new IngestManager(dbManager);

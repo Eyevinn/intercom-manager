@@ -139,7 +139,7 @@ const apiIngests: FastifyPluginCallback = (fastify, opts, next) => {
     '/ingest/:ingestId',
     {
       schema: {
-        description: 'Retrieves a Ingest.',
+        description: 'Retrieves an ingest.',
         response: {
           200: Ingest,
           500: Type.String()

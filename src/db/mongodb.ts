@@ -109,41 +109,41 @@ export class DbManagerMongoDb implements DbManager {
     const db = this.client.db();
     const _id = await this.getNextSequence('ingests');
     const ingest = { ...newIngest, _id };
-    await db.collection('ingests').insertOne(ingest as any);
-    return ingest as unknown as Ingest;
+    await db.collection<Ingest>('ingests').insertOne(ingest as any);
+    return ingest as Ingest;
   }
 
   /** Get all ingests from the database in reverse natural order, limited by the limit parameter */
   async getIngests(limit: number, offset: number): Promise<Ingest[]> {
     const db = this.client.db();
     const ingests = await db
-      .collection('ingests')
+      .collection<Ingest>('ingests')
       .find()
       .sort({ $natural: -1 })
       .skip(offset)
       .limit(limit)
       .toArray();
 
-    return ingests as unknown as Ingest[];
+    return ingests as Ingest[];
   }
 
   async getIngest(id: number): Promise<Ingest | undefined> {
     const db = this.client.db();
     // eslint-disable-next-line
-    return db.collection('ingests').findOne({ _id: id as any }) as
+    return db.collection<Ingest>('ingests').findOne({ _id: id as any }) as
       | any
       | undefined;
   }
 
   async getIngestsLength(): Promise<number> {
     const db = this.client.db();
-    return await db.collection('ingests').countDocuments();
+    return await db.collection<Ingest>('ingests').countDocuments();
   }
 
   async updateIngest(ingest: Ingest): Promise<Ingest | undefined> {
     const db = this.client.db();
     const result = await db
-      .collection('ingests')
+      .collection<Ingest>('ingests')
       .updateOne({ _id: ingest._id as any }, { $set: ingest });
     return result.modifiedCount === 1 ? ingest : undefined;
   }
@@ -151,7 +151,7 @@ export class DbManagerMongoDb implements DbManager {
   async deleteIngest(ingestId: number): Promise<boolean> {
     const db = this.client.db();
     const result = await db
-      .collection('ingests')
+      .collection<Ingest>('ingests')
       .deleteOne({ _id: ingestId as any });
     return result.deletedCount === 1;
   }
