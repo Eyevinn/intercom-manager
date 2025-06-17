@@ -1,5 +1,19 @@
 import api from './api';
 
+jest.mock('./db/interface', () => ({
+  getIngests: jest.fn().mockResolvedValue([]),
+  connect: jest.fn()
+}));
+
+jest.mock('./ingest_manager', () => {
+  return {
+    IngestManager: jest.fn().mockImplementation(() => ({
+      load: jest.fn().mockResolvedValue(undefined),
+      startPolling: jest.fn()
+    }))
+  };
+});
+
 jest.mock('./db/mongodb');
 
 describe('reAuth api', () => {

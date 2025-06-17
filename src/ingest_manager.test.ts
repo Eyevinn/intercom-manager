@@ -26,8 +26,14 @@ const existingIngest: Ingest = {
 
 jest.mock('./db/interface', () => ({
   addIngest: jest.fn(),
-  deleteIngest: jest.fn()
+  deleteIngest: jest.fn(),
+  getIngest: jest.fn(),
+  getIngests: jest.fn(),
+  updateIngest: jest.fn(),
+  connect: jest.fn()
 }));
+
+const deepClone = (obj: any) => JSON.parse(JSON.stringify(obj));
 
 beforeEach(() => {
   jest.resetAllMocks();
@@ -191,7 +197,7 @@ describe('ingest_manager', () => {
 
     it('change the name of a device output in a ingest', async () => {
       const dbManager = jest.requireMock('./db/interface');
-      dbManager.getIngest.mockReturnValueOnce(structuredClone(existingIngest));
+      dbManager.getIngest.mockReturnValueOnce(deepClone(existingIngest));
       const ingestManagerTest = new IngestManager(dbManager);
       const ingest = await ingestManagerTest.getIngest(1);
       if (ingest) {
@@ -203,10 +209,17 @@ describe('ingest_manager', () => {
         expect(dbManager.updateIngest).toHaveBeenLastCalledWith({
           _id: 1,
           name: 'ingestname',
+          ipAddress: '127.0.0.1',
           deviceOutput: [
             {
               name: 'deviceoutputname',
               label: 'newLabel'
+            }
+          ],
+          deviceInput: [
+            {
+              name: 'deviceinputname',
+              label: 'deviceinputlabel'
             }
           ]
         });
@@ -215,7 +228,7 @@ describe('ingest_manager', () => {
 
     it('change the name of a device input in a ingest', async () => {
       const dbManager = jest.requireMock('./db/interface');
-      dbManager.getIngest.mockReturnValueOnce(structuredClone(existingIngest));
+      dbManager.getIngest.mockReturnValueOnce(deepClone(existingIngest));
       const ingestManagerTest = new IngestManager(dbManager);
       const ingest = await ingestManagerTest.getIngest(1);
       if (ingest) {
@@ -227,10 +240,17 @@ describe('ingest_manager', () => {
         expect(dbManager.updateIngest).toHaveBeenLastCalledWith({
           _id: 1,
           name: 'ingestname',
+          ipAddress: '127.0.0.1',
           deviceInput: [
             {
               name: 'deviceinputname',
               label: 'newLabel'
+            }
+          ],
+          deviceOutput: [
+            {
+              name: 'deviceoutputname',
+              label: 'deviceoutputlabel'
             }
           ]
         });
@@ -239,7 +259,7 @@ describe('ingest_manager', () => {
 
     it('change the name of a ingest', async () => {
       const dbManager = jest.requireMock('./db/interface');
-      dbManager.getIngest.mockReturnValueOnce(structuredClone(existingIngest));
+      dbManager.getIngest.mockReturnValueOnce(deepClone(existingIngest));
       const ingestManagerTest = new IngestManager(dbManager);
       const ingest = await ingestManagerTest.getIngest(1);
       if (ingest) {
@@ -247,6 +267,7 @@ describe('ingest_manager', () => {
         expect(dbManager.updateIngest).toHaveBeenLastCalledWith({
           _id: 1,
           name: 'newName',
+          ipAddress: '127.0.0.1',
           deviceOutput: [
             {
               name: 'deviceoutputname',
