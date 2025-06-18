@@ -10,6 +10,7 @@ import apiShare from './api_share';
 import apiReAuth from './api_re_auth';
 import fastifyCookie from '@fastify/cookie';
 import { getApiIngests } from './api_ingests';
+import { getApiIngestIOs } from './api_ingest_io';
 
 const HelloWorld = Type.String({
   description: 'The magical words!'
@@ -87,5 +88,6 @@ export default async (opts: ApiOptions) => {
   api.register(apiShare, { publicHost: opts.publicHost, prefix: 'api/v1' });
   api.register(apiReAuth, { prefix: 'api/v1' });
   api.register(await getApiIngests(), { prefix: 'api/v1' });
+  api.register(await getApiIngestIOs(), { prefix: 'api/v1' });
   return api;
 };

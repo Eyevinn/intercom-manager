@@ -1,18 +1,18 @@
 import { Type } from '@sinclair/typebox';
 import { FastifyPluginCallback } from 'fastify';
 import {
-  IngestListResponse,
-  Ingest,
   ErrorResponse,
-  PatchIngestResponse,
-  PatchIngest,
-  NewIngest
+  IngestIO,
+  IngestIOListResponse,
+  NewIngestIO,
+  PatchIngestIO,
+  PatchIngestIOResponse
 } from './models';
-import { IngestManager } from './ingest_manager';
 import dotenv from 'dotenv';
 import { Log } from './log';
 import { DbManagerMongoDb } from './db/mongodb';
 import { DbManagerCouchDb } from './db/couchdb';
+import { IngestIOManager } from './ingest_io_manager';
 dotenv.config();
 
 const DB_CONNECTION_STRING: string =
@@ -29,19 +29,19 @@ if (dbUrl.protocol === 'mongodb:') {
   throw new Error('Unsupported database protocol');
 }
 
-const ingestManager = new IngestManager(dbManager);
+const ingestIOManager = new IngestIOManager(dbManager);
 
-const apiIngests: FastifyPluginCallback = (fastify, opts, next) => {
+const apiIngestIOs: FastifyPluginCallback = (fastify, opts, next) => {
   fastify.post<{
-    Body: NewIngest;
+    Body: NewIngestIO;
     Reply: { success: boolean; message: string };
   }>(
-    '/ingest',
+    '/ingestio',
     {
       schema: {
         description:
-          'Create a new Ingest. The device data will be fetched from the specified IP address.',
-        body: NewIngest,
+          'Create a new Ingest IO, where an input and an output from an ingest are connected to a production line.',
+        body: NewIngestIO,
         response: {
           200: Type.Object({
             success: Type.Boolean(),
@@ -53,39 +53,38 @@ const apiIngests: FastifyPluginCallback = (fastify, opts, next) => {
     },
     async (request, reply) => {
       try {
-        const ingest = await ingestManager.createIngest(request.body);
+        const ingestIO = await ingestIOManager.createIO(request.body);
 
-        if (ingest) {
-          await ingestManager.load();
+        if (ingestIO) {
           reply.code(200).send({
             success: true,
-            message: `Successfully created ingest with ID ${ingest._id}`
+            message: `Successfully created ingest IO with ID ${ingestIO._id}`
           });
         } else {
           reply.code(400).send({
             success: false,
-            message: 'Failed to create ingest - could not connect to device'
+            message: 'Failed to create ingest IO'
           });
         }
       } catch (err) {
         Log().error(err);
         reply.code(500).send({
           success: false,
-          message: 'Exception thrown when trying to create ingest: ' + err
+          message: 'Exception thrown when trying to create ingest IO: ' + err
         });
       }
     }
   );
 
   fastify.get<{
-    Reply: IngestListResponse | string;
+    Reply: IngestIOListResponse | string;
     Querystring: {
       limit?: number;
       offset?: number;
       extended?: boolean;
     };
   }>(
-    '/ingestlist',
+    '/ingestiolist',
     {
       schema: {
         description: 'Paginated list of all ingests.',
@@ -94,7 +93,7 @@ const apiIngests: FastifyPluginCallback = (fastify, opts, next) => {
           offset: Type.Optional(Type.Number())
         }),
         response: {
-          200: IngestListResponse,
+          200: IngestIOListResponse,
           500: Type.String()
         }
       }
@@ -103,20 +102,30 @@ const apiIngests: FastifyPluginCallback = (fastify, opts, next) => {
       try {
         const limit = request.query.limit || 50;
         const offset = request.query.offset || 0;
-        const ingests = await ingestManager.getIngests(limit, offset);
-        const totalItems = await ingestManager.getNumberOfIngests();
-        const responseIngests: Ingest[] = ingests.map(
-          ({ _id, label, ipAddress, deviceOutput, deviceInput }) => ({
+        const ingestIOs = await ingestIOManager.getIngestIOs(limit, offset);
+        const totalItems = await ingestIOManager.getNumberOfIngestIOs();
+        const responseIngestIOs: IngestIO[] = ingestIOs.map(
+          ({
             _id,
             label,
-            ipAddress,
+            ingestId,
+            deviceInput,
             deviceOutput,
-            deviceInput
+            productionId,
+            lineId
+          }: IngestIO) => ({
+            _id,
+            label,
+            ingestId,
+            deviceInput,
+            deviceOutput,
+            productionId,
+            lineId
           })
         );
 
         reply.code(200).send({
-          ingests: responseIngests,
+          ingestIOs: responseIngestIOs,
           offset,
           limit,
           totalItems
@@ -126,65 +135,67 @@ const apiIngests: FastifyPluginCallback = (fastify, opts, next) => {
         reply
           .code(500)
           .send(
-            'Exception thrown when trying to get paginated ingests: ' + err
+            'Exception thrown when trying to get paginated ingest IOs: ' + err
           );
       }
     }
   );
 
   fastify.get<{
-    Params: { ingestId: string };
-    Reply: Ingest | string;
+    Params: { ingestIOId: string };
+    Reply: IngestIO | string;
   }>(
-    '/ingest/:ingestId',
+    '/ingestio/:ingestIOId',
     {
       schema: {
-        description: 'Retrieves an ingest.',
+        description: 'Retrieves an ingest IO.',
         response: {
-          200: Ingest,
+          200: IngestIO,
           500: Type.String()
         }
       }
     },
     async (request, reply) => {
       try {
-        const ingest = await ingestManager.getIngest(
-          parseInt(request.params.ingestId, 10)
+        const ingestIO = await ingestIOManager.getIngestIO(
+          parseInt(request.params.ingestIOId, 10)
         );
-        if (!ingest) {
-          reply.code(404).send('Ingest not found');
+        if (!ingestIO) {
+          reply.code(404).send('Ingest IO not found');
           return;
         }
-        const ingestResponse: Ingest = {
-          _id: ingest._id,
-          label: ingest.label,
-          ipAddress: ingest.ipAddress,
-          deviceOutput: ingest.deviceOutput,
-          deviceInput: ingest.deviceInput
+        const ingestResponse: IngestIO = {
+          _id: ingestIO._id,
+          label: ingestIO.label,
+          ingestId: ingestIO.ingestId,
+          deviceInput: ingestIO.deviceInput,
+          deviceOutput: ingestIO.deviceOutput,
+          productionId: ingestIO.productionId,
+          lineId: ingestIO.lineId
         };
         reply.code(200).send(ingestResponse);
       } catch (err) {
         Log().error(err);
         reply
           .code(500)
-          .send('Exception thrown when trying to get ingests: ' + err);
+          .send('Exception thrown when trying to get ingest IOs: ' + err);
       }
     }
   );
 
   fastify.patch<{
-    Params: { ingestId: string };
-    Body: PatchIngest;
-    Reply: PatchIngestResponse | ErrorResponse | string;
+    Params: { ingestIOId: string };
+    Body: PatchIngestIO;
+    Reply: PatchIngestIOResponse | ErrorResponse | string;
   }>(
-    '/ingest/:ingestId',
+    '/ingestio/:ingestIOId',
     {
       schema: {
         description:
           'Modify an existing Ingest. By changing the label, the deviceOutput or the deviceInput, the ingest is updated and the new ingest is returned.',
-        body: PatchIngest,
+        body: PatchIngestIO,
         response: {
-          200: PatchIngestResponse,
+          200: PatchIngestIOResponse,
           400: ErrorResponse,
           404: ErrorResponse,
           500: Type.String()
@@ -193,28 +204,34 @@ const apiIngests: FastifyPluginCallback = (fastify, opts, next) => {
     },
     async (request, reply) => {
       try {
-        const { ingestId } = request.params;
-        let ingest;
+        const { ingestIOId } = request.params;
+        let ingestIO;
         try {
-          ingest = await ingestManager.getIngest(parseInt(ingestId, 10));
+          ingestIO = await ingestIOManager.getIngestIO(
+            parseInt(ingestIOId, 10)
+          );
         } catch (err) {
           console.warn(
-            'Trying to patch an ingest in an ingest that does not exist'
+            'Trying to patch an ingest IO in an ingest IO that does not exist'
           );
         }
-        if (!ingest) {
+        if (!ingestIO) {
           reply.code(404).send({
-            message: `Ingest with id ${ingestId} not found`
+            message: `Ingest IO with id ${ingestIOId} not found`
           });
         } else {
           const updates: any = {};
 
-          if ('deviceOutput' in request.body) {
-            updates.deviceOutput = request.body.deviceOutput;
-          } else if ('deviceInput' in request.body) {
+          if ('deviceInput' in request.body) {
             updates.deviceInput = request.body.deviceInput;
+          } else if ('deviceOutput' in request.body) {
+            updates.deviceOutput = request.body.deviceOutput;
           } else if ('label' in request.body) {
             updates.label = request.body.label;
+          } else if ('productionId' in request.body) {
+            updates.productionId = request.body.productionId;
+          } else if ('lineId' in request.body) {
+            updates.lineId = request.body.lineId;
           } else {
             reply.code(400).send({
               message: 'Invalid request body'
@@ -222,21 +239,23 @@ const apiIngests: FastifyPluginCallback = (fastify, opts, next) => {
             return;
           }
 
-          const updatedIngest = await ingestManager.updateIngest(
-            ingest,
+          const updatedIngestIO = await ingestIOManager.updateIngestIO(
+            ingestIO,
             updates
           );
 
-          if (!updatedIngest) {
+          if (!updatedIngestIO) {
             reply.code(400).send({
-              message: `Failed to update ingest with id ${ingestId}`
+              message: `Failed to update ingest IO with id ${ingestIOId}`
             });
           } else {
             reply.code(200).send({
-              _id: updatedIngest._id,
-              label: updatedIngest.label,
-              deviceOutput: updatedIngest.deviceOutput,
-              deviceInput: updatedIngest.deviceInput
+              _id: updatedIngestIO._id,
+              label: updatedIngestIO.label,
+              deviceInput: updatedIngestIO.deviceInput,
+              deviceOutput: updatedIngestIO.deviceOutput,
+              productionId: updatedIngestIO.productionId,
+              lineId: updatedIngestIO.lineId
             });
           }
         }
@@ -250,13 +269,13 @@ const apiIngests: FastifyPluginCallback = (fastify, opts, next) => {
   );
 
   fastify.delete<{
-    Params: { ingestId: string };
+    Params: { ingestIOId: string };
     Reply: string;
   }>(
-    '/ingest/:ingestId',
+    '/ingestio/:ingestIOId',
     {
       schema: {
-        description: 'Deletes an Ingest.',
+        description: 'Deletes an Ingest IO.',
         response: {
           200: Type.String(),
           500: Type.String()
@@ -264,17 +283,17 @@ const apiIngests: FastifyPluginCallback = (fastify, opts, next) => {
       }
     },
     async (request, reply) => {
-      const { ingestId } = request.params;
+      const { ingestIOId } = request.params;
       try {
-        if (!(await ingestManager.deleteIngest(parseInt(ingestId, 10)))) {
-          throw new Error('Could not delete ingest');
+        if (!(await ingestIOManager.deleteIngestIO(parseInt(ingestIOId, 10)))) {
+          throw new Error('Could not delete ingest IO');
         }
-        reply.code(200).send(`Deleted ingest ${ingestId}`);
+        reply.code(200).send(`Deleted ingest IO ${ingestIOId}`);
       } catch (err) {
         Log().error(err);
         reply
           .code(500)
-          .send('Exception thrown when trying to delete ingest: ' + err);
+          .send('Exception thrown when trying to delete ingest IO: ' + err);
       }
     }
   );
@@ -282,7 +301,7 @@ const apiIngests: FastifyPluginCallback = (fastify, opts, next) => {
   next();
 };
 
-export async function getApiIngests() {
-  await ingestManager.load();
-  return apiIngests;
+export async function getApiIngestIOs() {
+  await ingestIOManager.load();
+  return apiIngestIOs;
 }

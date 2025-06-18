@@ -16,6 +16,17 @@ interface IngestUpdate {
   };
 }
 
+type DeviceData = {
+  deviceOutput: {
+    name: string;
+    label: string;
+  }[];
+  deviceInput: {
+    name: string;
+    label: string;
+  }[];
+};
+
 export class IngestManager extends EventEmitter {
   private dbManager: DbManager;
 
@@ -53,7 +64,7 @@ export class IngestManager extends EventEmitter {
 
   private async fetchDeviceData(
     ipAddress: string
-  ): Promise<{ deviceOutput: any[]; deviceInput: any[] } | undefined> {
+  ): Promise<DeviceData | undefined> {
     try {
       // TODO: Implement actual device communication
       // This is a placeholder that will be replaced with actual device communication

@@ -30,6 +30,12 @@ export type IngestListResponse = Static<typeof IngestListResponse>;
 export type PatchIngest = Static<typeof PatchIngest>;
 export type PatchIngestResponse = Static<typeof PatchIngestResponse>;
 
+export type IngestIO = Static<typeof IngestIO>;
+export type NewIngestIO = Static<typeof NewIngestIO>;
+export type IngestIOListResponse = Static<typeof IngestIOListResponse>;
+export type PatchIngestIO = Static<typeof PatchIngestIO>;
+export type PatchIngestIOResponse = Static<typeof PatchIngestIOResponse>;
+
 export const Audio = Type.Object({
   'relay-type': Type.Array(
     Type.Union([
@@ -308,3 +314,48 @@ export const PatchIngest = Type.Union([
 ]);
 
 export const PatchIngestResponse = Type.Omit(Ingest, ['ipAddress']);
+
+export const IngestIO = Type.Object({
+  _id: Type.Number(),
+  label: Type.String(),
+  ingestId: Type.Number(),
+  deviceInput: Type.Object({
+    name: Type.String(),
+    label: Type.String()
+  }),
+  deviceOutput: Type.Object({
+    name: Type.String(),
+    label: Type.String()
+  }),
+  productionId: Type.String(),
+  lineId: Type.String()
+});
+
+export const NewIngestIO = Type.Omit(IngestIO, ['_id']);
+
+export const IngestIOListResponse = Type.Object({
+  ingestIOs: Type.Array(IngestIO),
+  offset: Type.Number(),
+  limit: Type.Number(),
+  totalItems: Type.Number()
+});
+
+export const PatchIngestIO = Type.Union([
+  Type.Object({ label: Type.String() }),
+  Type.Object({
+    deviceOutput: Type.Object({
+      name: Type.String(),
+      label: Type.String()
+    })
+  }),
+  Type.Object({
+    deviceInput: Type.Object({
+      name: Type.String(),
+      label: Type.String()
+    })
+  }),
+  Type.Object({ productionId: Type.String() }),
+  Type.Object({ lineId: Type.String() })
+]);
+
+export const PatchIngestIOResponse = Type.Omit(IngestIO, ['ingestId']);

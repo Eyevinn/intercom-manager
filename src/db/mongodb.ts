@@ -1,6 +1,13 @@
 import { MongoClient } from 'mongodb';
 import { DbManager } from './interface';
-import { Ingest, Line, NewIngest, Production } from '../models';
+import {
+  Ingest,
+  IngestIO,
+  Line,
+  NewIngest,
+  NewIngestIO,
+  Production
+} from '../models';
 import { assert } from '../utils';
 
 export class DbManagerMongoDb implements DbManager {
@@ -105,6 +112,12 @@ export class DbManagerMongoDb implements DbManager {
       );
   }
 
+  /**
+   * Add a new ingest to the database
+   * @param newIngest - The new ingest to add
+   * @returns The added ingest
+   */
+
   async addIngest(newIngest: NewIngest): Promise<Ingest> {
     const db = this.client.db();
     const _id = await this.getNextSequence('ingests');
@@ -153,6 +166,63 @@ export class DbManagerMongoDb implements DbManager {
     const result = await db
       .collection<Ingest>('ingests')
       .deleteOne({ _id: ingestId as any });
+    return result.deletedCount === 1;
+  }
+
+  /**
+   * Add a new ingest IO to the database
+   * @param newIngestIO - The new ingest IO to add
+   * @returns The added ingest IO
+   */
+
+  async addIngestIO(newIngestIO: NewIngestIO): Promise<IngestIO> {
+    const db = this.client.db();
+    const _id = await this.getNextSequence('ingest_ios');
+    const ingestIO = { ...newIngestIO, _id };
+    await db.collection<IngestIO>('ingest_ios').insertOne(ingestIO as any);
+    return ingestIO as IngestIO;
+  }
+
+  /** Get all ingests from the database in reverse natural order, limited by the limit parameter */
+  async getIngestIOs(limit: number, offset: number): Promise<IngestIO[]> {
+    const db = this.client.db();
+    const ingestIOs = await db
+      .collection<IngestIO>('ingest_ios')
+      .find()
+      .sort({ $natural: -1 })
+      .skip(offset)
+      .limit(limit)
+      .toArray();
+
+    return ingestIOs as IngestIO[];
+  }
+
+  async getIngestIO(id: number): Promise<IngestIO | undefined> {
+    const db = this.client.db();
+    // eslint-disable-next-line
+    return db.collection<IngestIO>('ingest_ios').findOne({ _id: id as any }) as
+      | any
+      | undefined;
+  }
+
+  async getIngestIOsLength(): Promise<number> {
+    const db = this.client.db();
+    return await db.collection<IngestIO>('ingest_ios').countDocuments();
+  }
+
+  async updateIngestIO(ingestIO: IngestIO): Promise<IngestIO | undefined> {
+    const db = this.client.db();
+    const result = await db
+      .collection<IngestIO>('ingest_ios')
+      .updateOne({ _id: ingestIO._id as any }, { $set: ingestIO });
+    return result.modifiedCount === 1 ? ingestIO : undefined;
+  }
+
+  async deleteIngestIO(ingestIOId: number): Promise<boolean> {
+    const db = this.client.db();
+    const result = await db
+      .collection<IngestIO>('ingest_ios')
+      .deleteOne({ _id: ingestIOId as any });
     return result.deletedCount === 1;
   }
 }

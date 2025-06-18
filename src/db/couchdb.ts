@@ -1,4 +1,11 @@
-import { Ingest, Line, NewIngest, Production } from '../models';
+import {
+  Ingest,
+  IngestIO,
+  Line,
+  NewIngest,
+  NewIngestIO,
+  Production
+} from '../models';
 import { assert } from '../utils';
 import { DbManager } from './interface';
 import nano from 'nano';
@@ -124,6 +131,12 @@ export class DbManagerCouchDb implements DbManager {
     );
   }
 
+  /**
+   * Add a new ingest to the database
+   * @param newIngest - The new ingest to add
+   * @returns The added ingest
+   */
+
   async addIngest(newIngest: NewIngest): Promise<Ingest> {
     const _id = await this.getNextSequence('ingests');
     if (_id === -1) {
@@ -179,6 +192,70 @@ export class DbManagerCouchDb implements DbManager {
   async deleteIngest(ingestId: number): Promise<boolean> {
     const ingest = await this.nanoDb.get(ingestId.toString());
     const response = await this.nanoDb.destroy(ingest._id, ingest._rev);
+    return response.ok;
+  }
+
+  /**
+   * Add a new ingest IO to the database
+   * @param newIngestIO - The new ingest IO to add
+   * @returns The added ingest IO
+   */
+
+  async addIngestIO(newIngestIO: NewIngestIO): Promise<IngestIO> {
+    const _id = await this.getNextSequence('ingest_ios');
+    if (_id === -1) {
+      throw new Error('Failed to get next sequence');
+    }
+    const insertIngestIO = {
+      ...newIngestIO,
+      _id: _id.toString()
+    };
+    const response = await this.nanoDb.insert(
+      insertIngestIO as unknown as nano.MaybeDocument
+    );
+    if (!response.ok) throw new Error('Failed to insert ingestIO');
+    return { ...newIngestIO, _id } as any;
+  }
+
+  /** Get all ingests from the database in reverse natural order, limited by the limit parameter */
+  async getIngestIOs(): Promise<IngestIO[]> {
+    const ingestIOs: IngestIO[] = [];
+    const response = await this.nanoDb.list({
+      include_docs: true
+    });
+    // eslint-disable-next-line
+    response.rows.forEach((row: any) => {
+      if (row.doc._id.toLowerCase().indexOf('counter') === -1)
+        ingestIOs.push(row.doc);
+    });
+    return ingestIOs as any as IngestIO[];
+  }
+
+  async getIngestIOsLength(): Promise<number> {
+    const ingestIOs = await this.nanoDb.list({ include_docs: false });
+    return ingestIOs.rows.length;
+  }
+
+  async getIngestIO(id: number): Promise<IngestIO | undefined> {
+    const ingestIO = await this.nanoDb.get(id.toString());
+    // eslint-disable-next-line
+    return ingestIO as any | undefined;
+  }
+
+  async updateIngestIO(ingestIO: IngestIO): Promise<IngestIO | undefined> {
+    const existingIngestIO = await this.nanoDb.get(ingestIO._id.toString());
+    const updatedIngestIO = {
+      ...existingIngestIO,
+      ...ingestIO,
+      _id: ingestIO._id.toString()
+    };
+    const response = await this.nanoDb.insert(updatedIngestIO);
+    return response.ok ? ingestIO : undefined;
+  }
+
+  async deleteIngestIO(ingestIOId: number): Promise<boolean> {
+    const ingestIO = await this.nanoDb.get(ingestIOId.toString());
+    const response = await this.nanoDb.destroy(ingestIO._id, ingestIO._rev);
     return response.ok;
   }
 }

@@ -1,4 +1,11 @@
-import { Ingest, Line, NewIngest, Production } from '../models';
+import {
+  Ingest,
+  IngestIO,
+  Line,
+  NewIngest,
+  NewIngestIO,
+  Production
+} from '../models';
 
 export interface DbManager {
   connect(): Promise<void>;
@@ -20,4 +27,10 @@ export interface DbManager {
   getIngests(limit: number, offset: number): Promise<Ingest[]>;
   updateIngest(ingest: Ingest): Promise<Ingest | undefined>;
   deleteIngest(ingestId: number): Promise<boolean>;
+  addIngestIO(newIngestIO: NewIngestIO): Promise<IngestIO>;
+  getIngestIO(id: number): Promise<IngestIO | undefined>;
+  getIngestIOsLength(): Promise<number>;
+  getIngestIOs(limit: number, offset: number): Promise<IngestIO[]>;
+  updateIngestIO(ingestIO: IngestIO): Promise<IngestIO | undefined>;
+  deleteIngestIO(ingestIOId: number): Promise<boolean>;
 }

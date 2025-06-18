@@ -33,7 +33,7 @@ jest.mock('./db/interface', () => ({
   connect: jest.fn()
 }));
 
-const deepClone = (obj: any) => JSON.parse(JSON.stringify(obj));
+const deepClone = (obj: Ingest) => JSON.parse(JSON.stringify(obj));
 
 beforeEach(() => {
   jest.resetAllMocks();
