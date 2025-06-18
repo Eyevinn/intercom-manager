@@ -106,9 +106,9 @@ const apiIngests: FastifyPluginCallback = (fastify, opts, next) => {
         const ingests = await ingestManager.getIngests(limit, offset);
         const totalItems = await ingestManager.getNumberOfIngests();
         const responseIngests: Ingest[] = ingests.map(
-          ({ _id, name, ipAddress, deviceOutput, deviceInput }) => ({
+          ({ _id, label, ipAddress, deviceOutput, deviceInput }) => ({
             _id,
-            name,
+            label,
             ipAddress,
             deviceOutput,
             deviceInput
@@ -157,7 +157,7 @@ const apiIngests: FastifyPluginCallback = (fastify, opts, next) => {
         }
         const ingestResponse: Ingest = {
           _id: ingest._id,
-          name: ingest.name,
+          label: ingest.label,
           ipAddress: ingest.ipAddress,
           deviceOutput: ingest.deviceOutput,
           deviceInput: ingest.deviceInput
@@ -175,7 +175,7 @@ const apiIngests: FastifyPluginCallback = (fastify, opts, next) => {
   fastify.patch<{
     Params: { ingestId: string };
     Body:
-      | { name: string }
+      | { label: string }
       | { deviceOutput: { name: string; label: string } }
       | { deviceInput: { name: string; label: string } };
     Reply: PatchIngestResponse | ErrorResponse | string;
@@ -184,7 +184,7 @@ const apiIngests: FastifyPluginCallback = (fastify, opts, next) => {
     {
       schema: {
         description:
-          'Modify an existing Ingest. By changing the name, the deviceOutput or the deviceInput, the ingest is updated and the new ingest is returned.',
+          'Modify an existing Ingest. By changing the label, the deviceOutput or the deviceInput, the ingest is updated and the new ingest is returned.',
         body: PatchIngest,
         response: {
           200: PatchIngestResponse,
@@ -210,24 +210,7 @@ const apiIngests: FastifyPluginCallback = (fastify, opts, next) => {
             message: `Ingest with id ${ingestId} not found`
           });
         } else {
-          if ('name' in request.body) {
-            const updatedIngest = await ingestManager.updateIngest(
-              ingest,
-              request.body.name
-            );
-            if (!updatedIngest) {
-              reply.code(400).send({
-                message: `Failed to update ingest with id ${ingestId}`
-              });
-            } else {
-              reply.code(200).send({
-                _id: updatedIngest._id,
-                name: updatedIngest.name,
-                deviceOutput: updatedIngest.deviceOutput,
-                deviceInput: updatedIngest.deviceInput
-              });
-            }
-          } else if ('deviceOutput' in request.body) {
+          if ('deviceOutput' in request.body) {
             const updatedIngest = await ingestManager.updateIngestDeviceOutput(
               ingest,
               request.body.deviceOutput.name,
@@ -240,7 +223,7 @@ const apiIngests: FastifyPluginCallback = (fastify, opts, next) => {
             } else {
               reply.code(200).send({
                 _id: updatedIngest._id,
-                name: updatedIngest.name,
+                label: updatedIngest.label,
                 deviceOutput: updatedIngest.deviceOutput,
                 deviceInput: updatedIngest.deviceInput
               });
@@ -258,7 +241,24 @@ const apiIngests: FastifyPluginCallback = (fastify, opts, next) => {
             } else {
               reply.code(200).send({
                 _id: updatedIngest._id,
-                name: updatedIngest.name,
+                label: updatedIngest.label,
+                deviceOutput: updatedIngest.deviceOutput,
+                deviceInput: updatedIngest.deviceInput
+              });
+            }
+          } else if ('label' in request.body) {
+            const updatedIngest = await ingestManager.updateIngest(
+              ingest,
+              request.body.label
+            );
+            if (!updatedIngest) {
+              reply.code(400).send({
+                message: `Failed to update ingest with id ${ingestId}`
+              });
+            } else {
+              reply.code(200).send({
+                _id: updatedIngest._id,
+                label: updatedIngest.label,
                 deviceOutput: updatedIngest.deviceOutput,
                 deviceInput: updatedIngest.deviceInput
               });

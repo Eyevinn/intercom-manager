@@ -262,13 +262,13 @@ export const ReAuthResponse = Type.Object({
 export type ReAuthResponse = Static<typeof ReAuthResponse>;
 
 export const NewIngest = Type.Object({
-  name: Type.String(),
+  label: Type.String(),
   ipAddress: Type.String()
 });
 
 export const Ingest = Type.Object({
   _id: Type.Number(),
-  name: Type.String(),
+  label: Type.String(),
   ipAddress: Type.String(),
   deviceOutput: Type.Array(
     Type.Object({
@@ -292,7 +292,7 @@ export const IngestListResponse = Type.Object({
 });
 
 export const PatchIngest = Type.Union([
-  Type.Object({ name: Type.String() }),
+  Type.Object({ label: Type.String() }),
   Type.Object({
     deviceOutput: Type.Object({
       name: Type.String(),

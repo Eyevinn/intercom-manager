@@ -106,9 +106,9 @@ export class IngestManager extends EventEmitter {
 
   async updateIngest(
     ingest: Ingest,
-    ingestName: string
+    ingestLabel: string
   ): Promise<Ingest | undefined> {
-    ingest.name = ingestName;
+    ingest.label = ingestLabel;
     return this.dbManager.updateIngest(ingest);
   }
 

@@ -2,13 +2,13 @@ import { IngestManager } from './ingest_manager';
 import { Ingest, NewIngest } from './models';
 
 const newIngest: NewIngest = {
-  name: 'ingestname',
+  label: 'ingestlabel',
   ipAddress: '127.0.0.1'
 };
 
 const existingIngest: Ingest = {
   _id: 1,
-  name: 'ingestname',
+  label: 'ingestlabel',
   ipAddress: '127.0.0.1',
   deviceOutput: [
     {
@@ -108,7 +108,7 @@ describe('ingest_manager', () => {
   it('deleting ingest object removes it from class instance', async () => {
     const ingest1: Ingest = {
       _id: 1,
-      name: 'ingestname1',
+      label: 'ingestlabel1',
       ipAddress: '127.0.0.1',
       deviceOutput: [
         {
@@ -126,7 +126,7 @@ describe('ingest_manager', () => {
 
     const ingest2: Ingest = {
       _id: 2,
-      name: 'ingestname2',
+      label: 'ingestlabel2',
       ipAddress: '127.0.0.2',
       deviceOutput: [
         {
@@ -195,7 +195,7 @@ describe('ingest_manager', () => {
       jest.resetAllMocks();
     });
 
-    it('change the name of a device output in an ingest', async () => {
+    it('change the label of a device output in an ingest', async () => {
       const dbManager = jest.requireMock('./db/interface');
       dbManager.getIngest.mockReturnValueOnce(deepClone(existingIngest));
       const ingestManagerTest = new IngestManager(dbManager);
@@ -208,7 +208,7 @@ describe('ingest_manager', () => {
         );
         expect(dbManager.updateIngest).toHaveBeenLastCalledWith({
           _id: 1,
-          name: 'ingestname',
+          label: 'ingestlabel',
           ipAddress: '127.0.0.1',
           deviceOutput: [
             {
@@ -226,7 +226,7 @@ describe('ingest_manager', () => {
       }
     });
 
-    it('change the name of a device input in an ingest', async () => {
+    it('change the label of a device input in an ingest', async () => {
       const dbManager = jest.requireMock('./db/interface');
       dbManager.getIngest.mockReturnValueOnce(deepClone(existingIngest));
       const ingestManagerTest = new IngestManager(dbManager);
@@ -239,7 +239,7 @@ describe('ingest_manager', () => {
         );
         expect(dbManager.updateIngest).toHaveBeenLastCalledWith({
           _id: 1,
-          name: 'ingestname',
+          label: 'ingestlabel',
           ipAddress: '127.0.0.1',
           deviceInput: [
             {
@@ -257,16 +257,16 @@ describe('ingest_manager', () => {
       }
     });
 
-    it('change the name of an ingest', async () => {
+    it('change the label of an ingest', async () => {
       const dbManager = jest.requireMock('./db/interface');
       dbManager.getIngest.mockReturnValueOnce(deepClone(existingIngest));
       const ingestManagerTest = new IngestManager(dbManager);
       const ingest = await ingestManagerTest.getIngest(1);
       if (ingest) {
-        await ingestManagerTest.updateIngest(ingest, 'newName');
+        await ingestManagerTest.updateIngest(ingest, 'newLabel');
         expect(dbManager.updateIngest).toHaveBeenLastCalledWith({
           _id: 1,
-          name: 'newName',
+          label: 'newLabel',
           ipAddress: '127.0.0.1',
           deviceOutput: [
             {
