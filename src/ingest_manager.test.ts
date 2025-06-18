@@ -201,11 +201,12 @@ describe('ingest_manager', () => {
       const ingestManagerTest = new IngestManager(dbManager);
       const ingest = await ingestManagerTest.getIngest(1);
       if (ingest) {
-        await ingestManagerTest.updateIngestDeviceOutput(
-          ingest,
-          'deviceoutputname',
-          'newLabel'
-        );
+        await ingestManagerTest.updateIngest(ingest, {
+          deviceOutput: {
+            name: 'deviceoutputname',
+            label: 'newLabel'
+          }
+        });
         expect(dbManager.updateIngest).toHaveBeenLastCalledWith({
           _id: 1,
           label: 'ingestlabel',
@@ -232,11 +233,12 @@ describe('ingest_manager', () => {
       const ingestManagerTest = new IngestManager(dbManager);
       const ingest = await ingestManagerTest.getIngest(1);
       if (ingest) {
-        await ingestManagerTest.updateIngestDeviceInput(
-          ingest,
-          'deviceinputname',
-          'newLabel'
-        );
+        await ingestManagerTest.updateIngest(ingest, {
+          deviceInput: {
+            name: 'deviceinputname',
+            label: 'newLabel'
+          }
+        });
         expect(dbManager.updateIngest).toHaveBeenLastCalledWith({
           _id: 1,
           label: 'ingestlabel',
@@ -263,7 +265,9 @@ describe('ingest_manager', () => {
       const ingestManagerTest = new IngestManager(dbManager);
       const ingest = await ingestManagerTest.getIngest(1);
       if (ingest) {
-        await ingestManagerTest.updateIngest(ingest, 'newLabel');
+        await ingestManagerTest.updateIngest(ingest, {
+          label: 'newLabel'
+        });
         expect(dbManager.updateIngest).toHaveBeenLastCalledWith({
           _id: 1,
           label: 'newLabel',

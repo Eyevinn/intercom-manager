@@ -4,6 +4,18 @@ import { DbManager } from './db/interface';
 import { Ingest, NewIngest } from './models';
 import { Log } from './log';
 
+interface IngestUpdate {
+  label?: string;
+  deviceInput?: {
+    name: string;
+    label: string;
+  };
+  deviceOutput?: {
+    name: string;
+    label: string;
+  };
+}
+
 export class IngestManager extends EventEmitter {
   private dbManager: DbManager;
 
@@ -106,40 +118,37 @@ export class IngestManager extends EventEmitter {
 
   async updateIngest(
     ingest: Ingest,
-    ingestLabel: string
+    updates: IngestUpdate
   ): Promise<Ingest | undefined> {
-    ingest.label = ingestLabel;
+    if (updates.label !== undefined) {
+      ingest.label = updates.label;
+    }
+
+    if (updates.deviceOutput) {
+      const { name, label } = updates.deviceOutput;
+      const deviceOutput = ingest.deviceOutput.find(
+        (device) => device.name === name
+      );
+      if (deviceOutput) {
+        deviceOutput.label = label;
+      } else {
+        return undefined;
+      }
+    }
+
+    if (updates.deviceInput) {
+      const { name, label } = updates.deviceInput;
+      const deviceInput = ingest.deviceInput.find(
+        (device) => device.name === name
+      );
+      if (deviceInput) {
+        deviceInput.label = label;
+      } else {
+        return undefined;
+      }
+    }
+
     return this.dbManager.updateIngest(ingest);
-  }
-
-  async updateIngestDeviceOutput(
-    ingest: Ingest,
-    deviceOutputName: string,
-    deviceOutputLabel: string
-  ): Promise<Ingest | undefined> {
-    const deviceOutput = ingest.deviceOutput.find(
-      (deviceOutput) => deviceOutput.name === deviceOutputName
-    );
-    if (deviceOutput) {
-      deviceOutput.label = deviceOutputLabel;
-      return this.dbManager.updateIngest(ingest);
-    }
-    return undefined;
-  }
-
-  async updateIngestDeviceInput(
-    ingest: Ingest,
-    deviceInputName: string,
-    deviceInputLabel: string
-  ): Promise<Ingest | undefined> {
-    const deviceInput = ingest.deviceInput.find(
-      (deviceInput) => deviceInput.name === deviceInputName
-    );
-    if (deviceInput) {
-      deviceInput.label = deviceInputLabel;
-      return this.dbManager.updateIngest(ingest);
-    }
-    return undefined;
   }
 
   /**

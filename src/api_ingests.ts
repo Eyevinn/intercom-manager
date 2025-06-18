@@ -174,10 +174,7 @@ const apiIngests: FastifyPluginCallback = (fastify, opts, next) => {
 
   fastify.patch<{
     Params: { ingestId: string };
-    Body:
-      | { label: string }
-      | { deviceOutput: { name: string; label: string } }
-      | { deviceInput: { name: string; label: string } };
+    Body: PatchIngest;
     Reply: PatchIngestResponse | ErrorResponse | string;
   }>(
     '/ingest/:ingestId',
@@ -210,62 +207,36 @@ const apiIngests: FastifyPluginCallback = (fastify, opts, next) => {
             message: `Ingest with id ${ingestId} not found`
           });
         } else {
+          const updates: any = {};
+
           if ('deviceOutput' in request.body) {
-            const updatedIngest = await ingestManager.updateIngestDeviceOutput(
-              ingest,
-              request.body.deviceOutput.name,
-              request.body.deviceOutput.label
-            );
-            if (!updatedIngest) {
-              reply.code(400).send({
-                message: `Failed to update ingest with id ${ingestId}`
-              });
-            } else {
-              reply.code(200).send({
-                _id: updatedIngest._id,
-                label: updatedIngest.label,
-                deviceOutput: updatedIngest.deviceOutput,
-                deviceInput: updatedIngest.deviceInput
-              });
-            }
+            updates.deviceOutput = request.body.deviceOutput;
           } else if ('deviceInput' in request.body) {
-            const updatedIngest = await ingestManager.updateIngestDeviceInput(
-              ingest,
-              request.body.deviceInput.name,
-              request.body.deviceInput.label
-            );
-            if (!updatedIngest) {
-              reply.code(400).send({
-                message: `Failed to update ingest with id ${ingestId}`
-              });
-            } else {
-              reply.code(200).send({
-                _id: updatedIngest._id,
-                label: updatedIngest.label,
-                deviceOutput: updatedIngest.deviceOutput,
-                deviceInput: updatedIngest.deviceInput
-              });
-            }
+            updates.deviceInput = request.body.deviceInput;
           } else if ('label' in request.body) {
-            const updatedIngest = await ingestManager.updateIngest(
-              ingest,
-              request.body.label
-            );
-            if (!updatedIngest) {
-              reply.code(400).send({
-                message: `Failed to update ingest with id ${ingestId}`
-              });
-            } else {
-              reply.code(200).send({
-                _id: updatedIngest._id,
-                label: updatedIngest.label,
-                deviceOutput: updatedIngest.deviceOutput,
-                deviceInput: updatedIngest.deviceInput
-              });
-            }
+            updates.label = request.body.label;
           } else {
             reply.code(400).send({
               message: 'Invalid request body'
+            });
+            return;
+          }
+
+          const updatedIngest = await ingestManager.updateIngest(
+            ingest,
+            updates
+          );
+
+          if (!updatedIngest) {
+            reply.code(400).send({
+              message: `Failed to update ingest with id ${ingestId}`
+            });
+          } else {
+            reply.code(200).send({
+              _id: updatedIngest._id,
+              label: updatedIngest.label,
+              deviceOutput: updatedIngest.deviceOutput,
+              deviceInput: updatedIngest.deviceInput
             });
           }
         }
