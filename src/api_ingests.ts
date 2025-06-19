@@ -16,6 +16,7 @@ dotenv.config();
 
 export interface ApiIngestsOptions {
   dbManager: DbManager;
+  ingestManager: IngestManager;
 }
 
 const apiIngests: FastifyPluginCallback<ApiIngestsOptions> = (
@@ -23,7 +24,7 @@ const apiIngests: FastifyPluginCallback<ApiIngestsOptions> = (
   opts,
   next
 ) => {
-  const ingestManager = new IngestManager(opts.dbManager);
+  const ingestManager = opts.ingestManager;
 
   fastify.post<{
     Body: NewIngest;
@@ -200,6 +201,7 @@ const apiIngests: FastifyPluginCallback<ApiIngestsOptions> = (
             message: `Ingest with id ${ingestId} not found`
           });
         } else {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const updates: any = {};
 
           if ('deviceOutput' in request.body) {
@@ -275,8 +277,6 @@ const apiIngests: FastifyPluginCallback<ApiIngestsOptions> = (
   next();
 };
 
-export async function getApiIngests(dbManager: DbManager) {
-  const ingestManager = new IngestManager(dbManager);
-  await ingestManager.load();
+export function getApiIngests() {
   return apiIngests;
 }

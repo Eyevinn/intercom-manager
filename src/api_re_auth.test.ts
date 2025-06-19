@@ -34,6 +34,15 @@ const mockDbManager = {
   deleteIngest: jest.fn().mockResolvedValue(true)
 };
 
+const mockProductionManager = {
+  checkUserStatus: jest.fn()
+} as any;
+
+const mockIngestManager = {
+  load: jest.fn().mockResolvedValue(undefined),
+  startPolling: jest.fn()
+} as any;
+
 describe('reAuth api', () => {
   test('can generate a new SAT Token for the OSC Intercom instance', async () => {
     const server = await api({
@@ -41,7 +50,9 @@ describe('reAuth api', () => {
       smbServerBaseUrl: 'http://localhost',
       endpointIdleTimeout: '60',
       publicHost: 'https://example.com',
-      dbManager: mockDbManager
+      dbManager: mockDbManager,
+      productionManager: mockProductionManager,
+      ingestManager: mockIngestManager
     });
     const response = await server.inject({
       method: 'GET',

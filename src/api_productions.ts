@@ -29,21 +29,12 @@ import { Log } from './log';
 import { DbManager } from './db/interface';
 dotenv.config();
 
-let globalProductionManager: ProductionManager | null = null;
-
-export function checkUserStatus() {
-  globalProductionManager?.checkUserStatus();
-}
-
-export function setGlobalProductionManager(pm: ProductionManager) {
-  globalProductionManager = pm;
-}
-
 export interface ApiProductionsOptions {
   smbServerBaseUrl: string;
   endpointIdleTimeout: string;
   smbServerApiKey?: string;
   dbManager: DbManager;
+  productionManager: ProductionManager;
 }
 
 const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
@@ -58,7 +49,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   const smb = new SmbProtocol();
   const smbServerApiKey = opts.smbServerApiKey || '';
 
-  const productionManager = new ProductionManager(opts.dbManager);
+  const productionManager = opts.productionManager;
   const connectionQueue = new ConnectionQueue();
   const coreFunctions = new CoreFunctions(productionManager, connectionQueue);
 
@@ -825,9 +816,6 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   next();
 };
 
-export async function getApiProductions(dbManager: DbManager) {
-  const productionManager = new ProductionManager(dbManager);
-  await productionManager.load();
-  setGlobalProductionManager(productionManager);
+export function getApiProductions() {
   return apiProductions;
 }

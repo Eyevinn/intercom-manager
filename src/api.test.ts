@@ -34,6 +34,32 @@ const mockDbManager = {
   deleteIngest: jest.fn().mockResolvedValue(true)
 };
 
+const mockProductionManager = {
+  checkUserStatus: jest.fn(),
+  load: jest.fn().mockResolvedValue(undefined),
+  createProduction: jest.fn().mockResolvedValue({}),
+  getProductions: jest.fn().mockResolvedValue([]),
+  getNumberOfProductions: jest.fn().mockResolvedValue(0),
+  requireProduction: jest.fn().mockResolvedValue({}),
+  updateProduction: jest.fn().mockResolvedValue({}),
+  addProductionLine: jest.fn().mockResolvedValue(undefined),
+  getLine: jest.fn().mockResolvedValue(undefined),
+  getUsersForLine: jest.fn().mockResolvedValue([]),
+  updateProductionLine: jest.fn().mockResolvedValue({}),
+  deleteProductionLine: jest.fn().mockResolvedValue(undefined),
+  deleteProduction: jest.fn().mockResolvedValue(true),
+  removeUserSession: jest.fn().mockResolvedValue('session-id'),
+  getUser: jest.fn().mockResolvedValue(undefined),
+  requireLine: jest.fn().mockResolvedValue({}),
+  updateUserLastSeen: jest.fn().mockResolvedValue(true),
+  once: jest.fn()
+} as any;
+
+const mockIngestManager = {
+  load: jest.fn().mockResolvedValue(undefined),
+  startPolling: jest.fn()
+} as any;
+
 describe('api', () => {
   it('responds with hello, world!', async () => {
     const server = await api({
@@ -41,7 +67,9 @@ describe('api', () => {
       smbServerBaseUrl: 'http://localhost',
       endpointIdleTimeout: '60',
       publicHost: 'http://localhost',
-      dbManager: mockDbManager
+      dbManager: mockDbManager,
+      productionManager: mockProductionManager,
+      ingestManager: mockIngestManager
     });
     const response = await server.inject({
       method: 'GET',
