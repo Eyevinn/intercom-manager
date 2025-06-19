@@ -11,27 +11,20 @@ import {
 import { IngestManager } from './ingest_manager';
 import dotenv from 'dotenv';
 import { Log } from './log';
-import { DbManagerMongoDb } from './db/mongodb';
-import { DbManagerCouchDb } from './db/couchdb';
+import { DbManager } from './db/interface';
 dotenv.config();
 
-const DB_CONNECTION_STRING: string =
-  process.env.DB_CONNECTION_STRING ??
-  process.env.MONGODB_CONNECTION_STRING ??
-  'mongodb://localhost:27017/intercom-manager';
-let dbManager;
-const dbUrl = new URL(DB_CONNECTION_STRING);
-if (dbUrl.protocol === 'mongodb:') {
-  dbManager = new DbManagerMongoDb(dbUrl);
-} else if (dbUrl.protocol === 'http:' || dbUrl.protocol === 'https:') {
-  dbManager = new DbManagerCouchDb(dbUrl);
-} else {
-  throw new Error('Unsupported database protocol');
+export interface ApiIngestsOptions {
+  dbManager: DbManager;
 }
 
-const ingestManager = new IngestManager(dbManager);
+const apiIngests: FastifyPluginCallback<ApiIngestsOptions> = (
+  fastify,
+  opts,
+  next
+) => {
+  const ingestManager = new IngestManager(opts.dbManager);
 
-const apiIngests: FastifyPluginCallback = (fastify, opts, next) => {
   fastify.post<{
     Body: NewIngest;
     Reply: { success: boolean; message: string };
@@ -85,7 +78,7 @@ const apiIngests: FastifyPluginCallback = (fastify, opts, next) => {
       extended?: boolean;
     };
   }>(
-    '/ingestlist',
+    '/ingest',
     {
       schema: {
         description: 'Paginated list of all ingests.',
@@ -282,7 +275,8 @@ const apiIngests: FastifyPluginCallback = (fastify, opts, next) => {
   next();
 };
 
-export async function getApiIngests() {
+export async function getApiIngests(dbManager: DbManager) {
+  const ingestManager = new IngestManager(dbManager);
   await ingestManager.load();
   return apiIngests;
 }

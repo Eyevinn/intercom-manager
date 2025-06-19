@@ -10,6 +10,7 @@ import apiShare from './api_share';
 import apiReAuth from './api_re_auth';
 import fastifyCookie from '@fastify/cookie';
 import { getApiIngests } from './api_ingests';
+import { DbManager } from './db/interface';
 
 const HelloWorld = Type.String({
   description: 'The magical words!'
@@ -47,6 +48,7 @@ export interface ApiOptions {
   endpointIdleTimeout: string;
   smbServerApiKey?: string;
   publicHost: string;
+  dbManager: DbManager;
 }
 
 export default async (opts: ApiOptions) => {
@@ -78,14 +80,18 @@ export default async (opts: ApiOptions) => {
 
   api.register(healthcheck, { title: opts.title });
   // register other API routes here
-  api.register(await getApiProductions(), {
+  api.register(await getApiProductions(opts.dbManager), {
     prefix: 'api/v1',
     smbServerBaseUrl: opts.smbServerBaseUrl,
     endpointIdleTimeout: opts.endpointIdleTimeout,
-    smbServerApiKey: opts.smbServerApiKey
+    smbServerApiKey: opts.smbServerApiKey,
+    dbManager: opts.dbManager
   });
   api.register(apiShare, { publicHost: opts.publicHost, prefix: 'api/v1' });
   api.register(apiReAuth, { prefix: 'api/v1' });
-  api.register(await getApiIngests(), { prefix: 'api/v1' });
+  api.register(await getApiIngests(opts.dbManager), {
+    prefix: 'api/v1',
+    dbManager: opts.dbManager
+  });
   return api;
 };
