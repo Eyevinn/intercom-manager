@@ -5,15 +5,14 @@ import swaggerUI from '@fastify/swagger-ui';
 import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import { Static, Type } from '@sinclair/typebox';
 import fastify, { FastifyPluginCallback } from 'fastify';
+import { getApiIngests } from './api_ingests';
 import apiPermissions from './api_permissions';
 import { getApiProductions } from './api_productions';
 import apiReAuth from './api_re_auth';
 import apiShare from './api_share';
-import fastifyCookie from '@fastify/cookie';
-import { getApiIngests } from './api_ingests';
 import { DbManager } from './db/interface';
-import { ProductionManager } from './production_manager';
 import { IngestManager } from './ingest_manager';
+import { ProductionManager } from './production_manager';
 
 const HelloWorld = Type.String({
   description: 'The magical words!'
@@ -96,6 +95,11 @@ export default async (opts: ApiOptions) => {
   api.register(apiShare, { publicHost: opts.publicHost, prefix: 'api/v1' });
   api.register(apiReAuth, { prefix: 'api/v1' });
   api.register(apiPermissions, { prefix: 'api/v1' });
+  api.register(getApiIngests(), {
+    prefix: 'api/v1',
+    dbManager: opts.dbManager,
+    ingestManager: opts.ingestManager
+  });
   api.register(getApiIngests(), {
     prefix: 'api/v1',
     dbManager: opts.dbManager,
