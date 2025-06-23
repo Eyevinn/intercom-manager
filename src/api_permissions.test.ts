@@ -1,7 +1,7 @@
 import api from './api';
 
 describe('permissions api', () => {
-  test('returns participant permissions  when no access key is provided', async () => {
+  test('returns participant permissions when no access key is provided', async () => {
     const server = await api({
       title: 'my awesome service',
       smbServerBaseUrl: 'http://localhost',
@@ -33,7 +33,8 @@ describe('permissions api', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/api/v1/permissions?accessKey=editorkey'
+      url: '/api/v1/permissions',
+      headers: { 'x-access-key': 'editorkey' }
     });
 
     expect(response.statusCode).toBe(200);
@@ -55,7 +56,8 @@ describe('permissions api', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/api/v1/permissions?accessKey=adminkey'
+      url: '/api/v1/permissions',
+      headers: { 'x-access-key': 'adminkey' }
     });
 
     expect(response.statusCode).toBe(200);
@@ -83,7 +85,8 @@ describe('permissions api', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/api/v1/permissions?accessKey=invalidkey'
+      url: '/api/v1/permissions',
+      headers: { 'x-access-key': 'invalidkey' }
     });
 
     expect(response.statusCode).toBe(403);

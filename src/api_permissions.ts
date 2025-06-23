@@ -17,8 +17,8 @@ const apiPermissions: FastifyPluginCallback = (fastify, _opts, next) => {
     {
       schema: {
         description: 'Get frontend permissions for a given access key',
-        querystring: Type.Object({
-          accessKey: Type.Optional(Type.String())
+        headers: Type.Object({
+          'x-access-key': Type.Optional(Type.String())
         }),
         response: {
           200: {
@@ -40,7 +40,7 @@ const apiPermissions: FastifyPluginCallback = (fastify, _opts, next) => {
       }
     },
     async (request, reply) => {
-      const { accessKey } = request.query as { accessKey?: string };
+      const accessKey = request.headers['x-access-key'];
 
       const envRoles = {
         admin: process.env.ADMIN_ACCESS_KEY,
