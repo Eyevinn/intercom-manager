@@ -51,8 +51,14 @@ describe('ingest_manager', () => {
       .mockReturnValueOnce(undefined)
       .mockReturnValue(newIngest);
 
-    const ingestManagerTest = new IngestManager(dbManager);
+    jest
+      .spyOn(IngestManager.prototype as any, 'fetchDeviceData')
+      .mockResolvedValue({
+        deviceInput: [audioDevice],
+        deviceOutput: [audioDevice]
+      });
 
+    const ingestManagerTest = new IngestManager(dbManager);
     const spyAddIngest = jest.spyOn(dbManager, 'addIngest');
 
     await ingestManagerTest.createIngest(newIngest);
@@ -62,11 +68,16 @@ describe('ingest_manager', () => {
   it('creating an already existing ingest returns undefined', async () => {
     const dbManager = jest.requireMock('./db/interface');
 
-    // Simulate success on first create
-    dbManager.addIngest.mockResolvedValueOnce(existingIngest);
+    jest
+      .spyOn(IngestManager.prototype as any, 'fetchDeviceData')
+      .mockResolvedValue({
+        deviceInput: [audioDevice],
+        deviceOutput: [audioDevice]
+      });
 
-    // Simulate failure (e.g., duplicate) on second create
-    dbManager.addIngest.mockResolvedValueOnce(undefined);
+    dbManager.addIngest
+      .mockResolvedValueOnce(existingIngest)
+      .mockResolvedValueOnce(undefined);
 
     const ingestManagerTest = new IngestManager(dbManager);
 
