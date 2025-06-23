@@ -100,10 +100,5 @@ export default async (opts: ApiOptions) => {
     dbManager: opts.dbManager,
     ingestManager: opts.ingestManager
   });
-  api.register(getApiIngests(), {
-    prefix: 'api/v1',
-    dbManager: opts.dbManager,
-    ingestManager: opts.ingestManager
-  });
   return api;
 };
