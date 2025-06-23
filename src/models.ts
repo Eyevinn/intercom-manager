@@ -1,4 +1,4 @@
-import { Type, Static } from '@sinclair/typebox';
+import { Static, Type } from '@sinclair/typebox';
 
 export type NewProduction = Static<typeof NewProduction>;
 export type NewProductionLine = Static<typeof NewProductionLine>;
@@ -261,6 +261,25 @@ export const ReAuthResponse = Type.Object({
 });
 export type ReAuthResponse = Static<typeof ReAuthResponse>;
 
+const AudioDevice = Type.Object({
+  name: Type.String(),
+  maxInputChannels: Type.Number(),
+  maxOutputChannels: Type.Number(),
+  defaultSampleRate: Type.Number(),
+  defaultLowInputLatency: Type.Number(),
+  defaultLowOutputLatency: Type.Number(),
+  defaultHighInputLatency: Type.Number(),
+  defaultHighOutputLatency: Type.Number(),
+  isInput: Type.Boolean(),
+  isOutput: Type.Boolean(),
+  hostAPI: Type.String(),
+  label: Type.Optional(Type.String())
+});
+
+export type AudioDevice = Static<typeof AudioDevice>;
+export const NewAudioDevice = Type.Omit(AudioDevice, ['label']);
+export type NewAudioDevice = Static<typeof NewAudioDevice>;
+
 export const NewIngest = Type.Object({
   label: Type.String(),
   ipAddress: Type.String()
@@ -270,18 +289,8 @@ export const Ingest = Type.Object({
   _id: Type.Number(),
   label: Type.String(),
   ipAddress: Type.String(),
-  deviceOutput: Type.Array(
-    Type.Object({
-      name: Type.String(),
-      label: Type.String()
-    })
-  ),
-  deviceInput: Type.Array(
-    Type.Object({
-      name: Type.String(),
-      label: Type.String()
-    })
-  )
+  deviceOutput: Type.Array(AudioDevice),
+  deviceInput: Type.Array(AudioDevice)
 });
 
 export const IngestListResponse = Type.Object({
@@ -294,16 +303,10 @@ export const IngestListResponse = Type.Object({
 export const PatchIngest = Type.Union([
   Type.Object({ label: Type.String() }),
   Type.Object({
-    deviceOutput: Type.Object({
-      name: Type.String(),
-      label: Type.String()
-    })
+    deviceOutput: AudioDevice
   }),
   Type.Object({
-    deviceInput: Type.Object({
-      name: Type.String(),
-      label: Type.String()
-    })
+    deviceInput: AudioDevice
   })
 ]);
 

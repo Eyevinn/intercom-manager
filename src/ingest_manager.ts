@@ -1,8 +1,8 @@
 import { EventEmitter } from 'events';
 
 import { DbManager } from './db/interface';
-import { Ingest, NewIngest } from './models';
 import { Log } from './log';
+import { AudioDevice, Ingest, NewAudioDevice, NewIngest } from './models';
 
 interface IngestUpdate {
   label?: string;
@@ -53,37 +53,87 @@ export class IngestManager extends EventEmitter {
 
   private async fetchDeviceData(
     ipAddress: string
-  ): Promise<{ deviceOutput: any[]; deviceInput: any[] } | undefined> {
+  ): Promise<
+    { deviceOutput: AudioDevice[]; deviceInput: AudioDevice[] } | undefined
+  > {
     try {
-      // TODO: Implement actual device communication
-      // This is a placeholder that will be replaced with actual device communication
-      Log().info('fetching device data for ip address', ipAddress);
-      return {
-        deviceOutput: [],
-        deviceInput: []
-      };
+      // Normalize and ensure URL structure
+      const hasProtocol = /^https?:\/\//.test(ipAddress);
+      const withProtocol = hasProtocol ? ipAddress : `http://${ipAddress}`;
+
+      const url = new URL(withProtocol);
+      if (!url.port) {
+        url.port = '8080'; // default port if none provided
+      }
+      url.pathname = '/devices';
+
+      const response = await fetch(url.toString());
+
+      if (!response.ok) {
+        throw new Error(`Received non-OK response: ${response.status}`);
+      }
+
+      const devices = (await response.json()) as NewAudioDevice[];
+
+      const deviceInput = devices.filter((d) => d.isInput);
+      const deviceOutput = devices.filter((d) => d.isOutput);
+
+      return { deviceInput, deviceOutput };
     } catch (err) {
-      Log().error(err);
+      Log().error('Failed to fetch device data from ingest', err);
       return undefined;
     }
   }
 
   private async pollDeviceData(ingest: Ingest) {
     try {
-      const deviceData = await this.fetchDeviceData(ingest.ipAddress);
-      if (deviceData) {
-        const hasChanges =
-          JSON.stringify(deviceData.deviceOutput) !==
-            JSON.stringify(ingest.deviceOutput) ||
-          JSON.stringify(deviceData.deviceInput) !==
-            JSON.stringify(ingest.deviceInput);
+      const [freshIngest, deviceData] = await Promise.all([
+        this.dbManager.getIngest(ingest._id),
+        this.fetchDeviceData(ingest.ipAddress)
+      ]);
 
-        if (hasChanges) {
-          ingest.deviceOutput = deviceData.deviceOutput;
-          ingest.deviceInput = deviceData.deviceInput;
-          await this.dbManager.updateIngest(ingest);
-          this.emit('deviceDataChanged', ingest);
-        }
+      if (!deviceData || !freshIngest) return;
+
+      const normalize = (s: string) => s.trim().toLowerCase();
+
+      const mergeDevices = (
+        oldDevices: AudioDevice[],
+        newDevices: AudioDevice[]
+      ): AudioDevice[] => {
+        return newDevices.map((newDevice) => {
+          const old = oldDevices.find(
+            (d) => normalize(d.name) === normalize(newDevice.name)
+          );
+          return {
+            ...newDevice,
+            label: old?.label ?? newDevice.name
+          };
+        });
+      };
+
+      const mergedInput = mergeDevices(
+        freshIngest.deviceInput,
+        deviceData.deviceInput
+      );
+      const mergedOutput = mergeDevices(
+        freshIngest.deviceOutput,
+        deviceData.deviceOutput
+      );
+
+      const sortDevices = (devices: AudioDevice[]) =>
+        [...devices].sort((a, b) => a.name.localeCompare(b.name));
+
+      const hasChanges =
+        JSON.stringify(sortDevices(freshIngest.deviceInput)) !==
+          JSON.stringify(sortDevices(mergedInput)) ||
+        JSON.stringify(sortDevices(freshIngest.deviceOutput)) !==
+          JSON.stringify(sortDevices(mergedOutput));
+
+      if (hasChanges) {
+        freshIngest.deviceInput = mergedInput;
+        freshIngest.deviceOutput = mergedOutput;
+        await this.dbManager.updateIngest(freshIngest);
+        this.emit('deviceDataChanged', freshIngest);
       }
     } catch (err) {
       Log().error('Error polling device data:', err);
