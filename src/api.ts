@@ -67,9 +67,6 @@ export default async (opts: ApiOptions) => {
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
   });
 
-  // register cookie plugin
-  api.register(cookie);
-
   // register the swagger plugins, it will automagically do magic
   api.register(swagger, {
     swagger: {
