@@ -31,6 +31,10 @@ Available as an open web service in [Eyevinn Open Source Cloud](https://www.osaa
 | `PUBLIC_HOST`               | Hostname for frontend application for generating URLs to share               |
 | `OSC_ACCESS_TOKEN`          | Personal Access Token from OSC for link sharing and reauthenticating         |
 | `MONGODB_CONNECTION_STRING` | DEPRECATED: MongoDB connection string                                        |
+| `ADMIN_ACCESS_KEY`          | When set, some features will be restricted for non-admins                    |
+| `EDITOR_ACCESS_KEY`         | When set, some features will be restricted for non-editors                   |
+
+Note: If neither ADMIN_ACCESS_KEY nor EDITOR_ACCESS_KEY are set, all users will have access to all features.
 
 ## Installation / Usage
 
