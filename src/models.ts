@@ -256,15 +256,11 @@ export const ReAuthResponse = Type.Object({
 export type ReAuthResponse = Static<typeof ReAuthResponse>;
 
 // WHIP endpoint request body schema
-export const WhipRequest = Type.Object({
-  sdpOffer: Type.String({
-    description: 'WebRTC SDP offer'
-  })
+export const WhipRequest = Type.String({
+  description: 'WebRTC SDP offer'
 });
 
 // WHIP endpoint response schema
-export const WhipResponse = Type.Object({
-  sdpAnswer: Type.String({
-    description: 'WebRTC SDP answer'
-  })
+export const WhipResponse = Type.String({
+  description: 'WebRTC SDP answer'
 });

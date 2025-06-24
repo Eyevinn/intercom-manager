@@ -1,4 +1,4 @@
-import { Type } from '@sinclair/typebox';
+import { Static, Type } from '@sinclair/typebox';
 import { FastifyPluginCallback } from 'fastify';
 import {
   NewProduction,
@@ -835,8 +835,9 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   // WHIP endpoint for ingesting WebRTC streams
   fastify.post<{
     Params: { productionId: string; lineId: string };
-    Body: { sdpOffer: string };
-    Reply: { sdpAnswer: string } | { error: string };
+    Body: Static<typeof WhipRequest>;
+    // Reply: Static<typeof WhipResponse>;
+    Reply: any;
   }>(
     '/whip/:productionId/:lineId',
     {
@@ -853,7 +854,10 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     async (request, reply) => {
       try {
         const { productionId, lineId } = request.params;
-        const { sdpOffer } = request.body;
+        const sdpOffer = request.body;
+
+        console.log('NUUUUUUUUUUUUU');
+        console.log('sdpOffer', sdpOffer);
 
         // Create a unique session ID for this WHIP connection
         const sessionId = uuidv4();
@@ -881,7 +885,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         );
 
         // Handle the SDP answer
-        const sdpAnswer = await coreFunctions.createOffer(
+        const sdpAnswer = await coreFunctions.createAnswer(
           smb,
           smbServerUrl,
           smbServerApiKey,
@@ -902,8 +906,19 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         // Update user endpoint information
         productionManager.updateUserEndpoint(sessionId, endpointId, endpoint);
 
+        console.log('sdpAnswer', sdpAnswer);
+
+        // Create the Location URL for the WHIP resource
+        const baseUrl = request.protocol + '://' + request.hostname;
+        const locationUrl = `${baseUrl}/api/v1/whip/${productionId}/${lineId}/${sessionId}`;
+
+        // Set response headers according to WHIP specification
+        reply.header('Content-Type', 'application/sdp');
+        reply.header('Location', locationUrl);
+        reply.header('ETag', sessionId);
+
         // Return 201 Created with the SDP answer
-        reply.code(201).send({ sdpAnswer });
+        reply.code(201).send(sdpAnswer);
       } catch (err) {
         Log().error(err);
         reply

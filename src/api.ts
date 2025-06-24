@@ -9,6 +9,7 @@ import { getApiProductions } from './api_productions';
 import apiShare from './api_share';
 import apiReAuth from './api_re_auth';
 import fastifyCookie from '@fastify/cookie';
+import { readFileSync } from 'fs';
 
 const HelloWorld = Type.String({
   description: 'The magical words!'
@@ -52,6 +53,15 @@ export default async (opts: ApiOptions) => {
   const api = fastify({
     ignoreTrailingSlash: true
   }).withTypeProvider<TypeBoxTypeProvider>();
+
+  // Tell Fastify how to parse 'application/sdp' as a raw string for WHIP endpoint
+  api.addContentTypeParser(
+    'application/sdp',
+    { parseAs: 'string' },
+    (req, body, done) => {
+      done(null, body); // body will be a string (raw SDP)
+    }
+  );
 
   // register the cookie plugin
   api.register(fastifyCookie);

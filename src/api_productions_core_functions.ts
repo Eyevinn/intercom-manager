@@ -95,7 +95,7 @@ export class CoreFunctions {
     return endpoint;
   }
 
-  async createOffer(
+  async createAnswer(
     smb: SmbProtocol,
     smbServerUrl: string,
     smbServerApiKey: string,
@@ -175,7 +175,7 @@ export class CoreFunctions {
         type: transport.dtls.type,
         hash: transport.dtls.hash
       };
-      media.setup = media.setup === 'actpass' ? 'active' : 'actpass';
+      media.setup = 'active';
 
       // Clear unnecessary fields
       media.ssrcGroups = undefined;
