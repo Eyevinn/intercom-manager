@@ -597,8 +597,10 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           smbServerApiKey,
           smbConferenceId,
           endpointId,
-          true,
-          true,
+          true, // audio
+          true, // data
+          true, // iceControlling
+          'forwarder', // relayType
           parseInt(opts.endpointIdleTimeout, 10)
         );
         if (!endpoint.audio) {
@@ -856,9 +858,6 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         const { productionId, lineId } = request.params;
         const sdpOffer = request.body;
 
-        console.log('NUUUUUUUUUUUUU');
-        console.log('sdpOffer', sdpOffer);
-
         // Create a unique session ID for this WHIP connection
         const sessionId = uuidv4();
         const endpointId = uuidv4();
@@ -880,7 +879,9 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           smbConferenceId,
           endpointId,
           true, // audio
-          false, // no data channel needed for WHIP
+          false, // no data channel needed for WHIP,
+          false, // iceControlling
+          'ssrc-rewrite', // relayType
           parseInt(opts.endpointIdleTimeout, 10)
         );
 
@@ -905,11 +906,9 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
 
         // Update user endpoint information
         productionManager.updateUserEndpoint(sessionId, endpointId, endpoint);
-
-        console.log('sdpAnswer', sdpAnswer);
-
         // Create the Location URL for the WHIP resource
-        const baseUrl = request.protocol + '://' + request.hostname;
+        const baseUrl =
+          request.protocol + '://' + request.hostname + ':' + request.port;
         const locationUrl = `${baseUrl}/api/v1/whip/${productionId}/${lineId}/${sessionId}`;
 
         // Set response headers according to WHIP specification

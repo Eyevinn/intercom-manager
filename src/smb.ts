@@ -48,13 +48,15 @@ export class SmbProtocol {
     endpointId: string,
     audio: boolean,
     data: boolean,
+    iceControlling: boolean,
+    relayType: 'ssrc-rewrite' | 'forwarder',
     idleTimeout: number,
     smbKey: string
   ): Promise<SmbEndpointDescription> {
     const request: BaseAllocationRequest = {
       action: 'allocate',
       'bundle-transport': {
-        'ice-controlling': true,
+        'ice-controlling': iceControlling,
         ice: true,
         dtls: true,
         sdes: false
@@ -62,7 +64,7 @@ export class SmbProtocol {
     };
 
     if (audio) {
-      request['audio'] = { 'relay-type': 'ssrc-rewrite' };
+      request['audio'] = { 'relay-type': relayType };
     }
     if (data) {
       request['data'] = {};

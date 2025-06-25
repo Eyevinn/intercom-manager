@@ -81,6 +81,8 @@ export class CoreFunctions {
     endpointId: string,
     audio: boolean,
     data: boolean,
+    iceControlling: boolean,
+    relayType: 'ssrc-rewrite' | 'forwarder',
     endpointIdleTimeout: number
   ): Promise<SmbEndpointDescription> {
     const endpoint: SmbEndpointDescription = await smb.allocateEndpoint(
@@ -89,6 +91,8 @@ export class CoreFunctions {
       endpointId,
       audio,
       data,
+      iceControlling,
+      relayType,
       endpointIdleTimeout,
       smbServerApiKey
     );
@@ -127,6 +131,12 @@ export class CoreFunctions {
       };
     }
 
+    // Remove session-level ICE and DTLS parameters to avoid conflicts
+    delete parsedOffer.iceUfrag;
+    delete parsedOffer.icePwd;
+    delete parsedOffer.fingerprint;
+    delete parsedOffer.setup;
+
     // Get the first media description (usually audio)
     const offerMediaDescription = parsedOffer.media[0];
     if (!offerMediaDescription) {
@@ -135,12 +145,17 @@ export class CoreFunctions {
 
     // Process SSRCs
     endpointDescription.audio.ssrcs = [];
-    if (parsedOffer.media[1]?.ssrcs) {
-      let parsedSsrcs = parsedOffer.media[1].ssrcs[0].id;
+    console.log('parsedOffer', parsedOffer);
+    // Check both media sections for SSRCs (audio might be in first or second position)
+    const audioMedia = parsedOffer.media.find((m) => m.type === 'audio');
+    if (audioMedia && audioMedia.ssrcs && audioMedia.ssrcs.length > 0) {
+      let parsedSsrcs = audioMedia.ssrcs[0].id;
       if (typeof parsedSsrcs === 'string') {
         parsedSsrcs = parseInt(parsedSsrcs, 10);
       }
       endpointDescription.audio.ssrcs.push(parsedSsrcs);
+    } else {
+      console.log('No SSRCs found in audio media');
     }
 
     if (endpointDescription.audio.ssrcs.length === 0) {
@@ -161,7 +176,15 @@ export class CoreFunctions {
 
     // Process each media section
     let bundleGroupMids = '';
+    const audioOnlyMedia = [];
+
     for (let media of parsedOffer.media) {
+      // Filter out video media - keep only audio and application (data)
+      if (media.type === 'video') {
+        console.log('Filtering out video media section:', media.mid);
+        continue; // Skip video media
+      }
+
       // Add to bundle group
       bundleGroupMids =
         bundleGroupMids === ''
@@ -179,7 +202,8 @@ export class CoreFunctions {
 
       // Clear unnecessary fields
       media.ssrcGroups = undefined;
-      media.ssrcs = undefined;
+      // Don't clear SSRCs - they're needed for audio flow!
+      // media.ssrcs = undefined;
       media.msid = undefined;
       media.candidates = undefined;
       media.port = 9;
@@ -189,6 +213,7 @@ export class CoreFunctions {
         ipVer: 4,
         address: '0.0.0.0'
       };
+      media.rtcpMux = 'rtcp-mux';
 
       // Add ICE candidates
       media.candidates = transport.ice.candidates.map((candidate) => ({
@@ -205,6 +230,13 @@ export class CoreFunctions {
         'network-id': candidate.network
       }));
 
+      // Debug ICE controlling configuration
+      console.log('=== ICE Controlling Debug ===');
+      console.log('Transport configuration:', JSON.stringify(transport));
+      console.log('ICE candidates count:', media.candidates.length);
+      console.log('First ICE candidate:', media.candidates[0]);
+      console.log('=== End ICE Controlling Debug ===');
+
       // Handle audio media
       if (media.type === 'audio') {
         // Filter for Opus codec
@@ -219,20 +251,39 @@ export class CoreFunctions {
         );
         media.payloads = `${opusPayloadType}`;
 
-        // Filter RTP header extensions
-        media.ext =
-          media.ext &&
-          media.ext.filter(
-            (ext) =>
-              ext.uri === 'urn:ietf:params:rtp-hdrext:ssrc-audio-level' ||
-              ext.uri ===
-                'http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time'
-          );
+        // Ensure proper RTP header extensions for audio
+        media.ext = [
+          { value: 1, uri: 'urn:ietf:params:rtp-hdrext:ssrc-audio-level' },
+          {
+            value: 2,
+            uri: 'http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time'
+          }
+        ];
 
-        media.direction = 'recvonly';
+        // For WHIP: OBS sends audio to server, server receives it
+        // Change direction from sendonly to recvonly for WHIP
+        console.log('Original audio direction:', media.direction);
+        if (media.direction === 'sendonly') {
+          media.direction = 'recvonly';
+          console.log('Changed audio direction to recvonly for WHIP');
+        }
+
+        // Preserve SSRCs for audio media
+        if (media.ssrcs && media.ssrcs.length > 0) {
+          console.log('Preserving audio SSRCs in SDP answer:', media.ssrcs);
+        } else {
+          console.log('No SSRCs found in audio media to preserve');
+        }
+
         media.rtcpFb = undefined;
       }
+
+      // Add processed media to our filtered list
+      audioOnlyMedia.push(media);
     }
+
+    // Replace the media array with our filtered version
+    parsedOffer.media = audioOnlyMedia;
 
     // Set up bundle group
     parsedOffer.groups = [
@@ -242,7 +293,6 @@ export class CoreFunctions {
       }
     ];
 
-    // Configure the endpoint
     await smb.configureEndpoint(
       smbServerUrl,
       lineId,
@@ -251,8 +301,25 @@ export class CoreFunctions {
       smbServerApiKey
     );
 
+    console.log('new parsedOffer', JSON.stringify(parsedOffer));
+
     // Return the answer
-    return write(parsedOffer);
+    const sdpAnswer = write(parsedOffer);
+
+    // Debug the final SDP answer
+    console.log('=== Final SDP Answer Debug ===');
+    console.log('SDP Answer length:', sdpAnswer.length);
+    console.log(
+      'SDP Answer contains ice-controlling:',
+      sdpAnswer.includes('ice-controlling')
+    );
+    console.log(
+      'SDP Answer contains a=ice-controlling:',
+      sdpAnswer.includes('a=ice-controlling')
+    );
+    console.log('=== End SDP Answer Debug ===');
+
+    return sdpAnswer;
   }
 
   async handleAnswerRequest(
