@@ -26,6 +26,11 @@ const apiIngests: FastifyPluginCallback<ApiIngestsOptions> = (
 ) => {
   const ingestManager = opts.ingestManager;
 
+  // Hook to return 405 for all ingest routes
+  fastify.addHook('preHandler', async (request, reply) => {
+    reply.code(405).send({ message: 'Method Not Allowed' });
+  });
+
   fastify.post<{
     Body: NewIngest;
     Reply: { success: boolean; message: string };
