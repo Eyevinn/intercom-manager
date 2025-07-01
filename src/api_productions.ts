@@ -600,7 +600,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           true, // audio
           true, // data
           true, // iceControlling
-          'forwarder', // relayType
+          'ssrc-rewrite', // relayType
           parseInt(opts.endpointIdleTimeout, 10)
         );
         if (!endpoint.audio) {
@@ -879,8 +879,8 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           smbConferenceId,
           endpointId,
           true, // audio
-          false, // no data channel needed for WHIP,
-          false, // iceControlling
+          true, // no data channel needed for WHIP
+          true, // iceControlling
           'ssrc-rewrite', // relayType
           parseInt(opts.endpointIdleTimeout, 10)
         );
@@ -896,12 +896,19 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           sdpOffer
         );
 
+        Log().info(
+          `WHIP session created: ${sessionId} for production ${productionId}, line ${lineId}`
+        );
+        Log().info(
+          `SMB conference: ${smbConferenceId}, endpoint: ${endpointId}`
+        );
+
         // Create user session in production manager
         productionManager.createUserSession(
           productionId,
           lineId,
           sessionId,
-          `whip-${endpointId}`
+          'WHIPing tears off my face'
         );
 
         // Update user endpoint information
@@ -916,8 +923,19 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         reply.header('Location', locationUrl);
         reply.header('ETag', sessionId);
 
+        // Add CORS headers for browser compatibility
+        reply.header('Access-Control-Allow-Origin', '*');
+        reply.header('Access-Control-Allow-Methods', 'POST, DELETE, OPTIONS');
+        reply.header(
+          'Access-Control-Allow-Headers',
+          'Content-Type, Authorization'
+        );
+        reply.header('Access-Control-Expose-Headers', 'Location, ETag');
+
         // Return 201 Created with the SDP answer
-        reply.code(201).send(sdpAnswer);
+        await reply.code(201).send(sdpAnswer);
+
+        console.log('SLUT PÅ ALLT: ', sessionId);
       } catch (err) {
         Log().error(err);
         reply
@@ -953,12 +971,212 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           return;
         }
 
+        // Add CORS headers for browser compatibility
+        reply.header('Access-Control-Allow-Origin', '*');
+        reply.header('Access-Control-Allow-Methods', 'POST, DELETE, OPTIONS');
+        reply.header(
+          'Access-Control-Allow-Headers',
+          'Content-Type, Authorization'
+        );
+
         reply.code(204).send();
       } catch (err) {
         Log().error(err);
         reply
           .code(500)
           .send({ error: `Failed to terminate WHIP connection: ${err}` });
+      }
+    }
+  );
+
+  // PATCH endpoint for Trickle ICE support
+  fastify.patch<{
+    Params: { productionId: string; lineId: string; sessionId: string };
+    Body: string;
+  }>(
+    '/whip/:productionId/:lineId/:sessionId',
+    {
+      schema: {
+        description: 'Trickle ICE endpoint for sending ICE candidates',
+        body: Type.String({
+          description: 'ICE candidate SDP fragment'
+        }),
+        response: {
+          200: Type.Null(),
+          204: Type.Null(),
+          400: Type.Object({ error: Type.String() }),
+          404: Type.Object({ error: Type.String() }),
+          409: Type.Object({ error: Type.String() }),
+          412: Type.Object({ error: Type.String() }),
+          500: Type.Object({ error: Type.String() })
+        }
+      }
+    },
+    async (request, reply) => {
+      try {
+        console.log('PATCH ENDPOINT CALLED');
+
+        const { sessionId } = request.params;
+        const iceCandidateSdp = request.body;
+        const etag = request.headers.etag;
+
+        // Check if session exists
+        const session = productionManager.getUser(sessionId);
+        if (!session) {
+          reply.code(404).send({ error: 'WHIP session not found' });
+          return;
+        }
+
+        // Validate ETag if provided
+        if (etag && etag !== sessionId) {
+          reply.code(412).send({ error: 'ETag mismatch' });
+          return;
+        }
+
+        // Parse the ICE candidate SDP fragment
+        if (!iceCandidateSdp || iceCandidateSdp.trim() === '') {
+          reply.code(400).send({ error: 'Empty ICE candidate SDP fragment' });
+          return;
+        }
+
+        // Extract ICE candidate from SDP fragment
+        const candidateMatch = iceCandidateSdp.match(/a=candidate.*\r?\n?/);
+        if (!candidateMatch || candidateMatch.length === 0) {
+          reply.code(400).send({ error: 'Invalid ICE candidate format' });
+          return;
+        }
+
+        const candidateString = candidateMatch[0].trim();
+        Log().info(
+          `Received ICE candidate for session ${sessionId}: ${candidateString}`
+        );
+
+        // TODO: Implement ICE candidate handling with SMB
+        // This would typically involve:
+        // 1. Storing the ICE candidate for the session
+        // 2. Adding it to the SMB endpoint configuration
+        // 3. Reconfiguring the SMB endpoint with the new ICE candidate
+
+        // For now, we'll store the ICE candidate in the session
+        // This is a placeholder implementation - you'll need to integrate with SMB
+        if (!session.iceCandidates) {
+          session.iceCandidates = [];
+        }
+        session.iceCandidates.push({
+          candidate: candidateString,
+          timestamp: Date.now()
+        });
+
+        // Update the session in the production manager
+        productionManager.updateUserLastSeen(sessionId);
+
+        // Add CORS headers
+        reply.header('Access-Control-Allow-Origin', '*');
+        reply.header(
+          'Access-Control-Allow-Methods',
+          'POST, DELETE, OPTIONS, PATCH'
+        );
+        reply.header(
+          'Access-Control-Allow-Headers',
+          'Content-Type, Authorization, ETag'
+        );
+        reply.header('Access-Control-Expose-Headers', 'Location, ETag, Link');
+
+        // Return 204 No Content for successful ICE candidate processing
+        reply.code(204).send();
+      } catch (err) {
+        Log().error(err);
+        reply
+          .code(500)
+          .send({ error: `Failed to process ICE candidate: ${err}` });
+      }
+    }
+  );
+
+  // OPTIONS endpoint for CORS preflight requests and WHIP discovery
+  fastify.options<{
+    Params: { productionId: string; lineId: string };
+  }>(
+    '/whip/:productionId/:lineId',
+    {
+      schema: {
+        description: 'CORS preflight and WHIP discovery endpoint',
+        response: {
+          200: Type.Null()
+        }
+      }
+    },
+    async (request, reply) => {
+      try {
+        const { productionId, lineId } = request.params;
+
+        console.log('OPTIONS ENDPOINT CALLED');
+
+        // Check if production and line exist
+        const productionIdNum = parseInt(productionId, 10);
+        if (isNaN(productionIdNum)) {
+          reply.code(400).send({ error: 'Invalid production ID' });
+          return;
+        }
+
+        const production = await productionManager.getProduction(
+          productionIdNum
+        );
+        if (!production) {
+          reply.code(404).send({ error: 'Production not found' });
+          return;
+        }
+
+        const line = production.lines.find((l: any) => l.id === lineId);
+        if (!line) {
+          reply.code(404).send({ error: 'Line not found' });
+          return;
+        }
+
+        // Add CORS headers for preflight requests
+        reply.header('Access-Control-Allow-Origin', '*');
+        reply.header(
+          'Access-Control-Allow-Methods',
+          'POST, DELETE, OPTIONS, PATCH'
+        );
+        reply.header(
+          'Access-Control-Allow-Headers',
+          'Content-Type, Authorization, ETag'
+        );
+        reply.header('Access-Control-Expose-Headers', 'Location, ETag, Link');
+        reply.header('Access-Control-Max-Age', '86400'); // 24 hours
+
+        // WHIP-specific headers
+        reply.header('Accept-Post', 'application/sdp');
+
+        // Add ICE server information if available
+        // You can configure ICE servers in your environment or config
+        const iceServers = process.env.ICE_SERVERS
+          ? process.env.ICE_SERVERS.split(',')
+              .map((server) => {
+                const trimmed = server.trim();
+                if (trimmed.startsWith('stun:')) {
+                  return `${trimmed}; rel="ice-server"`;
+                } else if (trimmed.startsWith('turn:')) {
+                  // For TURN servers, you might need to extract credentials
+                  // This is a simplified version - you may need to enhance this
+                  return `${trimmed}; rel="ice-server"`;
+                }
+                return null;
+              })
+              .filter(Boolean)
+          : [];
+
+        if (iceServers.length > 0) {
+          reply.header('Link', iceServers.join(', '));
+        }
+
+        reply.code(200).send();
+      } catch (err) {
+        Log().error(err);
+        reply
+          .code(500)
+          .send({ error: `Failed to process OPTIONS request: ${err}` });
       }
     }
   );

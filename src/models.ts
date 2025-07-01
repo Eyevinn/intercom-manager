@@ -15,6 +15,9 @@ export type PatchLineResponse = Static<typeof PatchLineResponse>;
 export type PatchProduction = Static<typeof PatchProduction>;
 export type PatchProductionResponse = Static<typeof PatchProductionResponse>;
 export type SmbEndpointDescription = Static<typeof SmbEndpointDescription>;
+export type SmbAudioEndpointDescription = Static<
+  typeof SmbAudioEndpointDescription
+>;
 export type DetailedConference = Static<typeof DetailedConference>;
 export type Endpoint = Static<typeof Endpoint>;
 export type UserResponse = Static<typeof UserResponse>;
@@ -23,6 +26,7 @@ export type NewSession = Static<typeof NewSession>;
 export type SessionResponse = Static<typeof SessionResponse>;
 export type SdpAnswer = Static<typeof SdpAnswer>;
 export type ErrorResponse = Static<typeof ErrorResponse>;
+export type IceCandidate = Static<typeof IceCandidate>;
 
 export const Audio = Type.Object({
   'relay-type': Type.Array(
@@ -102,7 +106,8 @@ export const SmbTransport = Type.Object({
     Type.Object({
       ufrag: Type.String(),
       pwd: Type.String(),
-      candidates: Type.Array(SmbCandidate)
+      candidates: Type.Array(SmbCandidate),
+      controlling: Type.Optional(Type.Boolean())
     })
   ),
   dtls: Type.Optional(
@@ -149,12 +154,29 @@ export const SmbEndpointDescription = Type.Object({
   idleTimeout: Type.Optional(Type.Number())
 });
 
+export const SmbAudioEndpointDescription = Type.Object({
+  audio: Type.Object({
+    ssrcs: Type.Array(Type.Number()),
+    'payload-type': AudioSmbPayloadType,
+    'rtp-hdrexts': Type.Array(SmbRtpHeaderExtension),
+    transport: SmbTransport
+  }),
+  data: Type.Optional(Type.Object({ port: Type.Number() })),
+  idleTimeout: Type.Optional(Type.Number())
+});
+
 export const Endpoint = Type.Object({
   endpointId: Type.String(),
   sessionDescription: SmbEndpointDescription
 });
 
 export const Connections = Type.Record(Type.String(), Endpoint);
+
+// ICE candidate type for WHIP Trickle ICE
+export const IceCandidate = Type.Object({
+  candidate: Type.String(),
+  timestamp: Type.Number()
+});
 
 export const UserResponse = Type.Object({
   name: Type.String(),
@@ -171,7 +193,8 @@ export const UserSession = Type.Object({
   isActive: Type.Boolean(),
   isExpired: Type.Boolean(),
   endpointId: Type.Optional(Type.String()),
-  sessionDescription: Type.Optional(SmbEndpointDescription)
+  sessionDescription: Type.Optional(SmbEndpointDescription),
+  iceCandidates: Type.Optional(Type.Array(IceCandidate))
 });
 
 export const Line = Type.Object({

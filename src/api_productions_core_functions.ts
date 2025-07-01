@@ -96,6 +96,7 @@ export class CoreFunctions {
       endpointIdleTimeout,
       smbServerApiKey
     );
+
     return endpoint;
   }
 
@@ -103,7 +104,7 @@ export class CoreFunctions {
     smb: SmbProtocol,
     smbServerUrl: string,
     smbServerApiKey: string,
-    lineId: string,
+    smbConferenceId: string,
     endpointId: string,
     endpointDescription: SmbEndpointDescription,
     offer: string
@@ -123,12 +124,27 @@ export class CoreFunctions {
       parsedOffer.origin.sessionVersion++;
     }
 
+    // Remove ICE controlling indicators from client offer to prevent role conflicts
+    // This ensures SMB can be ICE controlling without conflicts
+    if ((parsedOffer as any).iceOptions) {
+      delete (parsedOffer as any).iceOptions;
+    }
+
+    parsedOffer.media.forEach((media, index) => {
+      if ((media as any).iceOptions) {
+        delete (media as any).iceOptions;
+      }
+    });
+
     // Set up MSID semantic if not present
     if (!parsedOffer.msidSemantic) {
       parsedOffer.msidSemantic = {
         semantic: 'WMS',
-        token: ''
+        token: '*'
       };
+    } else {
+      // Ensure the token is set to '*' for proper MSID handling
+      parsedOffer.msidSemantic.token = '*';
     }
 
     // Remove session-level ICE and DTLS parameters to avoid conflicts
@@ -143,26 +159,15 @@ export class CoreFunctions {
       throw new Error('Missing audio media description in offer');
     }
 
-    // Process SSRCs
-    endpointDescription.audio.ssrcs = [];
-    console.log('parsedOffer', parsedOffer);
-    // Check both media sections for SSRCs (audio might be in first or second position)
-    const audioMedia = parsedOffer.media.find((m) => m.type === 'audio');
-    if (audioMedia && audioMedia.ssrcs && audioMedia.ssrcs.length > 0) {
-      let parsedSsrcs = audioMedia.ssrcs[0].id;
-      if (typeof parsedSsrcs === 'string') {
-        parsedSsrcs = parseInt(parsedSsrcs, 10);
-      }
-      endpointDescription.audio.ssrcs.push(parsedSsrcs);
-    } else {
-      console.log('No SSRCs found in audio media');
+    // Use SMB-provided SSRCs - no need to extract from offer
+    if (
+      !endpointDescription.audio.ssrcs ||
+      endpointDescription.audio.ssrcs.length === 0
+    ) {
+      throw new Error('Missing audio ssrcs in SMB endpoint description');
     }
 
-    if (endpointDescription.audio.ssrcs.length === 0) {
-      throw new Error('Missing audio ssrcs in offer');
-    }
-
-    // Get transport configuration
+    // Get transport configuration from bundle-transport
     const transport = endpointDescription['bundle-transport'];
     if (!transport) {
       throw new Error('Missing bundle-transport in endpointDescription');
@@ -174,116 +179,141 @@ export class CoreFunctions {
       throw new Error('Missing ice in endpointDescription');
     }
 
-    // Process each media section
+    // Ensure SMB is ICE controlling
+    // transport.ice.controlling = true;
+
+    // Process all media sections to preserve order
     let bundleGroupMids = '';
-    const audioOnlyMedia = [];
+    const processedMedia = [];
 
     for (let media of parsedOffer.media) {
-      // Filter out video media - keep only audio and application (data)
-      if (media.type === 'video') {
-        console.log('Filtering out video media section:', media.mid);
-        continue; // Skip video media
-      }
-
       // Add to bundle group
       bundleGroupMids =
         bundleGroupMids === ''
           ? `${media.mid}`
           : `${bundleGroupMids} ${media.mid}`;
 
-      // Set ICE and DTLS parameters
-      media.iceUfrag = transport.ice.ufrag;
-      media.icePwd = transport.ice.pwd;
-      media.fingerprint = {
-        type: transport.dtls.type,
-        hash: transport.dtls.hash
-      };
-      media.setup = 'active';
-
-      // Clear unnecessary fields
-      media.ssrcGroups = undefined;
-      // Don't clear SSRCs - they're needed for audio flow!
-      // media.ssrcs = undefined;
-      media.msid = undefined;
-      media.candidates = undefined;
-      media.port = 9;
-      media.rtcp = {
-        port: 9,
-        netType: 'IN',
-        ipVer: 4,
-        address: '0.0.0.0'
-      };
-      media.rtcpMux = 'rtcp-mux';
-
-      // Add ICE candidates
-      media.candidates = transport.ice.candidates.map((candidate) => ({
-        foundation: candidate.foundation,
-        component: candidate.component,
-        transport: candidate.protocol,
-        priority: candidate.priority,
-        ip: candidate.ip,
-        port: candidate.port,
-        type: candidate.type,
-        raddr: candidate['rel-addr'],
-        rport: candidate['rel-port'],
-        generation: candidate.generation,
-        'network-id': candidate.network
-      }));
-
-      // Debug ICE controlling configuration
-      console.log('=== ICE Controlling Debug ===');
-      console.log('Transport configuration:', JSON.stringify(transport));
-      console.log('ICE candidates count:', media.candidates.length);
-      console.log('First ICE candidate:', media.candidates[0]);
-      console.log('=== End ICE Controlling Debug ===');
-
-      // Handle audio media
       if (media.type === 'audio') {
-        // Filter for Opus codec
-        media.rtp = media.rtp.filter(
-          (rtp) => rtp.codec.toLowerCase() === 'opus'
-        );
-        let opusPayloadType = media.rtp[0].payload;
+        // Process audio media with SMB configuration
+        const smbAudio = endpointDescription.audio;
+        const smbPayloadType = smbAudio['payload-type'];
 
-        // Set up audio parameters
-        media.fmtp = media.fmtp.filter(
-          (fmtp) => fmtp.payload === opusPayloadType
-        );
-        media.payloads = `${opusPayloadType}`;
+        // Set ICE and DTLS parameters
+        media.iceUfrag = transport.ice!.ufrag;
+        media.icePwd = transport.ice!.pwd;
+        media.fingerprint = {
+          type: transport.dtls!.type,
+          hash: transport.dtls!.hash
+        };
+        media.setup = 'passive';
 
-        // Ensure proper RTP header extensions for audio
-        media.ext = [
-          { value: 1, uri: 'urn:ietf:params:rtp-hdrext:ssrc-audio-level' },
+        // Clear unnecessary fields
+        media.ssrcGroups = undefined;
+        media.msid = undefined;
+        media.candidates = undefined;
+        media.port = 9;
+        media.rtcp = {
+          port: 9,
+          netType: 'IN',
+          ipVer: 4,
+          address: '0.0.0.0'
+        };
+        media.rtcpMux = 'rtcp-mux';
+
+        // Add ICE candidates
+        media.candidates = transport.ice!.candidates.map((candidate: any) => ({
+          foundation: candidate.foundation,
+          component: candidate.component,
+          transport: candidate.protocol,
+          priority: candidate.priority,
+          ip: candidate.ip,
+          port: candidate.port,
+          type: candidate.type,
+          raddr: candidate['rel-addr'],
+          rport: candidate['rel-port'],
+          generation: candidate.generation,
+          'network-id': candidate.network
+        }));
+
+        // Set up RTP with SMB-provided payload type
+        media.rtp = [
           {
-            value: 2,
-            uri: 'http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time'
+            payload: smbPayloadType.id,
+            codec: smbPayloadType.name,
+            rate: smbPayloadType.clockrate
           }
         ];
 
-        // For WHIP: OBS sends audio to server, server receives it
-        // Change direction from sendonly to recvonly for WHIP
-        console.log('Original audio direction:', media.direction);
-        if (media.direction === 'sendonly') {
-          media.direction = 'recvonly';
-          console.log('Changed audio direction to recvonly for WHIP');
-        }
+        // Use SMB-provided RTP header extensions
+        media.ext = smbAudio['rtp-hdrexts'].map((ext) => ({
+          value: ext.id,
+          uri: ext.uri
+        }));
 
-        // Preserve SSRCs for audio media
-        if (media.ssrcs && media.ssrcs.length > 0) {
-          console.log('Preserving audio SSRCs in SDP answer:', media.ssrcs);
+        // Set up FMTP with SMB-provided parameters
+        if (smbPayloadType.parameters) {
+          const fmtpParams = Object.entries(smbPayloadType.parameters)
+            .map(([key, value]) => `${key}=${value}`)
+            .join(';');
+
+          media.fmtp = [
+            {
+              payload: smbPayloadType.id,
+              config: fmtpParams
+            }
+          ];
         } else {
-          console.log('No SSRCs found in audio media to preserve');
+          media.fmtp = [];
         }
 
-        media.rtcpFb = undefined;
+        // Set payloads to SMB-provided payload type
+        media.payloads = `${smbPayloadType.id}`;
+
+        // Set up SSRCs from SMB (only use the provided SSRC)
+        if (smbAudio.ssrcs && smbAudio.ssrcs.length > 0) {
+          media.ssrcs = [
+            {
+              id: smbAudio.ssrcs[0], // Only use the first SSRC from SMB
+              attribute: 'cname',
+              value: uuidv4()
+            }
+          ];
+        }
+
+        // For WHIP: Client sends audio to server, server receives it
+        media.direction = 'recvonly';
+
+        // Use SMB-provided RTCP feedback if available
+        media.rtcpFb =
+          smbPayloadType['rtcp-fbs']?.map((fb) => ({
+            payload: smbPayloadType.id,
+            type: fb.type,
+            subtype: fb.subtype
+          })) || [];
+      } else {
+        // For non-audio media (video, etc.), set to inactive
+        media.direction = 'inactive';
+        media.port = 0;
+        media.payloads = '0'; // Use a dummy payload type for inactive media
+        media.rtp = [];
+        media.fmtp = [];
+        media.rtcpFb = [];
+        media.ssrcs = [];
+        media.ssrcGroups = undefined;
+        media.msid = undefined;
+        media.candidates = undefined;
+        media.iceUfrag = undefined;
+        media.icePwd = undefined;
+        media.fingerprint = undefined;
+        media.setup = undefined;
+        media.ext = [];
       }
 
-      // Add processed media to our filtered list
-      audioOnlyMedia.push(media);
+      processedMedia.push(media);
     }
 
-    // Replace the media array with our filtered version
-    parsedOffer.media = audioOnlyMedia;
+    // Keep all media sections in original order
+    parsedOffer.media = processedMedia;
 
     // Set up bundle group
     parsedOffer.groups = [
@@ -293,31 +323,28 @@ export class CoreFunctions {
       }
     ];
 
-    await smb.configureEndpoint(
-      smbServerUrl,
-      lineId,
-      endpointId,
-      endpointDescription,
-      smbServerApiKey
-    );
+    // await smb.configureEndpoint(
+    //   smbServerUrl,
+    //   smbConferenceId,
+    //   endpointId,
+    //   endpointDescription,
+    //   smbServerApiKey
+    // );
 
-    console.log('new parsedOffer', JSON.stringify(parsedOffer));
-
-    // Return the answer
+    // Return the answer// Return the answer
+    console.log('endpointDescription', JSON.stringify(endpointDescription));
+    console.log('answer', JSON.stringify(parsedOffer));
     const sdpAnswer = write(parsedOffer);
 
-    // Debug the final SDP answer
-    console.log('=== Final SDP Answer Debug ===');
-    console.log('SDP Answer length:', sdpAnswer.length);
-    console.log(
-      'SDP Answer contains ice-controlling:',
-      sdpAnswer.includes('ice-controlling')
-    );
-    console.log(
-      'SDP Answer contains a=ice-controlling:',
-      sdpAnswer.includes('a=ice-controlling')
-    );
-    console.log('=== End SDP Answer Debug ===');
+    // await this.handleAnswerRequest(
+    //   smb,
+    //   smbServerUrl,
+    //   smbServerApiKey,
+    //   lineId,
+    //   endpointId,
+    //   endpointDescription,
+    //   sdpAnswer
+    // );
 
     return sdpAnswer;
   }

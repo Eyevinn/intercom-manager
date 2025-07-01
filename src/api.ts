@@ -63,6 +63,15 @@ export default async (opts: ApiOptions) => {
     }
   );
 
+  // Tell Fastify how to parse 'application/trickle-ice-sdpfrag' as a raw string for Trickle ICE
+  api.addContentTypeParser(
+    'application/trickle-ice-sdpfrag',
+    { parseAs: 'string' },
+    (req, body, done) => {
+      done(null, body); // body will be a string (ICE candidate SDP fragment)
+    }
+  );
+
   // register the cookie plugin
   api.register(fastifyCookie);
 
