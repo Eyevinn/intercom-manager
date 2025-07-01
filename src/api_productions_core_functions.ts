@@ -1,11 +1,11 @@
 import { SessionDescription, parse, write } from 'sdp-transform';
+import { v4 as uuidv4 } from 'uuid';
 import { Connection } from './connection';
+import { ConnectionQueue } from './connection_queue';
 import { MediaStreamsInfoSsrc } from './media_streams_info';
 import { LineResponse, Production, SmbEndpointDescription } from './models';
-import { SmbProtocol } from './smb';
-import { ConnectionQueue } from './connection_queue';
 import { ProductionManager } from './production_manager';
-import { v4 as uuidv4 } from 'uuid';
+import { SmbProtocol } from './smb';
 
 export class CoreFunctions {
   private productionManager: ProductionManager;
@@ -377,6 +377,8 @@ export class CoreFunctions {
         'Missing audio media description when handling sdp answer from endpoint'
       );
     }
+    console.log("parsedAnswer.media", JSON.stringify(parsedAnswer.media));
+    console.log("parsedAnswer.media[1]", JSON.stringify(parsedAnswer.media[1]));
     if (parsedAnswer.media[1].ssrcs) {
       let parsedSsrcs = parsedAnswer.media[1].ssrcs[0].id;
       if (typeof parsedSsrcs === 'string') {

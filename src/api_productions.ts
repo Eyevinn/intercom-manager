@@ -1,35 +1,35 @@
 import { Static, Type } from '@sinclair/typebox';
+import dotenv from 'dotenv';
 import { FastifyPluginCallback } from 'fastify';
+import { v4 as uuidv4 } from 'uuid';
+import { CoreFunctions } from './api_productions_core_functions';
+import { ConnectionQueue } from './connection_queue';
+import { DbManagerCouchDb } from './db/couchdb';
+import { DbManagerMongoDb } from './db/mongodb';
+import { Log } from './log';
 import {
-  NewProduction,
-  LineResponse,
-  SmbEndpointDescription,
-  UserResponse,
-  ProductionResponse,
   DetailedProductionResponse,
-  UserSession,
-  NewSession,
-  SessionResponse,
-  SdpAnswer,
-  NewProductionLine,
   ErrorResponse,
-  PatchLineResponse,
+  LineResponse,
+  NewProduction,
+  NewProductionLine,
+  NewSession,
   PatchLine,
-  ProductionListResponse,
+  PatchLineResponse,
   PatchProduction,
   PatchProductionResponse,
-  WhipResponse,
-  WhipRequest
+  ProductionListResponse,
+  ProductionResponse,
+  SdpAnswer,
+  SessionResponse,
+  SmbEndpointDescription,
+  UserResponse,
+  UserSession,
+  WhipRequest,
+  WhipResponse
 } from './models';
-import { SmbProtocol } from './smb';
 import { ProductionManager } from './production_manager';
-import dotenv from 'dotenv';
-import { v4 as uuidv4 } from 'uuid';
-import { ConnectionQueue } from './connection_queue';
-import { CoreFunctions } from './api_productions_core_functions';
-import { Log } from './log';
-import { DbManagerMongoDb } from './db/mongodb';
-import { DbManagerCouchDb } from './db/couchdb';
+import { SmbProtocol } from './smb';
 dotenv.config();
 
 const DB_CONNECTION_STRING: string =
@@ -71,6 +71,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   ).toString();
   const smb = new SmbProtocol();
   const smbServerApiKey = opts.smbServerApiKey || '';
+  const whipHeartbeatIntervals: Record<string, NodeJS.Timeout> = {};
 
   fastify.post<{
     Body: NewProduction;
@@ -913,6 +914,20 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
 
         // Update user endpoint information
         productionManager.updateUserEndpoint(sessionId, endpointId, endpoint);
+
+        // Start heartbeat for this WHIP session
+        const interval = setInterval(() => {
+          console.log("Interval")
+          const success = productionManager.updateUserLastSeen(sessionId);
+          if (!success) {
+            console.warn(`WHIP heartbeat failed for ${sessionId}, clearing.`);
+            clearInterval(interval);
+            delete whipHeartbeatIntervals[sessionId];
+          }
+        }, 10_000);
+
+        whipHeartbeatIntervals[sessionId] = interval;
+
         // Create the Location URL for the WHIP resource
         const baseUrl =
           request.protocol + '://' + request.hostname + ':' + request.port;
@@ -963,6 +978,13 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     async (request, reply) => {
       try {
         const { sessionId } = request.params;
+
+         // Clear heartbeat interval if it exists
+        if (whipHeartbeatIntervals[sessionId]) {
+          console.log(`Clearing heartbeat for WHIP session ${sessionId}`);
+          clearInterval(whipHeartbeatIntervals[sessionId]);
+          delete whipHeartbeatIntervals[sessionId];
+        }
 
         // Remove the user session
         const deletedSessionId = productionManager.removeUserSession(sessionId);
