@@ -18,6 +18,7 @@ interface BaseAllocationRequest {
     sdes: boolean;
   };
   audio?: object;
+  video?: object;
   data?: object;
   idleTimeout?: number;
 }
@@ -73,6 +74,9 @@ export class SmbProtocol {
         sdes: false
       },
       audio: {
+        ssrcs: []
+      },
+      video: {
         ssrcs: []
       }
     };

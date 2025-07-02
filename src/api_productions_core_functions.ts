@@ -155,12 +155,6 @@ export class CoreFunctions {
     // delete parsedOffer.fingerprint;
     // delete parsedOffer.setup;
 
-    // Get the first media description (usually audio)
-    const offerMediaDescription = parsedOffer.media[0];
-    if (!offerMediaDescription) {
-      throw new Error('Missing audio media description in offer');
-    }
-
     // Use SMB-provided SSRCs - no need to extract from offer
     if (
       !endpointDescription.audio.ssrcs ||
@@ -171,6 +165,9 @@ export class CoreFunctions {
 
     // Get transport configuration from bundle-transport
     const transport = endpointDescription['bundle-transport'];
+    const originalMedia = {
+      ...parsedOffer.media.find((media) => media.type === 'audio')
+    };
     if (!transport) {
       throw new Error('Missing bundle-transport in endpointDescription');
     }
@@ -186,7 +183,6 @@ export class CoreFunctions {
 
     // Process all media sections to preserve order
     let bundleGroupMids = '';
-
     let candidatesAdded = false;
 
     for (let media of parsedOffer.media) {
@@ -203,10 +199,18 @@ export class CoreFunctions {
       //   type: transport.dtls!.type,
       //   hash: transport.dtls!.hash
       // };
-      media.setup = 'active';
+      // media.setup = 'active';
 
-      // Clear unnecessary fields
+      // delete media.iceOptions;
+      media.iceUfrag = transport.ice.ufrag;
+      media.icePwd = transport.ice.pwd;
+      media.fingerprint = {
+        type: transport.dtls.type,
+        hash: transport.dtls.hash
+      };
+      media.setup = media.setup === 'actpass' ? 'active' : 'actpass';
       media.ssrcGroups = undefined;
+      // media.ssrcs = undefined;
       media.msid = undefined;
       media.candidates = undefined;
       media.port = 9;
@@ -218,8 +222,9 @@ export class CoreFunctions {
       };
       // media.rtcpMux = 'rtcp-mux';
 
+      // Add ICE candidates
+
       if (!candidatesAdded) {
-        // Add ICE candidates
         media.candidates = transport.ice!.candidates.map((candidate: any) => ({
           foundation: candidate.foundation,
           component: candidate.component,
@@ -287,7 +292,6 @@ export class CoreFunctions {
             fmtp.payload === vp8RtxPayloadType
         );
         media.payloads = `${vp8PayloadType} ${vp8RtxPayloadType}`;
-        media.setup = 'active';
 
         media.ext =
           media.ext &&
@@ -298,6 +302,7 @@ export class CoreFunctions {
               ext.uri === 'urn:ietf:params:rtp-hdrext:sdes:rtp-stream-id'
           );
 
+        media.setup = 'active';
         media.direction = 'recvonly';
         media.rtcpFb = media.rtcpFb?.filter(
           (rtcpFb) =>
@@ -317,26 +322,37 @@ export class CoreFunctions {
       }
     ];
 
-    transport.dtls.setup = offerMediaDescription.setup || '';
-    transport.dtls.type = offerMediaDescription?.fingerprint?.type || '';
-    transport.dtls.hash = offerMediaDescription?.fingerprint?.hash || '';
-    transport.ice.ufrag = offerMediaDescription.iceUfrag || '';
-    transport.ice.pwd = offerMediaDescription.icePwd || '';
-    // transport.ice.candidates = [];
-    transport.ice.candidates =
-      offerMediaDescription.candidates?.map((c) => {
-        return {
-          ...c,
-          generation: c.generation,
-          component: c.component,
-          priority: c.priority,
-          foundation: c.foundation?.toString(),
-          protocol: 'udp',
-          port: c.port,
-          ip: c.ip,
-          type: c.type.toString()
-        };
-      }) || [];
+    const sdpAnswer = write(parsedOffer);
+
+    // Get the first media description (usually audio)
+    const offerMediaDescription = parsedOffer.media[0];
+    if (!offerMediaDescription) {
+      throw new Error('Missing audio media description in offer');
+    }
+
+    transport.dtls.setup = originalMedia.setup || '';
+    transport.dtls.type = originalMedia?.fingerprint?.type || '';
+    transport.dtls.hash = originalMedia?.fingerprint?.hash || '';
+    transport.ice.ufrag = originalMedia.iceUfrag || '';
+    transport.ice.pwd = originalMedia.icePwd || '';
+    transport.ice.candidates = [];
+    // transport.ice.candidates = !originalMedia.candidates
+    //   ? []
+    //   : originalMedia.candidates.flatMap((element) => {
+    //       return {
+    //         generation: element.generation ? element.generation : 0,
+    //         component: element.component,
+    //         protocol: element.transport?.toLowerCase(),
+    //         port: element.port,
+    //         ip: element.ip,
+    //         relPort: element.rport,
+    //         relAddr: element.raddr,
+    //         foundation: element.foundation.toString(),
+    //         priority: parseInt(element.priority.toString(), 10),
+    //         type: element.type,
+    //         network: element['network-id']
+    //       };
+    //     });
 
     for (let media of parsedOffer.media) {
       if (media.type === 'audio') {
@@ -347,47 +363,47 @@ export class CoreFunctions {
             endpointDescription.audio.ssrcs.push(parseInt(`${ssrc.id}`))
           );
       } else if (media.type === 'video') {
-        // endpointDescription.video = endpointDescription.video || {};
-        // endpointDescription.video.streams = [];
-        // let streamsMap = new Map();
-        // media.ssrcs
-        //   ?.filter((ssrc) => ssrc.attribute === 'msid' && ssrc.value)
-        //   .forEach((ssrc) => {
-        //     let mediaStreamId = ssrc.value?.split(' ')[0];
-        //     let smbVideoStream = streamsMap.get(mediaStreamId);
-        //     if (!smbVideoStream) {
-        //       smbVideoStream = {
-        //         sources: [],
-        //         id: mediaStreamId,
-        //         content: 'video'
-        //       };
-        //       streamsMap.set(mediaStreamId, smbVideoStream);
-        //     }
-        //     let feedbackGroup = media.ssrcGroups
-        //       ?.filter((element) => element.semantics === 'FID')
-        //       .filter((element) => element.ssrcs.indexOf(`${ssrc.id}`) !== -1)
-        //       .pop();
-        //     if (feedbackGroup) {
-        //       let ssrcsSplit = feedbackGroup.ssrcs.split(' ');
-        //       if (`${ssrc.id}` === ssrcsSplit[0]) {
-        //         smbVideoStream.sources = [
-        //           {
-        //             main: parseInt(ssrcsSplit[0]),
-        //             feedback: parseInt(ssrcsSplit[1])
-        //           }
-        //         ];
-        //       }
-        //     } else {
-        //       smbVideoStream.sources = [
-        //         {
-        //           main: parseInt(`${ssrc.id}`)
-        //         }
-        //       ];
-        //     }
-        //   });
-        // streamsMap.forEach((value) =>
-        //   endpointDescription.video.streams.push(value)
-        // );
+        endpointDescription.video = endpointDescription.video || {};
+        endpointDescription.video.streams = [];
+        let streamsMap = new Map();
+        media.ssrcs
+          ?.filter((ssrc) => ssrc.attribute === 'msid' && ssrc.value)
+          .forEach((ssrc) => {
+            let mediaStreamId = ssrc.value?.split(' ')[0];
+            let smbVideoStream = streamsMap.get(mediaStreamId);
+            if (!smbVideoStream) {
+              smbVideoStream = {
+                sources: [],
+                id: mediaStreamId,
+                content: 'video'
+              };
+              streamsMap.set(mediaStreamId, smbVideoStream);
+            }
+            let feedbackGroup = media.ssrcGroups
+              ?.filter((element) => element.semantics === 'FID')
+              .filter((element) => element.ssrcs.indexOf(`${ssrc.id}`) !== -1)
+              .pop();
+            if (feedbackGroup) {
+              let ssrcsSplit = feedbackGroup.ssrcs.split(' ');
+              if (`${ssrc.id}` === ssrcsSplit[0]) {
+                smbVideoStream.sources = [
+                  {
+                    main: parseInt(ssrcsSplit[0]),
+                    feedback: parseInt(ssrcsSplit[1])
+                  }
+                ];
+              }
+            } else {
+              smbVideoStream.sources = [
+                {
+                  main: parseInt(`${ssrc.id}`)
+                }
+              ];
+            }
+          });
+        streamsMap.forEach((value) =>
+          endpointDescription.video.streams.push(value)
+        );
       }
     }
 
@@ -403,43 +419,37 @@ export class CoreFunctions {
             })
           );
       } else if (media.type === 'video') {
-        // endpointDescription.video['payload-types'][0].id =
-        //   media.rtp?.[0].payload;
-        // endpointDescription.video['payload-types'][1].id =
-        //   media.rtp?.[1].payload;
-        // endpointDescription.video['payload-types'][1].parameters = {
-        //   apt: media.rtp[0].payload.toString()
-        // };
-        // endpointDescription.video['rtp-hdrexts'] = [];
-        // media.ext &&
-        //   media.ext.forEach((ext) =>
-        //     endpointDescription.video['rtp-hdrexts'].push({
-        //       id: ext.value,
-        //       uri: ext.uri
-        //     })
-        //   );
-        // endpointDescription.video['payload-types'].forEach((payloadType) => {
-        //   const rtcpFbs = media.rtcpFb?.filter(
-        //     (element) => element.payload === payloadType.id
-        //   );
-        //   payloadType['rtcp-fbs'] = rtcpFbs?.map((rtcpFb) => {
-        //     return {
-        //       type: rtcpFb.type,
-        //       subtype: rtcpFb.subtype || '' // Provide empty string as default when subtype is undefined
-        //     };
-        //   });
-        // });
+        endpointDescription.video['payload-types'][0].id =
+          media.rtp?.[0].payload;
+        endpointDescription.video['payload-types'][1].id =
+          media.rtp?.[1].payload;
+        endpointDescription.video['payload-types'][1].parameters = {
+          apt: media.rtp[0].payload.toString()
+        };
+        endpointDescription.video['rtp-hdrexts'] = [];
+        media.ext &&
+          media.ext.forEach((ext) =>
+            endpointDescription.video['rtp-hdrexts'].push({
+              id: ext.value,
+              uri: ext.uri
+            })
+          );
+        endpointDescription.video['payload-types'].forEach((payloadType) => {
+          const rtcpFbs = media.rtcpFb?.filter(
+            (element) => element.payload === payloadType.id
+          );
+          payloadType['rtcp-fbs'] = rtcpFbs?.map((rtcpFb) => {
+            return {
+              type: rtcpFb.type,
+              subtype: rtcpFb.subtype || '' // Provide empty string as default when subtype is undefined
+            };
+          });
+        });
       }
     }
 
     // Generate the SDP answer
-    const sdpAnswer = write(parsedOffer);
-
-    console.log('sdpAnswer', JSON.stringify(parsedOffer));
-    console.log(
-      'Updated endpointDescription',
-      JSON.stringify(endpointDescription)
-    );
+    // const sdpAnswer = write(parsedOffer);
 
     // Configure the endpoint to handle incoming media
     // This tells SMB how to route the audio when it starts flowing

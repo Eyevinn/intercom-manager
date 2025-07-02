@@ -898,13 +898,6 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           sdpOffer
         );
 
-        Log().info(
-          `WHIP session created: ${sessionId} for production ${productionId}, line ${lineId}`
-        );
-        Log().info(
-          `SMB conference: ${smbConferenceId}, endpoint: ${endpointId}`
-        );
-
         // Create user session in production manager
         productionManager.createUserSession(
           productionId,
@@ -939,10 +932,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
 
         // Add CORS headers for browser compatibility
         reply.header('Access-Control-Allow-Origin', '*');
-        reply.header(
-          'Access-Control-Allow-Methods',
-          'POST, DELETE, OPTIONS, PATCH'
-        );
+        reply.header('Access-Control-Allow-Methods', 'POST, DELETE, OPTIONS');
         reply.header(
           'Access-Control-Allow-Headers',
           'Content-Type, Authorization'
@@ -1172,28 +1162,6 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
 
         // WHIP-specific headers
         reply.header('Accept-Post', 'application/sdp');
-
-        // Add ICE server information if available
-        // You can configure ICE servers in your environment or config
-        const iceServers = process.env.ICE_SERVERS
-          ? process.env.ICE_SERVERS.split(',')
-              .map((server) => {
-                const trimmed = server.trim();
-                if (trimmed.startsWith('stun:')) {
-                  return `${trimmed}; rel="ice-server"`;
-                } else if (trimmed.startsWith('turn:')) {
-                  // For TURN servers, you might need to extract credentials
-                  // This is a simplified version - you may need to enhance this
-                  return `${trimmed}; rel="ice-server"`;
-                }
-                return null;
-              })
-              .filter(Boolean)
-          : [];
-
-        if (iceServers.length > 0) {
-          reply.header('Link', iceServers.join(', '));
-        }
 
         reply.code(200).send();
       } catch (err) {
