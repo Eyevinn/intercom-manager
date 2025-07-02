@@ -30,6 +30,7 @@ import {
 } from './models';
 import { ProductionManager } from './production_manager';
 import { SmbProtocol } from './smb';
+import { parse } from 'sdp-transform';
 dotenv.config();
 
 const DB_CONNECTION_STRING: string =
@@ -917,10 +918,8 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
 
         // Start heartbeat for this WHIP session
         const interval = setInterval(() => {
-          console.log("Interval")
           const success = productionManager.updateUserLastSeen(sessionId);
           if (!success) {
-            console.warn(`WHIP heartbeat failed for ${sessionId}, clearing.`);
             clearInterval(interval);
             delete whipHeartbeatIntervals[sessionId];
           }
@@ -940,7 +939,10 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
 
         // Add CORS headers for browser compatibility
         reply.header('Access-Control-Allow-Origin', '*');
-        reply.header('Access-Control-Allow-Methods', 'POST, DELETE, OPTIONS');
+        reply.header(
+          'Access-Control-Allow-Methods',
+          'POST, DELETE, OPTIONS, PATCH'
+        );
         reply.header(
           'Access-Control-Allow-Headers',
           'Content-Type, Authorization'
@@ -979,7 +981,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       try {
         const { sessionId } = request.params;
 
-         // Clear heartbeat interval if it exists
+        // Clear heartbeat interval if it exists
         if (whipHeartbeatIntervals[sessionId]) {
           console.log(`Clearing heartbeat for WHIP session ${sessionId}`);
           clearInterval(whipHeartbeatIntervals[sessionId]);

@@ -71,6 +71,9 @@ export class SmbProtocol {
         ice: true,
         dtls: true,
         sdes: false
+      },
+      audio: {
+        ssrcs: []
       }
     };
 

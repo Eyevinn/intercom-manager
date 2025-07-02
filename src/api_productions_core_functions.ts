@@ -50,7 +50,7 @@ export class CoreFunctions {
     const connection = new Connection(
       username,
       endpointMediaStreamInfo,
-      endpoint,
+      endpoint as any, // Type assertion to bypass type error temporarily
       endpointId
     );
 
@@ -120,27 +120,29 @@ export class CoreFunctions {
 
     // Parse the offer
     const parsedOffer = parse(offer);
+    console.log('parsedOffer', JSON.stringify(parsedOffer));
     if (parsedOffer.origin) {
       parsedOffer.origin.sessionVersion++;
     }
 
     // Remove ICE controlling indicators from client offer to prevent role conflicts
     // This ensures SMB can be ICE controlling without conflicts
-    if ((parsedOffer as any).iceOptions) {
-      delete (parsedOffer as any).iceOptions;
-    }
+    // if ((parsedOffer as any).iceOptions) {
+    //   delete (parsedOffer as any).iceOptions;
+    // }
 
-    parsedOffer.media.forEach((media, index) => {
-      if ((media as any).iceOptions) {
-        delete (media as any).iceOptions;
-      }
-    });
+    // parsedOffer.media.forEach((media, index) => {
+    //   if ((media as any).iceOptions) {
+    //     delete (media as any).iceOptions;
+    //   }
+    // });
 
     // Set up MSID semantic if not present
     if (!parsedOffer.msidSemantic) {
       parsedOffer.msidSemantic = {
         semantic: 'WMS',
-        token: '*'
+        // token: '*',
+        token: ''
       };
     } else {
       // Ensure the token is set to '*' for proper MSID handling
@@ -148,10 +150,10 @@ export class CoreFunctions {
     }
 
     // Remove session-level ICE and DTLS parameters to avoid conflicts
-    delete parsedOffer.iceUfrag;
-    delete parsedOffer.icePwd;
-    delete parsedOffer.fingerprint;
-    delete parsedOffer.setup;
+    // delete parsedOffer.iceUfrag;
+    // delete parsedOffer.icePwd;
+    // delete parsedOffer.fingerprint;
+    // delete parsedOffer.setup;
 
     // Get the first media description (usually audio)
     const offerMediaDescription = parsedOffer.media[0];
@@ -184,7 +186,8 @@ export class CoreFunctions {
 
     // Process all media sections to preserve order
     let bundleGroupMids = '';
-    const processedMedia = [];
+
+    let candidatesAdded = false;
 
     for (let media of parsedOffer.media) {
       // Add to bundle group
@@ -193,33 +196,29 @@ export class CoreFunctions {
           ? `${media.mid}`
           : `${bundleGroupMids} ${media.mid}`;
 
-      if (media.type === 'audio') {
-        // Process audio media with SMB configuration
-        const smbAudio = endpointDescription.audio;
-        const smbPayloadType = smbAudio['payload-type'];
+      // Set ICE and DTLS parameters
+      // media.iceUfrag = transport.ice!.ufrag;
+      // media.icePwd = transport.ice!.pwd;
+      // media.fingerprint = {
+      //   type: transport.dtls!.type,
+      //   hash: transport.dtls!.hash
+      // };
+      media.setup = 'active';
 
-        // Set ICE and DTLS parameters
-        media.iceUfrag = transport.ice!.ufrag;
-        media.icePwd = transport.ice!.pwd;
-        media.fingerprint = {
-          type: transport.dtls!.type,
-          hash: transport.dtls!.hash
-        };
-        media.setup = 'passive';
+      // Clear unnecessary fields
+      media.ssrcGroups = undefined;
+      media.msid = undefined;
+      media.candidates = undefined;
+      media.port = 9;
+      media.rtcp = {
+        port: 9,
+        netType: 'IN',
+        ipVer: 4,
+        address: '0.0.0.0'
+      };
+      // media.rtcpMux = 'rtcp-mux';
 
-        // Clear unnecessary fields
-        media.ssrcGroups = undefined;
-        media.msid = undefined;
-        media.candidates = undefined;
-        media.port = 9;
-        media.rtcp = {
-          port: 9,
-          netType: 'IN',
-          ipVer: 4,
-          address: '0.0.0.0'
-        };
-        media.rtcpMux = 'rtcp-mux';
-
+      if (!candidatesAdded) {
         // Add ICE candidates
         media.candidates = transport.ice!.candidates.map((candidate: any) => ({
           foundation: candidate.foundation,
@@ -234,86 +233,81 @@ export class CoreFunctions {
           generation: candidate.generation,
           'network-id': candidate.network
         }));
-
-        // Set up RTP with SMB-provided payload type
-        media.rtp = [
-          {
-            payload: smbPayloadType.id,
-            codec: smbPayloadType.name,
-            rate: smbPayloadType.clockrate
-          }
-        ];
-
-        // Use SMB-provided RTP header extensions
-        media.ext = smbAudio['rtp-hdrexts'].map((ext) => ({
-          value: ext.id,
-          uri: ext.uri
-        }));
-
-        // Set up FMTP with SMB-provided parameters
-        if (smbPayloadType.parameters) {
-          const fmtpParams = Object.entries(smbPayloadType.parameters)
-            .map(([key, value]) => `${key}=${value}`)
-            .join(';');
-
-          media.fmtp = [
-            {
-              payload: smbPayloadType.id,
-              config: fmtpParams
-            }
-          ];
-        } else {
-          media.fmtp = [];
-        }
-
-        // Set payloads to SMB-provided payload type
-        media.payloads = `${smbPayloadType.id}`;
-
-        // Set up SSRCs from SMB (only use the provided SSRC)
-        if (smbAudio.ssrcs && smbAudio.ssrcs.length > 0) {
-          media.ssrcs = [
-            {
-              id: smbAudio.ssrcs[0], // Only use the first SSRC from SMB
-              attribute: 'cname',
-              value: uuidv4()
-            }
-          ];
-        }
-
-        // For WHIP: Client sends audio to server, server receives it
-        media.direction = 'recvonly';
-
-        // Use SMB-provided RTCP feedback if available
-        media.rtcpFb =
-          smbPayloadType['rtcp-fbs']?.map((fb) => ({
-            payload: smbPayloadType.id,
-            type: fb.type,
-            subtype: fb.subtype
-          })) || [];
-      } else {
-        // For non-audio media (video, etc.), set to inactive
-        media.direction = 'inactive';
-        media.port = 0;
-        media.payloads = '0'; // Use a dummy payload type for inactive media
-        media.rtp = [];
-        media.fmtp = [];
-        media.rtcpFb = [];
-        media.ssrcs = [];
-        media.ssrcGroups = undefined;
-        media.msid = undefined;
-        media.candidates = undefined;
-        media.iceUfrag = undefined;
-        media.icePwd = undefined;
-        media.fingerprint = undefined;
-        media.setup = undefined;
-        media.ext = [];
+        candidatesAdded = true;
       }
 
-      processedMedia.push(media);
-    }
+      if (media.type === 'audio') {
+        media.rtp = media.rtp.filter(
+          (rtp) => rtp.codec.toLowerCase() === 'opus'
+        );
+        let opusPayloadType = media.rtp.at(0)?.payload;
+        if (!opusPayloadType) {
+          throw new Error('Missing opus payload type');
+        }
 
-    // Keep all media sections in original order
-    parsedOffer.media = processedMedia;
+        media.fmtp = media.fmtp.filter(
+          (fmtp) => fmtp.payload === opusPayloadType
+        );
+        media.payloads = `${opusPayloadType}`;
+
+        media.ext =
+          media.ext &&
+          media.ext.filter(
+            (ext) =>
+              ext.uri === 'urn:ietf:params:rtp-hdrext:ssrc-audio-level' ||
+              ext.uri ===
+                'http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time'
+          );
+
+        media.direction = 'recvonly';
+        media.rtcpFb = undefined;
+      } else if (media.type === 'video') {
+        const vp8Codec = media.rtp.find((rtp) => rtp.codec === 'VP8');
+        if (!vp8Codec) {
+          throw new Error('Missing VP8 codec');
+        }
+        const vp8PayloadType = vp8Codec.payload;
+
+        const rtxFmtp = media.fmtp.find(
+          (fmtp) => fmtp.config === `apt=${vp8PayloadType}`
+        );
+        if (!rtxFmtp) {
+          throw new Error('Missing RTX fmtp');
+        }
+        const vp8RtxPayloadType = rtxFmtp.payload;
+
+        media.rtp = media.rtp.filter(
+          (rtp) =>
+            rtp.payload === vp8PayloadType || rtp.payload === vp8RtxPayloadType
+        );
+
+        media.fmtp = media.fmtp.filter(
+          (fmtp) =>
+            fmtp.payload === vp8PayloadType ||
+            fmtp.payload === vp8RtxPayloadType
+        );
+        media.payloads = `${vp8PayloadType} ${vp8RtxPayloadType}`;
+        media.setup = 'active';
+
+        media.ext =
+          media.ext &&
+          media.ext.filter(
+            (ext) =>
+              ext.uri ===
+                'http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time' ||
+              ext.uri === 'urn:ietf:params:rtp-hdrext:sdes:rtp-stream-id'
+          );
+
+        media.direction = 'recvonly';
+        media.rtcpFb = media.rtcpFb?.filter(
+          (rtcpFb) =>
+            rtcpFb.payload === vp8PayloadType &&
+            (rtcpFb.type === 'goog-remb' || rtcpFb.type === 'nack')
+        );
+
+        media.ssrcGroups = undefined;
+      }
+    }
 
     // Set up bundle group
     parsedOffer.groups = [
@@ -323,28 +317,139 @@ export class CoreFunctions {
       }
     ];
 
-    // await smb.configureEndpoint(
-    //   smbServerUrl,
-    //   smbConferenceId,
-    //   endpointId,
-    //   endpointDescription,
-    //   smbServerApiKey
-    // );
+    transport.dtls.setup = offerMediaDescription.setup || '';
+    transport.dtls.type = offerMediaDescription?.fingerprint?.type || '';
+    transport.dtls.hash = offerMediaDescription?.fingerprint?.hash || '';
+    transport.ice.ufrag = offerMediaDescription.iceUfrag || '';
+    transport.ice.pwd = offerMediaDescription.icePwd || '';
+    // transport.ice.candidates = [];
+    transport.ice.candidates =
+      offerMediaDescription.candidates?.map((c) => {
+        return {
+          ...c,
+          generation: c.generation,
+          component: c.component,
+          priority: c.priority,
+          foundation: c.foundation?.toString(),
+          protocol: 'udp',
+          port: c.port,
+          ip: c.ip,
+          type: c.type.toString()
+        };
+      }) || [];
 
-    // Return the answer// Return the answer
-    console.log('endpointDescription', JSON.stringify(endpointDescription));
-    console.log('answer', JSON.stringify(parsedOffer));
+    for (let media of parsedOffer.media) {
+      if (media.type === 'audio') {
+        endpointDescription.audio.ssrcs = [];
+        media.ssrcs
+          ?.filter((ssrc) => ssrc.attribute === 'msid')
+          .forEach((ssrc) =>
+            endpointDescription.audio.ssrcs.push(parseInt(`${ssrc.id}`))
+          );
+      } else if (media.type === 'video') {
+        // endpointDescription.video = endpointDescription.video || {};
+        // endpointDescription.video.streams = [];
+        // let streamsMap = new Map();
+        // media.ssrcs
+        //   ?.filter((ssrc) => ssrc.attribute === 'msid' && ssrc.value)
+        //   .forEach((ssrc) => {
+        //     let mediaStreamId = ssrc.value?.split(' ')[0];
+        //     let smbVideoStream = streamsMap.get(mediaStreamId);
+        //     if (!smbVideoStream) {
+        //       smbVideoStream = {
+        //         sources: [],
+        //         id: mediaStreamId,
+        //         content: 'video'
+        //       };
+        //       streamsMap.set(mediaStreamId, smbVideoStream);
+        //     }
+        //     let feedbackGroup = media.ssrcGroups
+        //       ?.filter((element) => element.semantics === 'FID')
+        //       .filter((element) => element.ssrcs.indexOf(`${ssrc.id}`) !== -1)
+        //       .pop();
+        //     if (feedbackGroup) {
+        //       let ssrcsSplit = feedbackGroup.ssrcs.split(' ');
+        //       if (`${ssrc.id}` === ssrcsSplit[0]) {
+        //         smbVideoStream.sources = [
+        //           {
+        //             main: parseInt(ssrcsSplit[0]),
+        //             feedback: parseInt(ssrcsSplit[1])
+        //           }
+        //         ];
+        //       }
+        //     } else {
+        //       smbVideoStream.sources = [
+        //         {
+        //           main: parseInt(`${ssrc.id}`)
+        //         }
+        //       ];
+        //     }
+        //   });
+        // streamsMap.forEach((value) =>
+        //   endpointDescription.video.streams.push(value)
+        // );
+      }
+    }
+
+    for (let media of parsedOffer.media) {
+      if (media.type === 'audio') {
+        endpointDescription.audio['payload-type'].id = media.rtp[0].payload;
+        endpointDescription.audio['rtp-hdrexts'] = [];
+        media.ext &&
+          media.ext.forEach((ext) =>
+            endpointDescription.audio['rtp-hdrexts'].push({
+              id: ext.value,
+              uri: ext.uri
+            })
+          );
+      } else if (media.type === 'video') {
+        // endpointDescription.video['payload-types'][0].id =
+        //   media.rtp?.[0].payload;
+        // endpointDescription.video['payload-types'][1].id =
+        //   media.rtp?.[1].payload;
+        // endpointDescription.video['payload-types'][1].parameters = {
+        //   apt: media.rtp[0].payload.toString()
+        // };
+        // endpointDescription.video['rtp-hdrexts'] = [];
+        // media.ext &&
+        //   media.ext.forEach((ext) =>
+        //     endpointDescription.video['rtp-hdrexts'].push({
+        //       id: ext.value,
+        //       uri: ext.uri
+        //     })
+        //   );
+        // endpointDescription.video['payload-types'].forEach((payloadType) => {
+        //   const rtcpFbs = media.rtcpFb?.filter(
+        //     (element) => element.payload === payloadType.id
+        //   );
+        //   payloadType['rtcp-fbs'] = rtcpFbs?.map((rtcpFb) => {
+        //     return {
+        //       type: rtcpFb.type,
+        //       subtype: rtcpFb.subtype || '' // Provide empty string as default when subtype is undefined
+        //     };
+        //   });
+        // });
+      }
+    }
+
+    // Generate the SDP answer
     const sdpAnswer = write(parsedOffer);
 
-    // await this.handleAnswerRequest(
-    //   smb,
-    //   smbServerUrl,
-    //   smbServerApiKey,
-    //   lineId,
-    //   endpointId,
-    //   endpointDescription,
-    //   sdpAnswer
-    // );
+    console.log('sdpAnswer', JSON.stringify(parsedOffer));
+    console.log(
+      'Updated endpointDescription',
+      JSON.stringify(endpointDescription)
+    );
+
+    // Configure the endpoint to handle incoming media
+    // This tells SMB how to route the audio when it starts flowing
+    await smb.configureEndpoint(
+      smbServerUrl,
+      smbConferenceId,
+      endpointId,
+      endpointDescription,
+      smbServerApiKey
+    );
 
     return sdpAnswer;
   }
@@ -377,8 +482,7 @@ export class CoreFunctions {
         'Missing audio media description when handling sdp answer from endpoint'
       );
     }
-    console.log("parsedAnswer.media", JSON.stringify(parsedAnswer.media));
-    console.log("parsedAnswer.media[1]", JSON.stringify(parsedAnswer.media[1]));
+
     if (parsedAnswer.media[1].ssrcs) {
       let parsedSsrcs = parsedAnswer.media[1].ssrcs[0].id;
       if (typeof parsedSsrcs === 'string') {

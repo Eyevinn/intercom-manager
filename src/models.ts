@@ -87,16 +87,16 @@ export const NewProductionLine = Type.Object({
 });
 
 const SmbCandidate = Type.Object({
-  generation: Type.Number(),
-  component: Type.Number(),
-  protocol: Type.String(),
+  generation: Type.Any(),
+  component: Type.Any(),
+  protocol: Type.Any(),
   port: Type.Number(),
   ip: Type.String(),
   'rel-port': Type.Optional(Type.Number()),
   'rel-addr': Type.Optional(Type.String()),
-  foundation: Type.String(),
-  priority: Type.Number(),
-  type: Type.String(),
+  foundation: Type.Optional(Type.String()),
+  priority: Type.Any(),
+  type: Type.Optional(Type.String()),
   network: Type.Optional(Type.Number())
 });
 
@@ -125,8 +125,9 @@ const RtcpFeedback = Type.Object({
 });
 
 const AudioSmbPayloadParameters = Type.Object({
-  minptime: Type.String(),
-  useinbandfec: Type.String()
+  minptime: Type.Optional(Type.String()),
+  useinbandfec: Type.Optional(Type.String()),
+  apt: Type.Optional(Type.String())
 });
 
 const AudioSmbPayloadType = Type.Object({
@@ -149,6 +150,23 @@ export const SmbEndpointDescription = Type.Object({
     ssrcs: Type.Array(Type.Number()),
     'payload-type': AudioSmbPayloadType,
     'rtp-hdrexts': Type.Array(SmbRtpHeaderExtension)
+  }),
+  video: Type.Object({
+    ssrcs: Type.Array(Type.Number()),
+    'payload-types': Type.Array(AudioSmbPayloadType),
+    'rtp-hdrexts': Type.Array(SmbRtpHeaderExtension),
+    streams: Type.Array(
+      Type.Object({
+        id: Type.String(),
+        content: Type.String(),
+        sources: Type.Array(
+          Type.Object({
+            main: Type.Number(),
+            feedback: Type.Optional(Type.Number())
+          })
+        )
+      })
+    )
   }),
   data: Type.Optional(Type.Object({ port: Type.Number() })),
   idleTimeout: Type.Optional(Type.Number())
