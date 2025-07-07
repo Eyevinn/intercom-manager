@@ -30,7 +30,7 @@ import {
 } from './models';
 import { ProductionManager } from './production_manager';
 import { SmbProtocol } from './smb';
-import { parse } from 'sdp-transform';
+import { getIceServers } from './utils';
 dotenv.config();
 
 const DB_CONNECTION_STRING: string =
@@ -903,7 +903,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           productionId,
           lineId,
           sessionId,
-          'WHIPing tears off my face'
+          'WHIP'
         );
 
         // Update user endpoint information
@@ -930,19 +930,24 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         reply.header('Location', locationUrl);
         reply.header('ETag', sessionId);
 
-        // Add CORS headers for browser compatibility
+        const links = getIceServers();
+        const linkHeader = links.join(',');
+        reply.header('Link', linkHeader);
+
+        // CORS headers
         reply.header('Access-Control-Allow-Origin', '*');
-        reply.header('Access-Control-Allow-Methods', 'POST, DELETE, OPTIONS');
+        reply.header(
+          'Access-Control-Allow-Methods',
+          'GET, POST, DELETE, OPTIONS, PATCH'
+        );
         reply.header(
           'Access-Control-Allow-Headers',
-          'Content-Type, Authorization'
+          'Content-Type, Authorization, ETag, If-Match, Link'
         );
-        reply.header('Access-Control-Expose-Headers', 'Location, ETag');
+        reply.header('Access-Control-Expose-Headers', 'Location, ETag, Link');
 
         // Return 201 Created with the SDP answer
         await reply.code(201).send(sdpAnswer);
-
-        console.log('SLUT PÅ ALLT: ', sessionId);
       } catch (err) {
         Log().error(err);
         reply
@@ -961,7 +966,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       schema: {
         description: 'Terminate a WHIP connection',
         response: {
-          204: Type.Null(),
+          200: Type.Null(),
           404: Type.Object({ error: Type.String() }),
           500: Type.Object({ error: Type.String() })
         }
@@ -993,7 +998,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           'Content-Type, Authorization'
         );
 
-        reply.code(204).send();
+        reply.code(200).send();
       } catch (err) {
         Log().error(err);
         reply

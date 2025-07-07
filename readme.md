@@ -17,15 +17,16 @@ The solution is built on top of WebRTC technology and provides a user-friendly i
 
 ## Environment variables
 
-| Variable name               | Description                                                                  |
-| --------------------------- | ---------------------------------------------------------------------------- |
-| `PORT`                      | Intercom-Manager API port                                                    |
-| `SMB_ADDRESS`               | The address:port of the Symphony Media Bridge instance                       |
-| `SMB_APIKEY`                | When set, provide this API key for the Symphony Media Bridge (optional)      |
-| `DB_CONNECTION_STRING`      | DB connection string (default: `mongodb://localhost:27017/intercom-manager`) |
-| `PUBLIC_HOST`               | Hostname for frontend application for generating URLs to share               |
-| `OSC_ACCESS_TOKEN`          | Personal Access Token from OSC for link sharing and reauthenticating         |
-| `MONGODB_CONNECTION_STRING` | DEPRECATED: MongoDB connection string                                        |
+| Variable name               | Description                                                                                                                                                                                                                                                 |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PORT`                      | Intercom-Manager API port                                                                                                                                                                                                                                   |
+| `SMB_ADDRESS`               | The address:port of the Symphony Media Bridge instance                                                                                                                                                                                                      |
+| `SMB_APIKEY`                | When set, provide this API key for the Symphony Media Bridge (optional)                                                                                                                                                                                     |
+| `DB_CONNECTION_STRING`      | DB connection string (default: `mongodb://localhost:27017/intercom-manager`)                                                                                                                                                                                |
+| `PUBLIC_HOST`               | Hostname for frontend application for generating URLs to share                                                                                                                                                                                              |
+| `OSC_ACCESS_TOKEN`          | Personal Access Token from OSC for link sharing and reauthenticating                                                                                                                                                                                        |
+| `ICE_SERVERS`               | Comma-separated list of ICE servers in the format: `turn:username:password@turn.example.com,stun:stun.example.com`. If no STUN server is provided, and WHIP endpoints are used, Google's default STUN server (`stun:stun.l.google.com:19302`) will be used. |
+| `MONGODB_CONNECTION_STRING` | DEPRECATED: MongoDB connection string                                                                                                                                                                                                                       |
 
 ## Installation / Usage
 
