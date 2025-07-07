@@ -930,7 +930,9 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         reply.header('Location', locationUrl);
         reply.header('ETag', sessionId);
 
-        reply.header('Link', getIceServers().join(', '));
+        const links = getIceServers();
+        const linkHeader = links.join(',');
+        reply.header('Link', linkHeader);
 
         // CORS headers
         reply.header('Access-Control-Allow-Origin', '*');
@@ -964,7 +966,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       schema: {
         description: 'Terminate a WHIP connection',
         response: {
-          204: Type.Null(),
+          200: Type.Null(),
           404: Type.Object({ error: Type.String() }),
           500: Type.Object({ error: Type.String() })
         }
@@ -996,7 +998,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           'Content-Type, Authorization'
         );
 
-        reply.code(204).send();
+        reply.code(200).send();
       } catch (err) {
         Log().error(err);
         reply

@@ -1,6 +1,4 @@
 // Custom light assert function because jest breaks node:assert
-import { Log } from './log';
-
 // see https://github.com/jestjs/jest/issues/7547
 export function assert(condition: any, message: string): asserts condition {
   if (!condition) {
@@ -11,8 +9,8 @@ export function assert(condition: any, message: string): asserts condition {
 
 export function getIceServers(): string[] {
   const defaultStun = 'stun:stun.l.google.com:19302';
-  const iceServers = process.env.ICE_SERVERS || '';
-  const entries = iceServers
+  const raw = process.env.ICE_SERVERS || '';
+  const entries = raw
     .split(',')
     .map((e) => e.trim())
     .filter(Boolean);
@@ -20,30 +18,33 @@ export function getIceServers(): string[] {
   const links: string[] = [];
 
   for (const entry of entries) {
-    try {
-      const url = new URL(entry);
-
-      if (url.protocol.startsWith('stun')) {
-        links.push(`<${url.href}>; rel="ice-server"`);
-      } else if (url.protocol.startsWith('turn')) {
-        const username = url.username;
-        const credential = url.password;
-        const turnUrl = `${url.protocol.slice(0, -1)}:${url.host}${
-          url.pathname
-        }`;
-        if (username && credential) {
-          links.push(
-            `<${turnUrl}>; rel="ice-server"; username="${username}"; credential="${credential}"`
-          );
-        }
+    if (entry.startsWith('turn:')) {
+      const rest = entry.slice('turn:'.length);
+      const atIndex = rest.indexOf('@');
+      if (atIndex === -1) {
+        console.warn('Invalid TURN format, missing "@":', entry);
+        continue;
       }
-    } catch {
-      Log().warn(`Invalid ICE server URL: ${entry}`);
+
+      const creds = rest.slice(0, atIndex);
+      const host = rest.slice(atIndex + 1);
+
+      const [username, credential] = creds.split(':');
+      if (!username || !credential) {
+        console.warn('Invalid TURN credentials:', creds);
+        continue;
+      }
+
+      const uri = `turn:${host}`;
+      links.push(
+        `<${uri}>; rel="ice-server"; username="${username}"; credential="${credential}"; credential-type="password"`
+      );
+    } else if (entry.startsWith('stun:') || entry.startsWith('stuns:')) {
+      links.push(`<${entry}>; rel="ice-server"`);
     }
   }
 
-  // Fallback to default STUN if none was provided
-  if (!links.some((l) => l.includes('stun:'))) {
+  if (!links.some((link) => link.includes('stun:'))) {
     links.unshift(`<${defaultStun}>; rel="ice-server"`);
   }
 
