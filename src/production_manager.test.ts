@@ -1,10 +1,10 @@
-import { ProductionManager } from './production_manager';
 import {
   NewProduction,
   Production,
   SmbEndpointDescription,
   UserSession
 } from './models';
+import { ProductionManager } from './production_manager';
 
 const newProduction: NewProduction = {
   name: 'productionname',
@@ -73,6 +73,39 @@ const SmbEndpointDescriptionMock: SmbEndpointDescription = {
       {
         id: 3,
         uri: 'http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time'
+      }
+    ]
+  },
+  video: {
+    'payload-type': {
+      id: 100,
+      name: 'VP8',
+      clockrate: 90000,
+      parameters: {
+        'x-google-start-bitrate': '800',
+        'x-google-max-bitrate': '1200',
+        'x-google-min-bitrate': '300'
+      },
+      'rtcp-fbs': [
+        { type: 'nack' },
+        { type: 'nack', subtype: 'pli' },
+        { type: 'ccm', subtype: 'fir' },
+        { type: 'goog-remb' }
+      ]
+    },
+    ssrcs: [2345, 6789],
+    'rtp-hdrexts': [
+      {
+        id: 2,
+        uri: 'urn:3gpp:video-orientation'
+      },
+      {
+        id: 3,
+        uri: 'http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time'
+      },
+      {
+        id: 4,
+        uri: 'http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01'
       }
     ]
   },

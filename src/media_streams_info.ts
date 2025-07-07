@@ -16,6 +16,29 @@ export interface MediaStreamsInfo {
   };
 }
 
+export type RtpCodec = {
+  payload: number;
+  codec: string;
+  rate?: number;
+  encoding?: number;
+};
+
+export type Fmtp = {
+  payload: number;
+  config: string;
+};
+
+export type RtpHeaderExt = {
+  value: number;
+  uri: string;
+};
+
+export type RtcpFb = {
+  payload: number;
+  type: string;
+  subtype?: string;
+};
+
 const MediaStreamsInfoSsrcSchema = {
   ssrc: { type: 'string' },
   cname: { type: 'string' },

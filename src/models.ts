@@ -1,4 +1,4 @@
-import { Type, Static } from '@sinclair/typebox';
+import { Static, Type } from '@sinclair/typebox';
 
 export type NewProduction = Static<typeof NewProduction>;
 export type NewProductionLine = Static<typeof NewProductionLine>;
@@ -144,6 +144,37 @@ const SmbRtpHeaderExtension = Type.Object({
   uri: Type.String()
 });
 
+const VideoSmbPayloadParameters = Type.Object({
+  'x-google-start-bitrate': Type.Optional(Type.String()),
+  'x-google-max-bitrate': Type.Optional(Type.String()),
+  'x-google-min-bitrate': Type.Optional(Type.String())
+});
+
+const VideoSmbPayloadType = Type.Object({
+  id: Type.Number(),
+  name: Type.String(),
+  clockrate: Type.Number(),
+  parameters: VideoSmbPayloadParameters,
+  'rtcp-fbs': Type.Array(
+    Type.Object({
+      type: Type.String(),
+      subtype: Type.Optional(Type.String()),
+      payload: Type.Optional(Type.Number())
+    })
+  )
+});
+
+export const SmbVideoEndpointDescription = Type.Object({
+  video: Type.Object({
+    ssrcs: Type.Array(Type.Number()),
+    'payload-type': VideoSmbPayloadType,
+    'rtp-hdrexts': Type.Array(SmbRtpHeaderExtension),
+    transport: SmbTransport
+  }),
+  data: Type.Optional(Type.Object({ port: Type.Number() })),
+  idleTimeout: Type.Optional(Type.Number())
+});
+
 export const SmbEndpointDescription = Type.Object({
   'bundle-transport': Type.Optional(SmbTransport),
   audio: Type.Object({
@@ -153,20 +184,8 @@ export const SmbEndpointDescription = Type.Object({
   }),
   video: Type.Object({
     ssrcs: Type.Array(Type.Number()),
-    'payload-types': Type.Array(AudioSmbPayloadType),
-    'rtp-hdrexts': Type.Array(SmbRtpHeaderExtension),
-    streams: Type.Array(
-      Type.Object({
-        id: Type.String(),
-        content: Type.String(),
-        sources: Type.Array(
-          Type.Object({
-            main: Type.Number(),
-            feedback: Type.Optional(Type.Number())
-          })
-        )
-      })
-    )
+    'payload-type': VideoSmbPayloadType,
+    'rtp-hdrexts': Type.Array(SmbRtpHeaderExtension)
   }),
   data: Type.Optional(Type.Object({ port: Type.Number() })),
   idleTimeout: Type.Optional(Type.Number())
