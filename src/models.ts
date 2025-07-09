@@ -328,7 +328,7 @@ export const WhipRequest = Type.String({
 
 // WHIP endpoint response schema
 export const WhipResponse = Type.String({
-  description: 'WebRTC SDP answer'
+  description: 'Created'
 });
 
 export const NewIngest = Type.Object({

@@ -1,4 +1,9 @@
-import { SessionDescription, parse, write } from 'sdp-transform';
+import {
+  MediaDescription,
+  SessionDescription,
+  parse,
+  write
+} from 'sdp-transform';
 import { v4 as uuidv4 } from 'uuid';
 import { Connection } from './connection';
 import { ConnectionQueue } from './connection_queue';
@@ -115,50 +120,33 @@ export class CoreFunctions {
     endpointDescription: SmbEndpointDescription,
     offer: string
   ): Promise<string> {
-    if (!endpointDescription) {
-      throw new Error('Missing endpointDescription when handling sdp offer');
-    }
-    if (!endpointDescription.audio) {
-      throw new Error(
-        'Missing endpointDescription audio when handling sdp offer'
-      );
-    }
+    const { sdpAnswer, updatedDescription } = await this.buildSdpAnswer(
+      endpointDescription,
+      offer
+    );
 
-    // Parse the offer
-    const parsedOffer = parse(offer);
+    await smb.configureEndpoint(
+      smbServerUrl,
+      smbConferenceId,
+      endpointId,
+      updatedDescription,
+      smbServerApiKey
+    );
 
-    if (parsedOffer.origin) {
-      parsedOffer.origin.sessionVersion++;
-    }
+    return sdpAnswer;
+  }
 
-    // Set up MSID semantic if not present
-    if (!parsedOffer.msidSemantic) {
-      parsedOffer.msidSemantic = {
-        semantic: 'WMS',
-        // token: '*',
-        token: ''
-      };
-    } else {
-      // Ensure the token is set to '*' for proper MSID handling
-      parsedOffer.msidSemantic.token = '*';
-    }
-
-    // Use SMB-provided SSRCs - no need to extract from offer
-    if (
-      !endpointDescription.audio.ssrcs ||
-      endpointDescription.audio.ssrcs.length === 0
-    ) {
-      throw new Error('Missing audio ssrcs in SMB endpoint description');
-    }
-
-    // Get transport configuration from bundle-transport
-    const transport = endpointDescription['bundle-transport'];
-    const originalOffer = {
-      ...parsedOffer
-    };
+  prepareParsedOffer(
+    parsedOffer: SessionDescription,
+    endpointDescription: SmbEndpointDescription,
+    transport: (typeof endpointDescription)['bundle-transport']
+  ): { modifiedOffer: SessionDescription; originalMedia: MediaDescription } {
+    let bundleGroupMids = '';
+    let candidatesAdded = false;
     const originalMedia = {
       ...parsedOffer.media.find((media) => media.type === 'audio')
-    };
+    } as MediaDescription;
+
     if (!transport) {
       throw new Error('Missing bundle-transport in endpointDescription');
     }
@@ -169,21 +157,13 @@ export class CoreFunctions {
       throw new Error('Missing ice in endpointDescription');
     }
 
-    // Ensure SMB is ICE controlling
-    // transport.ice.controlling = true;
-
-    // Process all media sections to preserve order
-    let bundleGroupMids = '';
-    let candidatesAdded = false;
-
     for (const media of parsedOffer.media) {
-      // Add to bundle group
       bundleGroupMids =
         bundleGroupMids === ''
           ? `${media.mid}`
           : `${bundleGroupMids} ${media.mid}`;
 
-      // media['iceOptions'] = undefined;
+      (media as any).iceOptions = undefined;
       media.iceUfrag = transport.ice.ufrag;
       media.icePwd = transport.ice.pwd;
       media.fingerprint = {
@@ -192,7 +172,7 @@ export class CoreFunctions {
       };
       media.setup = media.setup === 'actpass' ? 'active' : 'actpass';
       media.ssrcGroups = undefined;
-      // media.ssrcs = undefined;
+      media.ssrcs = undefined;
       media.msid = undefined;
       media.candidates = undefined;
       media.port = 9;
@@ -202,9 +182,8 @@ export class CoreFunctions {
         ipVer: 4,
         address: '0.0.0.0'
       };
-      // media.rtcpMux = 'rtcp-mux';
+      media.rtcpMux = 'rtcp-mux';
 
-      // Add ICE candidates
       if (!candidatesAdded) {
         media.candidates = transport.ice!.candidates.map((candidate: any) => ({
           foundation: candidate.foundation,
@@ -227,28 +206,23 @@ export class CoreFunctions {
           (rtp: RtpCodec) => rtp.codec.toLowerCase() === 'opus'
         );
         const opusPayloadType = media.rtp.at(0)?.payload;
-        if (!opusPayloadType) {
-          throw new Error('Missing opus payload type');
-        }
+        if (!opusPayloadType) throw new Error('Missing opus payload type');
 
         media.fmtp = media.fmtp.filter(
           (fmtp: Fmtp) => fmtp.payload === opusPayloadType
         );
         media.payloads = `${opusPayloadType}`;
 
-        media.ext =
-          media.ext &&
-          media.ext.filter(
-            (ext: RtpHeaderExt) =>
-              ext.uri === 'urn:ietf:params:rtp-hdrext:ssrc-audio-level' ||
-              ext.uri ===
-                'http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time'
-          );
+        media.ext = media.ext?.filter(
+          (ext: RtpHeaderExt) =>
+            ext.uri === 'urn:ietf:params:rtp-hdrext:ssrc-audio-level' ||
+            ext.uri ===
+              'http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time'
+        );
 
         media.direction = 'recvonly';
         media.rtcpFb = undefined;
 
-        // Fallback RTP header extensions if none are provided
         const defaultAudioExts = [
           { id: 1, uri: 'urn:ietf:params:rtp-hdrext:ssrc-audio-level' },
           {
@@ -257,37 +231,23 @@ export class CoreFunctions {
           }
         ];
 
-        // Determine whether usable RTP extensions were provided
         const hasRtpExts =
           Array.isArray(media.ext) &&
           media.ext.some(
-            (ext: { uri: string }) =>
+            (ext) =>
               ext.uri === 'urn:ietf:params:rtp-hdrext:ssrc-audio-level' ||
               ext.uri ===
                 'http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time'
           );
 
-        // Normalize and assign
         const audioExts = hasRtpExts
-          ? media
-              .ext!.filter(
-                (ext: { uri: string }) =>
-                  ext.uri === 'urn:ietf:params:rtp-hdrext:ssrc-audio-level' ||
-                  ext.uri ===
-                    'http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time'
-              )
-              .map((ext: { value: number; uri: string }) => ({
-                id: ext.value,
-                uri: ext.uri
-              }))
+          ? media.ext!.map((ext: RtpHeaderExt) => ({
+              id: ext.value,
+              uri: ext.uri
+            }))
           : defaultAudioExts;
 
-        // Set final result
-        media.ext = audioExts.map((ext) => ({
-          value: ext.id,
-          uri: ext.uri
-        }));
-
+        media.ext = audioExts.map((ext) => ({ value: ext.id, uri: ext.uri }));
         endpointDescription.audio['rtp-hdrexts'] = audioExts;
       } else if (media.type === 'video') {
         const vp8Codec = media.rtp.find(
@@ -312,10 +272,10 @@ export class CoreFunctions {
               fmtp.payload === vp8PayloadType ||
               fmtp.payload === vp8RtxPayloadType
           );
-          media.payloads = [vp8PayloadType, vp8RtxPayloadType]
-            .filter((v) => v !== undefined)
-            .join(' ');
 
+          media.payloads = [vp8PayloadType, vp8RtxPayloadType]
+            .filter(Boolean)
+            .join(' ');
           media.ext =
             media.ext?.filter(
               (ext: RtpHeaderExt) =>
@@ -324,14 +284,14 @@ export class CoreFunctions {
                 ext.uri === 'urn:ietf:params:rtp-hdrext:sdes:rtp-stream-id'
             ) ?? [];
 
-          media.setup = 'active';
-          media.direction = 'recvonly';
           media.rtcpFb = media.rtcpFb?.filter(
-            (rtcpFb: RtcpFb) =>
-              rtcpFb.payload === vp8PayloadType &&
-              (rtcpFb.type === 'goog-remb' || rtcpFb.type === 'nack')
+            (fb: RtcpFb) =>
+              fb.payload === vp8PayloadType &&
+              (fb.type === 'goog-remb' || fb.type === 'nack')
           );
 
+          media.setup = 'active';
+          media.direction = 'recvonly';
           media.ssrcGroups = undefined;
         } else {
           console.warn(
@@ -343,7 +303,6 @@ export class CoreFunctions {
       }
     }
 
-    // Set up bundle group
     parsedOffer.groups = [
       {
         type: 'BUNDLE',
@@ -351,12 +310,25 @@ export class CoreFunctions {
       }
     ];
 
-    const sdpAnswer = write(parsedOffer);
+    return { modifiedOffer: parsedOffer, originalMedia: originalMedia };
+  }
 
-    // Get the first media description (usually audio)
-    const offerMediaDescription = parsedOffer.media[0];
-    if (!offerMediaDescription) {
-      throw new Error('Missing audio media description in offer');
+  finalizeEndpointDescription(
+    parsedOffer: SessionDescription,
+    originalOffer: SessionDescription,
+    originalMedia: MediaDescription,
+    endpointDescription: SmbEndpointDescription
+  ): void {
+    const transport = endpointDescription['bundle-transport'];
+
+    if (!transport) {
+      throw new Error('Missing bundle-transport in endpointDescription');
+    }
+    if (!transport.dtls) {
+      throw new Error('Missing dtls in endpointDescription');
+    }
+    if (!transport.ice) {
+      throw new Error('Missing ice in endpointDescription');
     }
 
     transport.ice.ufrag =
@@ -376,12 +348,10 @@ export class CoreFunctions {
         : originalMedia?.fingerprint?.type) || '';
     transport.dtls.setup =
       (originalOffer.setup ? originalOffer.setup : originalMedia?.setup) || '';
-    transport.ice.candidates = [];
 
-    // Do NOT clear candidates unless absolutely required
-    // if (!transport.ice.candidates || transport.ice.candidates.length === 0) {
-    //   throw new Error('ICE candidates missing in transport');
-    // }
+    if (!transport.ice.candidates || transport.ice.candidates.length === 0) {
+      throw new Error('ICE candidates missing in transport');
+    }
 
     const videoStreams: any[] = [];
     const streamsMap = new Map();
@@ -441,69 +411,57 @@ export class CoreFunctions {
       if (media.type === 'audio') {
         endpointDescription.audio['payload-type'].id = media.rtp[0].payload;
         endpointDescription.audio['rtp-hdrexts'] = [];
-        media.ext &&
-          media.ext.forEach((ext) =>
-            endpointDescription.audio['rtp-hdrexts'].push({
-              id: ext.value,
-              uri: ext.uri
-            })
-          );
+        media.ext?.forEach((ext: RtpHeaderExt) =>
+          endpointDescription.audio['rtp-hdrexts'].push({
+            id: ext.value,
+            uri: ext.uri
+          })
+        );
       } else if (media.type === 'video') {
         const supportedCodecs = ['VP8', 'H264', 'VP9'];
         const matchingCodecs =
-          media.rtp?.filter((rtp) =>
+          media.rtp?.filter((rtp: RtpCodec) =>
             supportedCodecs.includes(rtp.codec.toUpperCase())
           ) || [];
 
-        if (matchingCodecs.length === 0) {
-          console.warn(
-            'No supported video codecs found. Accepting offered codecs as-is.'
-          );
-        } else {
+        if (matchingCodecs.length > 0) {
           media.rtp = matchingCodecs;
         }
 
-        // Remove any codec with duplicate payload types
         const seenPayloads = new Set<number>();
-        media.rtp = media.rtp.filter((rtp) => {
+        media.rtp = media.rtp.filter((rtp: RtpCodec) => {
           if (seenPayloads.has(rtp.payload)) return false;
           seenPayloads.add(rtp.payload);
           return true;
         });
 
-        // Filter fmtp and rtcpFb to match
         media.fmtp =
-          media.fmtp?.filter((fmtp) =>
-            media.rtp.some((rtp) => rtp.payload === fmtp.payload)
+          media.fmtp?.filter((fmtp: Fmtp) =>
+            media.rtp.some((rtp: RtpCodec) => rtp.payload === fmtp.payload)
           ) ?? [];
 
         media.rtcpFb =
-          media.rtcpFb?.filter((fb) =>
-            media.rtp.some((rtp) => rtp.payload === fb.payload)
+          media.rtcpFb?.filter((fb: RtcpFb) =>
+            media.rtp.some((rtp: RtpCodec) => rtp.payload === fb.payload)
           ) ?? [];
 
-        // Set payloads line
-        media.payloads = media.rtp.map((rtp) => rtp.payload).join(' ');
-
-        media.setup = 'active';
-        media.direction = 'recvonly';
+        media.payloads = media.rtp
+          .map((rtp: RtpCodec) => rtp.payload)
+          .join(' ');
 
         media.ext =
           media.ext?.filter(
-            (ext) =>
+            (ext: RtpHeaderExt) =>
               ext.uri ===
                 'http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time' ||
               ext.uri === 'urn:ietf:params:rtp-hdrext:sdes:rtp-stream-id'
           ) ?? [];
 
-        // Optional cleanup
         media.ssrcGroups = undefined;
 
-        // Build endpointDescription.video based on the first selected codec
         endpointDescription.video = endpointDescription.video || {};
 
         const selectedCodec = media.rtp[0];
-
         if (typeof selectedCodec.rate !== 'number') {
           throw new Error('Selected video codec is missing a valid clockrate');
         }
@@ -529,41 +487,94 @@ export class CoreFunctions {
         }
 
         const rtcpFbs = media.rtcpFb?.filter(
-          (f) => f.payload === selectedCodec.payload
+          (f: RtcpFb) => f.payload === selectedCodec.payload
         );
         if (rtcpFbs?.length) {
-          payload['rtcp-fbs'] = rtcpFbs.map((fb) => ({
+          payload['rtcp-fbs'] = rtcpFbs.map((fb: RtcpFb) => ({
             type: fb.type,
             subtype: fb.subtype ?? undefined
           }));
         }
 
         endpointDescription.video['payload-type'] = payload;
-
-        // Populate RTP header extensions
-        endpointDescription.video['rtp-hdrexts'] = (media.ext || []).map(
-          (ext) => ({
+        endpointDescription.video['rtp-hdrexts'] = media.ext.map(
+          (ext: RtpHeaderExt) => ({
             id: ext.value,
             uri: ext.uri
           })
         );
 
-        // Assign SSRCs
         endpointDescription.video.ssrcs =
           media.ssrcs?.map((ssrc) => Number(ssrc.id)) ?? [];
       }
     }
-    // Configure the endpoint to handle incoming media
-    // This tells SMB how to route the audio when it starts flowing
-    await smb.configureEndpoint(
-      smbServerUrl,
-      smbConferenceId,
-      endpointId,
+  }
+
+  async buildSdpAnswer(
+    endpointDescription: SmbEndpointDescription,
+    offer: string
+  ): Promise<{
+    sdpAnswer: string;
+    updatedDescription: SmbEndpointDescription;
+  }> {
+    if (!endpointDescription) {
+      throw new Error('Missing endpointDescription when handling sdp offer');
+    }
+    if (!endpointDescription.audio) {
+      throw new Error(
+        'Missing endpointDescription audio when handling sdp offer'
+      );
+    }
+    if (
+      !endpointDescription.audio.ssrcs ||
+      endpointDescription.audio.ssrcs.length === 0
+    ) {
+      throw new Error('Missing audio ssrcs in SMB endpoint description');
+    }
+
+    const parsedOffer = parse(offer);
+
+    if (parsedOffer.origin) {
+      parsedOffer.origin.sessionVersion++;
+    }
+
+    if (!parsedOffer.msidSemantic) {
+      parsedOffer.msidSemantic = { semantic: 'WMS', token: '' };
+    } else {
+      parsedOffer.msidSemantic.token = '*';
+    }
+
+    const transport = endpointDescription['bundle-transport'];
+    if (!transport)
+      throw new Error('Missing bundle-transport in endpointDescription');
+    if (!transport.dtls) throw new Error('Missing dtls in endpointDescription');
+    if (!transport.ice) throw new Error('Missing ice in endpointDescription');
+
+    const originalOffer = { ...parsedOffer };
+    const { modifiedOffer, originalMedia } = this.prepareParsedOffer(
+      parsedOffer,
       endpointDescription,
-      smbServerApiKey
+      transport
     );
 
-    return sdpAnswer;
+    const sdpAnswer = write(modifiedOffer);
+
+    const offerMediaDescription = modifiedOffer.media[0];
+    if (!offerMediaDescription) {
+      throw new Error('Missing audio media description in offer');
+    }
+
+    this.finalizeEndpointDescription(
+      modifiedOffer,
+      originalOffer,
+      originalMedia,
+      endpointDescription
+    );
+
+    return {
+      sdpAnswer,
+      updatedDescription: endpointDescription
+    };
   }
 
   async handleAnswerRequest(
@@ -746,6 +757,60 @@ export class CoreFunctions {
       })
     );
     return allLinesResponse;
+  }
+
+  async trickleIceCandidateToSMB(
+    smb: SmbProtocol,
+    smbServerUrl: string,
+    smbServerApiKey: string,
+    conferenceId: string,
+    endpointId: string,
+    candidateLine: string,
+    endpointDescription: SmbEndpointDescription
+  ): Promise<void> {
+    const iceTransport = endpointDescription['bundle-transport']?.ice;
+
+    if (!iceTransport) {
+      throw new Error(
+        'ICE transport section missing from endpoint description'
+      );
+    }
+
+    if (!iceTransport.candidates) {
+      iceTransport.candidates = [];
+    }
+
+    // Parse a=candidate:... line
+    const line = candidateLine.replace(/^a=/, '').trim();
+    const parts = line.split(' ');
+
+    if (parts.length < 8 || !parts[0].startsWith('candidate:')) {
+      throw new Error(`Invalid ICE candidate line: ${candidateLine}`);
+    }
+
+    const parsed = {
+      foundation: parts[0].split(':')[1],
+      component: parseInt(parts[1], 10),
+      protocol: parts[2].toLowerCase(),
+      priority: parseInt(parts[3], 10),
+      ip: parts[4],
+      port: parseInt(parts[5], 10),
+      type: parts[7],
+      relAddr: parts[9] || undefined,
+      relPort: parts[11] ? parseInt(parts[11], 10) : undefined,
+      generation: 0,
+      network: 0
+    };
+
+    iceTransport.candidates.push(parsed);
+
+    await smb.configureEndpoint(
+      smbServerUrl,
+      conferenceId,
+      endpointId,
+      endpointDescription,
+      smbServerApiKey
+    );
   }
 
   private toStringIfNumber(value: string | number | undefined): string {

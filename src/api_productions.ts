@@ -1,6 +1,7 @@
 import { Static, Type } from '@sinclair/typebox';
 import dotenv from 'dotenv';
 import { FastifyPluginCallback } from 'fastify';
+import sdpTransform from 'sdp-transform';
 import { v4 as uuidv4 } from 'uuid';
 import { CoreFunctions } from './api_productions_core_functions';
 import { ConnectionQueue } from './connection_queue';
@@ -823,8 +824,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   fastify.post<{
     Params: { productionId: string; lineId: string };
     Body: Static<typeof WhipRequest>;
-    // Reply: Static<typeof WhipResponse>;
-    Reply: any;
+    Reply: Static<typeof WhipResponse> | { error: string };
   }>(
     '/whip/:productionId/:lineId',
     {
@@ -836,12 +836,26 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           400: Type.Object({ error: Type.String() }),
           500: Type.Object({ error: Type.String() })
         }
+      },
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: '1 minute',
+          errorResponseBuilder: () => ({
+            error: 'Too many requests, please try again later',
+            code: 429
+          })
+        }
       }
     },
     async (request, reply) => {
       try {
         const { productionId, lineId } = request.params;
         const sdpOffer = request.body;
+
+        if (request.headers['content-type'] !== 'application/sdp') {
+          return reply.code(415).send({ error: 'Unsupported Media Type' });
+        }
 
         // Create a unique session ID for this WHIP connection
         const sessionId = uuidv4();
@@ -881,6 +895,32 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           sdpOffer
         );
 
+        // Check if any m= sections from the offer were rejected
+        try {
+          const offerParsed = sdpTransform.parse(sdpOffer);
+          const answerParsed = sdpTransform.parse(sdpAnswer);
+
+          const offerMids = offerParsed.media.map((m) => m.mid).filter(Boolean);
+          const answerMids = answerParsed.media
+            .map((m) => m.mid)
+            .filter(Boolean);
+
+          const missingMids = offerMids.filter(
+            (mid) => !answerMids.includes(mid)
+          );
+
+          if (missingMids.length > 0) {
+            return reply.code(406).send({
+              error: `One or more m= sections could not be negotiated: ${missingMids.join(
+                ', '
+              )}`
+            });
+          }
+        } catch (err) {
+          Log().error('Malformed SDP:', err);
+          return reply.code(400).send({ error: 'Malformed SDP' });
+        }
+
         // Create user session in production manager
         productionManager.createUserSession(
           productionId,
@@ -908,26 +948,18 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           request.protocol + '://' + request.hostname + ':' + request.port;
         const locationUrl = `${baseUrl}/api/v1/whip/${productionId}/${lineId}/${sessionId}`;
 
-        // Set response headers according to WHIP specification
-        reply.header('Content-Type', 'application/sdp');
-        reply.header('Location', locationUrl);
-        reply.header('ETag', sessionId);
-
-        const links = getIceServers();
-        const linkHeader = links.join(',');
-        reply.header('Link', linkHeader);
-
-        // CORS headers
-        reply.header('Access-Control-Allow-Origin', '*');
-        reply.header(
-          'Access-Control-Allow-Methods',
-          'GET, POST, DELETE, OPTIONS, PATCH'
-        );
-        reply.header(
-          'Access-Control-Allow-Headers',
-          'Content-Type, Authorization, ETag, If-Match, Link'
-        );
-        reply.header('Access-Control-Expose-Headers', 'Location, ETag, Link');
+        // Set response headers
+        reply.headers({
+          'Content-Type': 'application/sdp',
+          Location: locationUrl,
+          ETag: sessionId,
+          Link: getIceServers().join(','),
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS, PATCH',
+          'Access-Control-Allow-Headers':
+            'Content-Type, Authorization, ETag, If-Match, Link',
+          'Access-Control-Expose-Headers': 'Location, ETag, Link'
+        });
 
         // Return 201 Created with the SDP answer
         await reply.code(201).send(sdpAnswer);
@@ -940,7 +972,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     }
   );
 
-  // DELETE endpoint to terminate WHIP connection
+  // Delete endpoint to terminate WHIP session
   fastify.delete<{
     Params: { productionId: string; lineId: string; sessionId: string };
   }>(
@@ -949,7 +981,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       schema: {
         description: 'Terminate a WHIP connection',
         response: {
-          200: Type.Null(),
+          200: Type.String({ description: 'OK' }),
           404: Type.Object({ error: Type.String() }),
           500: Type.Object({ error: Type.String() })
         }
@@ -974,14 +1006,13 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         }
 
         // Add CORS headers for browser compatibility
-        reply.header('Access-Control-Allow-Origin', '*');
-        reply.header('Access-Control-Allow-Methods', 'POST, DELETE, OPTIONS');
-        reply.header(
-          'Access-Control-Allow-Headers',
-          'Content-Type, Authorization'
-        );
+        reply.headers({
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'POST, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+        });
 
-        reply.code(200).send();
+        reply.code(200).send('OK');
       } catch (err) {
         Log().error(err);
         reply
@@ -991,175 +1022,170 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     }
   );
 
-  // PATCH endpoint for Trickle ICE support
-  fastify.patch<{
-    Params: { productionId: string; lineId: string; sessionId: string };
-    Body: string;
-  }>(
-    '/whip/:productionId/:lineId/:sessionId',
-    {
-      schema: {
-        description: 'Trickle ICE endpoint for sending ICE candidates',
-        body: Type.String({
-          description: 'ICE candidate SDP fragment'
-        }),
-        response: {
-          200: Type.Null(),
-          204: Type.Null(),
-          400: Type.Object({ error: Type.String() }),
-          404: Type.Object({ error: Type.String() }),
-          409: Type.Object({ error: Type.String() }),
-          412: Type.Object({ error: Type.String() }),
-          500: Type.Object({ error: Type.String() })
-        }
-      }
-    },
-    async (request, reply) => {
-      try {
-        console.log('PATCH ENDPOINT CALLED');
+  // // Patch endpoint for Trickle ICE support
+  // fastify.patch<{
+  //   Params: { productionId: string; lineId: string; sessionId: string };
+  //   Body: string;
+  // }>(
+  //   '/whip/:productionId/:lineId/:sessionId',
+  //   {
+  //     schema: {
+  //       description: 'Trickle ICE endpoint for sending ICE candidates',
+  //       body: Type.String({
+  //         description: 'ICE candidate SDP fragment'
+  //       }),
+  //       response: {
+  //         200: Type.Null(),
+  //         204: Type.Null(),
+  //         400: Type.Object({ error: Type.String() }),
+  //         404: Type.Object({ error: Type.String() }),
+  //         409: Type.Object({ error: Type.String() }),
+  //         412: Type.Object({ error: Type.String() }),
+  //         415: Type.Object({ error: Type.String() }),
+  //         422: Type.Object({ error: Type.String() }),
+  //         500: Type.Object({ error: Type.String() })
+  //       }
+  //     }
+  //   },
+  //   async (request, reply) => {
+  //     try {
+  //       const { sessionId } = request.params;
+  //       const iceCandidateSdp = request.body;
+  //       const etag = request.headers.etag;
 
-        const { sessionId } = request.params;
-        const iceCandidateSdp = request.body;
-        const etag = request.headers.etag;
+  //       // Reject unsupported content type
+  //       if (
+  //         request.headers['content-type'] !== 'application/trickle-ice-sdpfrag'
+  //       ) {
+  //         return reply.code(415).send({ error: 'Unsupported Media Type' });
+  //       }
 
-        // Check if session exists
-        const session = productionManager.getUser(sessionId);
-        if (!session) {
-          reply.code(404).send({ error: 'WHIP session not found' });
-          return;
-        }
+  //       // Check if session exists
+  //       const session = productionManager.getUser(sessionId);
+  //       if (!session) {
+  //         reply.code(404).send({ error: 'WHIP session not found' });
+  //         return;
+  //       }
 
-        // Validate ETag if provided
-        if (etag && etag !== sessionId) {
-          reply.code(412).send({ error: 'ETag mismatch' });
-          return;
-        }
+  //       // Validate ETag if provided
+  //       if (etag && etag !== sessionId) {
+  //         reply.code(412).send({ error: 'ETag mismatch' });
+  //         return;
+  //       }
 
-        // Parse the ICE candidate SDP fragment
-        if (!iceCandidateSdp || iceCandidateSdp.trim() === '') {
-          reply.code(400).send({ error: 'Empty ICE candidate SDP fragment' });
-          return;
-        }
+  //       // Parse the ICE candidate SDP fragment
+  //       if (!iceCandidateSdp || iceCandidateSdp.trim() === '') {
+  //         reply.code(400).send({ error: 'Empty ICE candidate SDP fragment' });
+  //         return;
+  //       }
 
-        // Extract ICE candidate from SDP fragment
-        const candidateMatch = iceCandidateSdp.match(/a=candidate.*\r?\n?/);
-        if (!candidateMatch || candidateMatch.length === 0) {
-          reply.code(400).send({ error: 'Invalid ICE candidate format' });
-          return;
-        }
+  //       // Extract ICE candidate from SDP fragment
+  //       const candidateMatch = iceCandidateSdp.match(/a=candidate.*\r?\n?/);
+  //       if (!candidateMatch || candidateMatch.length === 0) {
+  //         reply.code(400).send({ error: 'Invalid ICE candidate format' });
+  //         return;
+  //       }
 
-        const candidateString = candidateMatch[0].trim();
-        Log().info(
-          `Received ICE candidate for session ${sessionId}: ${candidateString}`
-        );
+  //       const candidateString = candidateMatch[0].trim();
+  //       Log().info(
+  //         `Received ICE candidate for session ${sessionId}: ${candidateString}`
+  //       );
 
-        // TODO: Implement ICE candidate handling with SMB
-        // This would typically involve:
-        // 1. Storing the ICE candidate for the session
-        // 2. Adding it to the SMB endpoint configuration
-        // 3. Reconfiguring the SMB endpoint with the new ICE candidate
+  //       // TODO: Implement ICE candidate handling with SMB
+  //       // This would typically involve:
+  //       // 1. Storing the ICE candidate for the session
+  //       // 2. Adding it to the SMB endpoint configuration
+  //       // 3. Reconfiguring the SMB endpoint with the new ICE candidate
 
-        // For now, we'll store the ICE candidate in the session
-        // This is a placeholder implementation - you'll need to integrate with SMB
-        if (!session.iceCandidates) {
-          session.iceCandidates = [];
-        }
-        session.iceCandidates.push({
-          candidate: candidateString,
-          timestamp: Date.now()
-        });
+  //       // For now, we'll store the ICE candidate in the session
+  //       // This is a placeholder implementation - you'll need to integrate with SMB
+  //       if (!session.iceCandidates) {
+  //         session.iceCandidates = [];
+  //       }
+  //       session.iceCandidates.push({
+  //         candidate: candidateString,
+  //         timestamp: Date.now()
+  //       });
 
-        // Update the session in the production manager
-        productionManager.updateUserLastSeen(sessionId);
+  //       // Update the session in the production manager
+  //       productionManager.updateUserLastSeen(sessionId);
 
-        // Add CORS headers
-        reply.header('Access-Control-Allow-Origin', '*');
-        reply.header(
-          'Access-Control-Allow-Methods',
-          'POST, DELETE, OPTIONS, PATCH'
-        );
-        reply.header(
-          'Access-Control-Allow-Headers',
-          'Content-Type, Authorization, ETag'
-        );
-        reply.header('Access-Control-Expose-Headers', 'Location, ETag, Link');
+  //       // Add CORS headers
+  //       reply.headers({
+  //         'Access-Control-Allow-Origin': '*',
+  //         'Access-Control-Allow-Methods': 'POST, DELETE, OPTIONS, PATCH',
+  //         'Access-Control-Allow-Headers': 'Content-Type, Authorization, ETag',
+  //         'Access-Control-Expose-Headers': 'Location, ETag, Link'
+  //       });
 
-        // Return 204 No Content for successful ICE candidate processing
-        reply.code(204).send();
-      } catch (err) {
-        Log().error(err);
-        reply
-          .code(500)
-          .send({ error: `Failed to process ICE candidate: ${err}` });
-      }
-    }
-  );
+  //       // Return 204 No Content for successful ICE candidate processing
+  //       reply.code(204).send();
+  //     } catch (err) {
+  //       Log().error(err);
+  //       reply
+  //         .code(500)
+  //         .send({ error: `Failed to process ICE candidate: ${err}` });
+  //     }
+  //   }
+  // );
 
-  // OPTIONS endpoint for CORS preflight requests and WHIP discovery
-  fastify.options<{
-    Params: { productionId: string; lineId: string };
-  }>(
-    '/whip/:productionId/:lineId',
-    {
-      schema: {
-        description: 'CORS preflight and WHIP discovery endpoint',
-        response: {
-          200: Type.Null()
-        }
-      }
-    },
-    async (request, reply) => {
-      try {
-        const { productionId, lineId } = request.params;
+  // // Options endpoint for CORS preflight requests and WHIP discovery
+  // fastify.options<{
+  //   Params: { productionId: string; lineId: string };
+  // }>(
+  //   '/whip/:productionId/:lineId',
+  //   {
+  //     schema: {
+  //       description: 'CORS preflight and WHIP discovery endpoint',
+  //       response: {
+  //         200: Type.String({ description: 'OK' })
+  //       }
+  //     }
+  //   },
+  //   async (request, reply) => {
+  //     try {
+  //       const { productionId, lineId } = request.params;
 
-        console.log('OPTIONS ENDPOINT CALLED');
+  //       // Check if production and line exist
+  //       const productionIdNum = parseInt(productionId, 10);
+  //       if (isNaN(productionIdNum)) {
+  //         reply.code(400).send({ error: 'Invalid production ID' });
+  //         return;
+  //       }
 
-        // Check if production and line exist
-        const productionIdNum = parseInt(productionId, 10);
-        if (isNaN(productionIdNum)) {
-          reply.code(400).send({ error: 'Invalid production ID' });
-          return;
-        }
+  //       const production = await productionManager.getProduction(
+  //         productionIdNum
+  //       );
+  //       if (!production) {
+  //         reply.code(404).send({ error: 'Production not found' });
+  //         return;
+  //       }
 
-        const production = await productionManager.getProduction(
-          productionIdNum
-        );
-        if (!production) {
-          reply.code(404).send({ error: 'Production not found' });
-          return;
-        }
+  //       const line = production.lines.find((l: any) => l.id === lineId);
+  //       if (!line) {
+  //         reply.code(404).send({ error: 'Line not found' });
+  //         return;
+  //       }
 
-        const line = production.lines.find((l: any) => l.id === lineId);
-        if (!line) {
-          reply.code(404).send({ error: 'Line not found' });
-          return;
-        }
+  //       // Add CORS headers for preflight requests
+  //       reply.headers({
+  //         'Access-Control-Allow-Origin': '*',
+  //         'Access-Control-Allow-Methods': 'POST, DELETE, OPTIONS, PATCH',
+  //         'Access-Control-Allow-Headers': 'Content-Type, Authorization, ETag',
+  //         'Access-Control-Expose-Headers': 'Location, ETag, Link',
+  //         'Access-Control-Max-Age': '86400', // 24 hours
+  //         'Accept-Post': 'application/sdp'
+  //       });
 
-        // Add CORS headers for preflight requests
-        reply.header('Access-Control-Allow-Origin', '*');
-        reply.header(
-          'Access-Control-Allow-Methods',
-          'POST, DELETE, OPTIONS, PATCH'
-        );
-        reply.header(
-          'Access-Control-Allow-Headers',
-          'Content-Type, Authorization, ETag'
-        );
-        reply.header('Access-Control-Expose-Headers', 'Location, ETag, Link');
-        reply.header('Access-Control-Max-Age', '86400'); // 24 hours
-
-        // WHIP-specific headers
-        reply.header('Accept-Post', 'application/sdp');
-
-        reply.code(200).send();
-      } catch (err) {
-        Log().error(err);
-        reply
-          .code(500)
-          .send({ error: `Failed to process OPTIONS request: ${err}` });
-      }
-    }
-  );
+  //       reply.code(200).send('OK');
+  //     } catch (err) {
+  //       Log().error(err);
+  //       reply
+  //         .code(500)
+  //         .send({ error: `Failed to process OPTIONS request: ${err}` });
+  //     }
+  //   }
+  // );
 
   next();
 };
