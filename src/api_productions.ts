@@ -1,6 +1,7 @@
 import { Static, Type } from '@sinclair/typebox';
 import dotenv from 'dotenv';
 import { FastifyPluginCallback } from 'fastify';
+import sdpTransform from 'sdp-transform';
 import { v4 as uuidv4 } from 'uuid';
 import { CoreFunctions } from './api_productions_core_functions';
 import { ConnectionQueue } from './connection_queue';
@@ -823,8 +824,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   fastify.post<{
     Params: { productionId: string; lineId: string };
     Body: Static<typeof WhipRequest>;
-    // Reply: Static<typeof WhipResponse>;
-    Reply: any;
+    Reply: Static<typeof WhipResponse> | { error: string };
   }>(
     '/whip/:productionId/:lineId',
     {
@@ -836,12 +836,26 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           400: Type.Object({ error: Type.String() }),
           500: Type.Object({ error: Type.String() })
         }
+      },
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: '1 minute',
+          errorResponseBuilder: () => ({
+            error: 'Too many requests, please try again later',
+            code: 429
+          })
+        }
       }
     },
     async (request, reply) => {
       try {
         const { productionId, lineId } = request.params;
         const sdpOffer = request.body;
+
+        if (request.headers['content-type'] !== 'application/sdp') {
+          return reply.code(415).send({ error: 'Unsupported Media Type' });
+        }
 
         // Create a unique session ID for this WHIP connection
         const sessionId = uuidv4();
@@ -881,6 +895,32 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           sdpOffer
         );
 
+        // Check if any m= sections from the offer were rejected
+        try {
+          const offerParsed = sdpTransform.parse(sdpOffer);
+          const answerParsed = sdpTransform.parse(sdpAnswer);
+
+          const offerMids = offerParsed.media.map((m) => m.mid).filter(Boolean);
+          const answerMids = answerParsed.media
+            .map((m) => m.mid)
+            .filter(Boolean);
+
+          const missingMids = offerMids.filter(
+            (mid) => !answerMids.includes(mid)
+          );
+
+          if (missingMids.length > 0) {
+            return reply.code(406).send({
+              error: `One or more m= sections could not be negotiated: ${missingMids.join(
+                ', '
+              )}`
+            });
+          }
+        } catch (err) {
+          Log().error('Malformed SDP:', err);
+          return reply.code(400).send({ error: 'Malformed SDP' });
+        }
+
         // Create user session in production manager
         productionManager.createUserSession(
           productionId,
@@ -908,26 +948,18 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           request.protocol + '://' + request.hostname + ':' + request.port;
         const locationUrl = `${baseUrl}/api/v1/whip/${productionId}/${lineId}/${sessionId}`;
 
-        // Set response headers according to WHIP specification
-        reply.header('Content-Type', 'application/sdp');
-        reply.header('Location', locationUrl);
-        reply.header('ETag', sessionId);
-
-        const links = getIceServers();
-        const linkHeader = links.join(',');
-        reply.header('Link', linkHeader);
-
-        // CORS headers
-        reply.header('Access-Control-Allow-Origin', '*');
-        reply.header(
-          'Access-Control-Allow-Methods',
-          'GET, POST, DELETE, OPTIONS, PATCH'
-        );
-        reply.header(
-          'Access-Control-Allow-Headers',
-          'Content-Type, Authorization, ETag, If-Match, Link'
-        );
-        reply.header('Access-Control-Expose-Headers', 'Location, ETag, Link');
+        // Set response headers
+        reply.headers({
+          'Content-Type': 'application/sdp',
+          Location: locationUrl,
+          ETag: sessionId,
+          Link: getIceServers().join(','),
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS, PATCH',
+          'Access-Control-Allow-Headers':
+            'Content-Type, Authorization, ETag, If-Match, Link',
+          'Access-Control-Expose-Headers': 'Location, ETag, Link'
+        });
 
         // Return 201 Created with the SDP answer
         await reply.code(201).send(sdpAnswer);
@@ -940,7 +972,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     }
   );
 
-  // DELETE endpoint to terminate WHIP connection
+  // Delete endpoint to terminate WHIP session
   fastify.delete<{
     Params: { productionId: string; lineId: string; sessionId: string };
   }>(
@@ -949,7 +981,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       schema: {
         description: 'Terminate a WHIP connection',
         response: {
-          200: Type.Null(),
+          200: Type.String({ description: 'OK' }),
           404: Type.Object({ error: Type.String() }),
           500: Type.Object({ error: Type.String() })
         }
@@ -974,14 +1006,13 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         }
 
         // Add CORS headers for browser compatibility
-        reply.header('Access-Control-Allow-Origin', '*');
-        reply.header('Access-Control-Allow-Methods', 'POST, DELETE, OPTIONS');
-        reply.header(
-          'Access-Control-Allow-Headers',
-          'Content-Type, Authorization'
-        );
+        reply.headers({
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'POST, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+        });
 
-        reply.code(200).send();
+        reply.code(200).send('OK');
       } catch (err) {
         Log().error(err);
         reply
@@ -991,7 +1022,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     }
   );
 
-  // PATCH endpoint for Trickle ICE support
+  // Patch endpoint for Trickle ICE support
   fastify.patch<{
     Params: { productionId: string; lineId: string; sessionId: string };
     Body: string;
@@ -1010,17 +1041,24 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           404: Type.Object({ error: Type.String() }),
           409: Type.Object({ error: Type.String() }),
           412: Type.Object({ error: Type.String() }),
+          415: Type.Object({ error: Type.String() }),
+          422: Type.Object({ error: Type.String() }),
           500: Type.Object({ error: Type.String() })
         }
       }
     },
     async (request, reply) => {
       try {
-        console.log('PATCH ENDPOINT CALLED');
-
         const { sessionId } = request.params;
         const iceCandidateSdp = request.body;
         const etag = request.headers.etag;
+
+        // Reject unsupported content type
+        if (
+          request.headers['content-type'] !== 'application/trickle-ice-sdpfrag'
+        ) {
+          return reply.code(415).send({ error: 'Unsupported Media Type' });
+        }
 
         // Check if session exists
         const session = productionManager.getUser(sessionId);
@@ -1040,6 +1078,16 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           reply.code(400).send({ error: 'Empty ICE candidate SDP fragment' });
           return;
         }
+
+        // Detect ICE restart attempt (presence of ufrag/pwd fields)
+        // Might not implement:
+        // const isIceRestart =
+        //   /a=ice-ufrag:/i.test(iceCandidateSdp) ||
+        //   /a=ice-pwd:/i.test(iceCandidateSdp);
+        // // TODO: If ICE restarts are not supported, reject with 422
+        // if (isIceRestart) {
+        //   return reply.code(422).send({ error: 'ICE restarts not supported' });
+        // }
 
         // Extract ICE candidate from SDP fragment
         const candidateMatch = iceCandidateSdp.match(/a=candidate.*\r?\n?/);
@@ -1069,20 +1117,40 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           timestamp: Date.now()
         });
 
+        // Possible SMB integration
+        // if (!session.endpointId || !session.sessionDescription) {
+        //   return reply
+        //     .code(500)
+        //     .send({ error: 'Session missing endpoint information' });
+        // }
+
+        // try {
+        //   await coreFunctions.trickleIceCandidateToSMB(
+        //     smb,
+        //     smbServerUrl,
+        //     smbServerApiKey,
+        //     session.lineId,
+        //     session.endpointId,
+        //     candidateString,
+        //     session.sessionDescription
+        //   );
+        // } catch (err) {
+        //   Log().error(`Failed to send ICE candidate to SMB: ${err}`);
+        //   return reply
+        //     .code(500)
+        //     .send({ error: 'Failed to deliver ICE candidate to SMB' });
+        // }
+
         // Update the session in the production manager
         productionManager.updateUserLastSeen(sessionId);
 
         // Add CORS headers
-        reply.header('Access-Control-Allow-Origin', '*');
-        reply.header(
-          'Access-Control-Allow-Methods',
-          'POST, DELETE, OPTIONS, PATCH'
-        );
-        reply.header(
-          'Access-Control-Allow-Headers',
-          'Content-Type, Authorization, ETag'
-        );
-        reply.header('Access-Control-Expose-Headers', 'Location, ETag, Link');
+        reply.headers({
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'POST, DELETE, OPTIONS, PATCH',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization, ETag',
+          'Access-Control-Expose-Headers': 'Location, ETag, Link'
+        });
 
         // Return 204 No Content for successful ICE candidate processing
         reply.code(204).send();
@@ -1095,7 +1163,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     }
   );
 
-  // OPTIONS endpoint for CORS preflight requests and WHIP discovery
+  // Options endpoint for CORS preflight requests and WHIP discovery
   fastify.options<{
     Params: { productionId: string; lineId: string };
   }>(
@@ -1104,15 +1172,13 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       schema: {
         description: 'CORS preflight and WHIP discovery endpoint',
         response: {
-          200: Type.Null()
+          200: Type.String({ description: 'OK' })
         }
       }
     },
     async (request, reply) => {
       try {
         const { productionId, lineId } = request.params;
-
-        console.log('OPTIONS ENDPOINT CALLED');
 
         // Check if production and line exist
         const productionIdNum = parseInt(productionId, 10);
@@ -1136,22 +1202,16 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         }
 
         // Add CORS headers for preflight requests
-        reply.header('Access-Control-Allow-Origin', '*');
-        reply.header(
-          'Access-Control-Allow-Methods',
-          'POST, DELETE, OPTIONS, PATCH'
-        );
-        reply.header(
-          'Access-Control-Allow-Headers',
-          'Content-Type, Authorization, ETag'
-        );
-        reply.header('Access-Control-Expose-Headers', 'Location, ETag, Link');
-        reply.header('Access-Control-Max-Age', '86400'); // 24 hours
+        reply.headers({
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'POST, DELETE, OPTIONS, PATCH',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization, ETag',
+          'Access-Control-Expose-Headers': 'Location, ETag, Link',
+          'Access-Control-Max-Age': '86400', // 24 hours
+          'Accept-Post': 'application/sdp'
+        });
 
-        // WHIP-specific headers
-        reply.header('Accept-Post', 'application/sdp');
-
-        reply.code(200).send();
+        reply.code(200).send('OK');
       } catch (err) {
         Log().error(err);
         reply
