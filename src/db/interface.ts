@@ -1,4 +1,4 @@
-import { Line, Production } from '../models';
+import { Ingest, Line, NewIngest, Production } from '../models';
 
 export interface DbManager {
   connect(): Promise<void>;
@@ -14,4 +14,10 @@ export interface DbManager {
     lineId: string,
     conferenceId: string
   ): Promise<void>;
+  addIngest(newIngest: NewIngest): Promise<Ingest>;
+  getIngest(id: number): Promise<Ingest | undefined>;
+  getIngestsLength(): Promise<number>;
+  getIngests(limit: number, offset: number): Promise<Ingest[]>;
+  updateIngest(ingest: Ingest): Promise<Ingest | undefined>;
+  deleteIngest(ingestId: number): Promise<boolean>;
 }

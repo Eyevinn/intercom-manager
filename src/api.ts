@@ -9,7 +9,10 @@ import { getApiProductions } from './api_productions';
 import apiShare from './api_share';
 import apiReAuth from './api_re_auth';
 import fastifyCookie from '@fastify/cookie';
-import { readFileSync } from 'fs';
+import { getApiIngests } from './api_ingests';
+import { DbManager } from './db/interface';
+import { ProductionManager } from './production_manager';
+import { IngestManager } from './ingest_manager';
 
 const HelloWorld = Type.String({
   description: 'The magical words!'
@@ -47,6 +50,9 @@ export interface ApiOptions {
   endpointIdleTimeout: string;
   smbServerApiKey?: string;
   publicHost: string;
+  dbManager: DbManager;
+  productionManager: ProductionManager;
+  ingestManager: IngestManager;
 }
 
 export default async (opts: ApiOptions) => {
@@ -96,13 +102,20 @@ export default async (opts: ApiOptions) => {
 
   api.register(healthcheck, { title: opts.title });
   // register other API routes here
-  api.register(await getApiProductions(), {
+  api.register(getApiProductions(), {
     prefix: 'api/v1',
     smbServerBaseUrl: opts.smbServerBaseUrl,
     endpointIdleTimeout: opts.endpointIdleTimeout,
-    smbServerApiKey: opts.smbServerApiKey
+    smbServerApiKey: opts.smbServerApiKey,
+    dbManager: opts.dbManager,
+    productionManager: opts.productionManager
   });
   api.register(apiShare, { publicHost: opts.publicHost, prefix: 'api/v1' });
   api.register(apiReAuth, { prefix: 'api/v1' });
+  api.register(getApiIngests(), {
+    prefix: 'api/v1',
+    dbManager: opts.dbManager,
+    ingestManager: opts.ingestManager
+  });
   return api;
 };

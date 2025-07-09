@@ -28,6 +28,12 @@ export type SdpAnswer = Static<typeof SdpAnswer>;
 export type ErrorResponse = Static<typeof ErrorResponse>;
 export type IceCandidate = Static<typeof IceCandidate>;
 
+export type NewIngest = Static<typeof NewIngest>;
+export type Ingest = Static<typeof Ingest>;
+export type IngestListResponse = Static<typeof IngestListResponse>;
+export type PatchIngest = Static<typeof PatchIngest>;
+export type PatchIngestResponse = Static<typeof PatchIngestResponse>;
+
 export const Audio = Type.Object({
   'relay-type': Type.Array(
     Type.Union([
@@ -324,3 +330,51 @@ export const WhipRequest = Type.String({
 export const WhipResponse = Type.String({
   description: 'WebRTC SDP answer'
 });
+
+export const NewIngest = Type.Object({
+  label: Type.String(),
+  ipAddress: Type.String()
+});
+
+export const Ingest = Type.Object({
+  _id: Type.Number(),
+  label: Type.String(),
+  ipAddress: Type.String(),
+  deviceOutput: Type.Array(
+    Type.Object({
+      name: Type.String(),
+      label: Type.String()
+    })
+  ),
+  deviceInput: Type.Array(
+    Type.Object({
+      name: Type.String(),
+      label: Type.String()
+    })
+  )
+});
+
+export const IngestListResponse = Type.Object({
+  ingests: Type.Array(Ingest),
+  offset: Type.Number(),
+  limit: Type.Number(),
+  totalItems: Type.Number()
+});
+
+export const PatchIngest = Type.Union([
+  Type.Object({ label: Type.String() }),
+  Type.Object({
+    deviceOutput: Type.Object({
+      name: Type.String(),
+      label: Type.String()
+    })
+  }),
+  Type.Object({
+    deviceInput: Type.Object({
+      name: Type.String(),
+      label: Type.String()
+    })
+  })
+]);
+
+export const PatchIngestResponse = Type.Omit(Ingest, ['ipAddress']);
