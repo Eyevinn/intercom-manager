@@ -4,8 +4,7 @@ import { FastifyPluginCallback } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import { CoreFunctions } from './api_productions_core_functions';
 import { ConnectionQueue } from './connection_queue';
-import { DbManagerCouchDb } from './db/couchdb';
-import { DbManagerMongoDb } from './db/mongodb';
+import { DbManager } from './db/interface';
 import { Log } from './log';
 import {
   DetailedProductionResponse,
@@ -27,26 +26,10 @@ import {
   UserSession,
   WhipRequest,
   WhipResponse
-  NewSession,
-  SessionResponse,
-  SdpAnswer,
-  NewProductionLine,
-  ErrorResponse,
-  PatchLineResponse,
-  PatchLine,
-  ProductionListResponse,
-  PatchProduction,
-  PatchProductionResponse
 } from './models';
 import { ProductionManager } from './production_manager';
 import { SmbProtocol } from './smb';
 import { getIceServers } from './utils';
-import dotenv from 'dotenv';
-import { v4 as uuidv4 } from 'uuid';
-import { ConnectionQueue } from './connection_queue';
-import { CoreFunctions } from './api_productions_core_functions';
-import { Log } from './log';
-import { DbManager } from './db/interface';
 dotenv.config();
 
 export interface ApiProductionsOptions {
