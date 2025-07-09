@@ -1022,204 +1022,170 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     }
   );
 
-  // Patch endpoint for Trickle ICE support
-  fastify.patch<{
-    Params: { productionId: string; lineId: string; sessionId: string };
-    Body: string;
-  }>(
-    '/whip/:productionId/:lineId/:sessionId',
-    {
-      schema: {
-        description: 'Trickle ICE endpoint for sending ICE candidates',
-        body: Type.String({
-          description: 'ICE candidate SDP fragment'
-        }),
-        response: {
-          200: Type.Null(),
-          204: Type.Null(),
-          400: Type.Object({ error: Type.String() }),
-          404: Type.Object({ error: Type.String() }),
-          409: Type.Object({ error: Type.String() }),
-          412: Type.Object({ error: Type.String() }),
-          415: Type.Object({ error: Type.String() }),
-          422: Type.Object({ error: Type.String() }),
-          500: Type.Object({ error: Type.String() })
-        }
-      }
-    },
-    async (request, reply) => {
-      try {
-        const { sessionId } = request.params;
-        const iceCandidateSdp = request.body;
-        const etag = request.headers.etag;
+  // // Patch endpoint for Trickle ICE support
+  // fastify.patch<{
+  //   Params: { productionId: string; lineId: string; sessionId: string };
+  //   Body: string;
+  // }>(
+  //   '/whip/:productionId/:lineId/:sessionId',
+  //   {
+  //     schema: {
+  //       description: 'Trickle ICE endpoint for sending ICE candidates',
+  //       body: Type.String({
+  //         description: 'ICE candidate SDP fragment'
+  //       }),
+  //       response: {
+  //         200: Type.Null(),
+  //         204: Type.Null(),
+  //         400: Type.Object({ error: Type.String() }),
+  //         404: Type.Object({ error: Type.String() }),
+  //         409: Type.Object({ error: Type.String() }),
+  //         412: Type.Object({ error: Type.String() }),
+  //         415: Type.Object({ error: Type.String() }),
+  //         422: Type.Object({ error: Type.String() }),
+  //         500: Type.Object({ error: Type.String() })
+  //       }
+  //     }
+  //   },
+  //   async (request, reply) => {
+  //     try {
+  //       const { sessionId } = request.params;
+  //       const iceCandidateSdp = request.body;
+  //       const etag = request.headers.etag;
 
-        // Reject unsupported content type
-        if (
-          request.headers['content-type'] !== 'application/trickle-ice-sdpfrag'
-        ) {
-          return reply.code(415).send({ error: 'Unsupported Media Type' });
-        }
+  //       // Reject unsupported content type
+  //       if (
+  //         request.headers['content-type'] !== 'application/trickle-ice-sdpfrag'
+  //       ) {
+  //         return reply.code(415).send({ error: 'Unsupported Media Type' });
+  //       }
 
-        // Check if session exists
-        const session = productionManager.getUser(sessionId);
-        if (!session) {
-          reply.code(404).send({ error: 'WHIP session not found' });
-          return;
-        }
+  //       // Check if session exists
+  //       const session = productionManager.getUser(sessionId);
+  //       if (!session) {
+  //         reply.code(404).send({ error: 'WHIP session not found' });
+  //         return;
+  //       }
 
-        // Validate ETag if provided
-        if (etag && etag !== sessionId) {
-          reply.code(412).send({ error: 'ETag mismatch' });
-          return;
-        }
+  //       // Validate ETag if provided
+  //       if (etag && etag !== sessionId) {
+  //         reply.code(412).send({ error: 'ETag mismatch' });
+  //         return;
+  //       }
 
-        // Parse the ICE candidate SDP fragment
-        if (!iceCandidateSdp || iceCandidateSdp.trim() === '') {
-          reply.code(400).send({ error: 'Empty ICE candidate SDP fragment' });
-          return;
-        }
+  //       // Parse the ICE candidate SDP fragment
+  //       if (!iceCandidateSdp || iceCandidateSdp.trim() === '') {
+  //         reply.code(400).send({ error: 'Empty ICE candidate SDP fragment' });
+  //         return;
+  //       }
 
-        // Detect ICE restart attempt (presence of ufrag/pwd fields)
-        // Might not implement:
-        // const isIceRestart =
-        //   /a=ice-ufrag:/i.test(iceCandidateSdp) ||
-        //   /a=ice-pwd:/i.test(iceCandidateSdp);
-        // // TODO: If ICE restarts are not supported, reject with 422
-        // if (isIceRestart) {
-        //   return reply.code(422).send({ error: 'ICE restarts not supported' });
-        // }
+  //       // Extract ICE candidate from SDP fragment
+  //       const candidateMatch = iceCandidateSdp.match(/a=candidate.*\r?\n?/);
+  //       if (!candidateMatch || candidateMatch.length === 0) {
+  //         reply.code(400).send({ error: 'Invalid ICE candidate format' });
+  //         return;
+  //       }
 
-        // Extract ICE candidate from SDP fragment
-        const candidateMatch = iceCandidateSdp.match(/a=candidate.*\r?\n?/);
-        if (!candidateMatch || candidateMatch.length === 0) {
-          reply.code(400).send({ error: 'Invalid ICE candidate format' });
-          return;
-        }
+  //       const candidateString = candidateMatch[0].trim();
+  //       Log().info(
+  //         `Received ICE candidate for session ${sessionId}: ${candidateString}`
+  //       );
 
-        const candidateString = candidateMatch[0].trim();
-        Log().info(
-          `Received ICE candidate for session ${sessionId}: ${candidateString}`
-        );
+  //       // TODO: Implement ICE candidate handling with SMB
+  //       // This would typically involve:
+  //       // 1. Storing the ICE candidate for the session
+  //       // 2. Adding it to the SMB endpoint configuration
+  //       // 3. Reconfiguring the SMB endpoint with the new ICE candidate
 
-        // TODO: Implement ICE candidate handling with SMB
-        // This would typically involve:
-        // 1. Storing the ICE candidate for the session
-        // 2. Adding it to the SMB endpoint configuration
-        // 3. Reconfiguring the SMB endpoint with the new ICE candidate
+  //       // For now, we'll store the ICE candidate in the session
+  //       // This is a placeholder implementation - you'll need to integrate with SMB
+  //       if (!session.iceCandidates) {
+  //         session.iceCandidates = [];
+  //       }
+  //       session.iceCandidates.push({
+  //         candidate: candidateString,
+  //         timestamp: Date.now()
+  //       });
 
-        // For now, we'll store the ICE candidate in the session
-        // This is a placeholder implementation - you'll need to integrate with SMB
-        if (!session.iceCandidates) {
-          session.iceCandidates = [];
-        }
-        session.iceCandidates.push({
-          candidate: candidateString,
-          timestamp: Date.now()
-        });
+  //       // Update the session in the production manager
+  //       productionManager.updateUserLastSeen(sessionId);
 
-        // Possible SMB integration
-        // if (!session.endpointId || !session.sessionDescription) {
-        //   return reply
-        //     .code(500)
-        //     .send({ error: 'Session missing endpoint information' });
-        // }
+  //       // Add CORS headers
+  //       reply.headers({
+  //         'Access-Control-Allow-Origin': '*',
+  //         'Access-Control-Allow-Methods': 'POST, DELETE, OPTIONS, PATCH',
+  //         'Access-Control-Allow-Headers': 'Content-Type, Authorization, ETag',
+  //         'Access-Control-Expose-Headers': 'Location, ETag, Link'
+  //       });
 
-        // try {
-        //   await coreFunctions.trickleIceCandidateToSMB(
-        //     smb,
-        //     smbServerUrl,
-        //     smbServerApiKey,
-        //     session.lineId,
-        //     session.endpointId,
-        //     candidateString,
-        //     session.sessionDescription
-        //   );
-        // } catch (err) {
-        //   Log().error(`Failed to send ICE candidate to SMB: ${err}`);
-        //   return reply
-        //     .code(500)
-        //     .send({ error: 'Failed to deliver ICE candidate to SMB' });
-        // }
+  //       // Return 204 No Content for successful ICE candidate processing
+  //       reply.code(204).send();
+  //     } catch (err) {
+  //       Log().error(err);
+  //       reply
+  //         .code(500)
+  //         .send({ error: `Failed to process ICE candidate: ${err}` });
+  //     }
+  //   }
+  // );
 
-        // Update the session in the production manager
-        productionManager.updateUserLastSeen(sessionId);
+  // // Options endpoint for CORS preflight requests and WHIP discovery
+  // fastify.options<{
+  //   Params: { productionId: string; lineId: string };
+  // }>(
+  //   '/whip/:productionId/:lineId',
+  //   {
+  //     schema: {
+  //       description: 'CORS preflight and WHIP discovery endpoint',
+  //       response: {
+  //         200: Type.String({ description: 'OK' })
+  //       }
+  //     }
+  //   },
+  //   async (request, reply) => {
+  //     try {
+  //       const { productionId, lineId } = request.params;
 
-        // Add CORS headers
-        reply.headers({
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'POST, DELETE, OPTIONS, PATCH',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization, ETag',
-          'Access-Control-Expose-Headers': 'Location, ETag, Link'
-        });
+  //       // Check if production and line exist
+  //       const productionIdNum = parseInt(productionId, 10);
+  //       if (isNaN(productionIdNum)) {
+  //         reply.code(400).send({ error: 'Invalid production ID' });
+  //         return;
+  //       }
 
-        // Return 204 No Content for successful ICE candidate processing
-        reply.code(204).send();
-      } catch (err) {
-        Log().error(err);
-        reply
-          .code(500)
-          .send({ error: `Failed to process ICE candidate: ${err}` });
-      }
-    }
-  );
+  //       const production = await productionManager.getProduction(
+  //         productionIdNum
+  //       );
+  //       if (!production) {
+  //         reply.code(404).send({ error: 'Production not found' });
+  //         return;
+  //       }
 
-  // Options endpoint for CORS preflight requests and WHIP discovery
-  fastify.options<{
-    Params: { productionId: string; lineId: string };
-  }>(
-    '/whip/:productionId/:lineId',
-    {
-      schema: {
-        description: 'CORS preflight and WHIP discovery endpoint',
-        response: {
-          200: Type.String({ description: 'OK' })
-        }
-      }
-    },
-    async (request, reply) => {
-      try {
-        const { productionId, lineId } = request.params;
+  //       const line = production.lines.find((l: any) => l.id === lineId);
+  //       if (!line) {
+  //         reply.code(404).send({ error: 'Line not found' });
+  //         return;
+  //       }
 
-        // Check if production and line exist
-        const productionIdNum = parseInt(productionId, 10);
-        if (isNaN(productionIdNum)) {
-          reply.code(400).send({ error: 'Invalid production ID' });
-          return;
-        }
+  //       // Add CORS headers for preflight requests
+  //       reply.headers({
+  //         'Access-Control-Allow-Origin': '*',
+  //         'Access-Control-Allow-Methods': 'POST, DELETE, OPTIONS, PATCH',
+  //         'Access-Control-Allow-Headers': 'Content-Type, Authorization, ETag',
+  //         'Access-Control-Expose-Headers': 'Location, ETag, Link',
+  //         'Access-Control-Max-Age': '86400', // 24 hours
+  //         'Accept-Post': 'application/sdp'
+  //       });
 
-        const production = await productionManager.getProduction(
-          productionIdNum
-        );
-        if (!production) {
-          reply.code(404).send({ error: 'Production not found' });
-          return;
-        }
-
-        const line = production.lines.find((l: any) => l.id === lineId);
-        if (!line) {
-          reply.code(404).send({ error: 'Line not found' });
-          return;
-        }
-
-        // Add CORS headers for preflight requests
-        reply.headers({
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'POST, DELETE, OPTIONS, PATCH',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization, ETag',
-          'Access-Control-Expose-Headers': 'Location, ETag, Link',
-          'Access-Control-Max-Age': '86400', // 24 hours
-          'Accept-Post': 'application/sdp'
-        });
-
-        reply.code(200).send('OK');
-      } catch (err) {
-        Log().error(err);
-        reply
-          .code(500)
-          .send({ error: `Failed to process OPTIONS request: ${err}` });
-      }
-    }
-  );
+  //       reply.code(200).send('OK');
+  //     } catch (err) {
+  //       Log().error(err);
+  //       reply
+  //         .code(500)
+  //         .send({ error: `Failed to process OPTIONS request: ${err}` });
+  //     }
+  //   }
+  // );
 
   next();
 };
