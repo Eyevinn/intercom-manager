@@ -211,7 +211,7 @@ describe('apiWhip', () => {
   });
 
   describe('PATCH /whip/:productionId/:lineId/:sessionId', () => {
-    it('should return 405 method not supported', async () => {
+    it('should return 405 method not allowed', async () => {
       const fastify = await createTestServer();
 
       const response = await fastify.inject({
@@ -222,7 +222,7 @@ describe('apiWhip', () => {
       });
 
       expect(response.statusCode).toBe(405);
-      expect(response.payload).toBe('Method not supported');
+      expect(response.payload).toBe('Method not allowed');
     });
   });
 });
