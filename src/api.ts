@@ -7,9 +7,10 @@ import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import { Static, Type } from '@sinclair/typebox';
 import fastify, { FastifyPluginCallback } from 'fastify';
 import { getApiIngests } from './api_ingests';
-import { getApiProductions } from './api_productions';
+import { ApiProductionsOptions, getApiProductions } from './api_productions';
 import apiReAuth from './api_re_auth';
 import apiShare from './api_share';
+import apiWhip, { ApiWhipOptions } from './api_whip';
 import { DbManager } from './db/interface';
 import { IngestManager } from './ingest_manager';
 import { ProductionManager } from './production_manager';
@@ -44,7 +45,7 @@ const healthcheck: FastifyPluginCallback<HealthcheckOptions> = (
   next();
 };
 
-export interface ApiOptions {
+export interface ApiGeneralOptions {
   title: string;
   smbServerBaseUrl: string;
   endpointIdleTimeout: string;
@@ -55,28 +56,14 @@ export interface ApiOptions {
   ingestManager: IngestManager;
 }
 
+export type ApiOptions = ApiGeneralOptions &
+  ApiProductionsOptions &
+  ApiWhipOptions;
+
 export default async (opts: ApiOptions) => {
   const api = fastify({
     ignoreTrailingSlash: true
   }).withTypeProvider<TypeBoxTypeProvider>();
-
-  // Tell Fastify how to parse 'application/sdp' as a raw string for WHIP endpoint
-  api.addContentTypeParser(
-    'application/sdp',
-    { parseAs: 'string' },
-    (req, body, done) => {
-      done(null, body); // body will be a string (raw SDP)
-    }
-  );
-
-  // Tell Fastify how to parse 'application/trickle-ice-sdpfrag' as a raw string for Trickle ICE
-  api.addContentTypeParser(
-    'application/trickle-ice-sdpfrag',
-    { parseAs: 'string' },
-    (req, body, done) => {
-      done(null, body); // body will be a string (ICE candidate SDP fragment)
-    }
-  );
 
   // register the cookie plugin
   api.register(fastifyCookie);
@@ -112,6 +99,15 @@ export default async (opts: ApiOptions) => {
     endpointIdleTimeout: opts.endpointIdleTimeout,
     smbServerApiKey: opts.smbServerApiKey,
     dbManager: opts.dbManager,
+    productionManager: opts.productionManager,
+    coreFunctions: opts.coreFunctions
+  });
+  api.register(apiWhip, {
+    prefix: 'api/v1',
+    smbServerApiKey: opts.smbServerApiKey,
+    endpointIdleTimeout: opts.endpointIdleTimeout,
+    smbServerBaseUrl: opts.smbServerBaseUrl,
+    coreFunctions: opts.coreFunctions,
     productionManager: opts.productionManager
   });
   api.register(apiShare, { publicHost: opts.publicHost, prefix: 'api/v1' });

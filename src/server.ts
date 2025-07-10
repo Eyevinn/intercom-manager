@@ -1,9 +1,11 @@
 import api from './api';
+import { CoreFunctions } from './api_productions_core_functions';
+import { ConnectionQueue } from './connection_queue';
 import { DbManagerCouchDb } from './db/couchdb';
 import { DbManagerMongoDb } from './db/mongodb';
-import { ProductionManager } from './production_manager';
-import { Log } from './log';
 import { IngestManager } from './ingest_manager';
+import { Log } from './log';
+import { ProductionManager } from './production_manager';
 
 const SMB_ADDRESS: string = process.env.SMB_ADDRESS ?? 'http://localhost:8080';
 const PUBLIC_HOST: string = process.env.PUBLIC_HOST ?? 'http://localhost:3000';
@@ -35,6 +37,7 @@ if (dbUrl.protocol === 'mongodb:') {
   const productionManager = new ProductionManager(dbManager);
   await productionManager.load();
 
+  const connectionQueue = new ConnectionQueue();
   const ingestManager = new IngestManager(dbManager);
   await ingestManager.load();
 
@@ -48,7 +51,8 @@ if (dbUrl.protocol === 'mongodb:') {
     publicHost: PUBLIC_HOST,
     dbManager: dbManager,
     productionManager: productionManager,
-    ingestManager: ingestManager
+    ingestManager: ingestManager,
+    coreFunctions: new CoreFunctions(productionManager, connectionQueue)
   });
 
   server.listen({ port: PORT, host: '0.0.0.0' }, (err, address) => {
