@@ -251,7 +251,7 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
     Params: { productionId: string; lineId: string; sessionId: string };
     Body: string;
   }>('/whip/:productionId/:lineId/:sessionId', {}, async (request, reply) => {
-    reply.code(405).send('Method not supported');
+    reply.code(405).send('Method not allowed');
   });
 
   fastify.options<{
