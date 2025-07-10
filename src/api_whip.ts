@@ -1,6 +1,6 @@
 import { Static, Type } from '@sinclair/typebox';
 import { FastifyPluginCallback } from 'fastify';
-import sdpTransform from 'sdp-transform';
+import sdpTransform, { parse } from 'sdp-transform';
 import { v4 as uuidv4 } from 'uuid';
 import { CoreFunctions } from './api_productions_core_functions';
 import { Log } from './log';
@@ -79,11 +79,12 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
     async (request, reply) => {
       try {
         const { productionId, lineId, username } = request.params;
-        const sdpOffer = request.body;
 
         if (request.headers['content-type'] !== 'application/sdp') {
           return reply.code(415).send({ error: 'Unsupported Media Type' });
         }
+
+        const sdpOffer = parse(request.body);
 
         // Create a unique session ID for this WHIP connection
         const sessionId = uuidv4();
@@ -112,20 +113,21 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
           parseInt(opts.endpointIdleTimeout, 10)
         );
 
-        // Handle the SDP answer
-        const sdpAnswer = await coreFunctions.createAnswer(
+        await coreFunctions.configureEndpointForWhip(
+          sdpOffer,
+          endpoint,
           smb,
           smbServerUrl,
           smbServerApiKey,
           smbConferenceId,
-          endpointId,
-          endpoint,
-          sdpOffer
+          endpointId
         );
+
+        const sdpAnswer = await coreFunctions.createAnswer(sdpOffer, endpoint);
 
         // Check if any m= sections from the offer were rejected
         try {
-          const offerParsed = sdpTransform.parse(sdpOffer);
+          const offerParsed = sdpOffer;
           const answerParsed = sdpTransform.parse(sdpAnswer);
 
           const offerMids = offerParsed.media.map((m) => m.mid).filter(Boolean);

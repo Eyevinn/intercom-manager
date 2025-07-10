@@ -111,41 +111,16 @@ export class CoreFunctions {
     return endpoint;
   }
 
-  async createAnswer(
+  async configureEndpointForWhip(
+    offer: SessionDescription,
+    endpoint: SmbEndpointDescription,
     smb: SmbProtocol,
     smbServerUrl: string,
     smbServerApiKey: string,
     smbConferenceId: string,
-    endpointId: string,
-    endpointDescription: SmbEndpointDescription,
-    offer: string
-  ): Promise<string> {
-    const { sdpAnswer, updatedDescription } = await this.buildSdpAnswer(
-      endpointDescription,
-      offer
-    );
-
-    await smb.configureEndpoint(
-      smbServerUrl,
-      smbConferenceId,
-      endpointId,
-      updatedDescription,
-      smbServerApiKey
-    );
-
-    return sdpAnswer;
-  }
-
-  prepareParsedOffer(
-    parsedOffer: SessionDescription,
-    endpointDescription: SmbEndpointDescription,
-    transport: (typeof endpointDescription)['bundle-transport']
-  ): { modifiedOffer: SessionDescription; originalMedia: MediaDescription } {
-    let bundleGroupMids = '';
-    let candidatesAdded = false;
-    const originalMedia = {
-      ...parsedOffer.media.find((media) => media.type === 'audio')
-    } as MediaDescription;
+    endpointId: string
+  ): Promise<void> {
+    const transport = endpoint['bundle-transport'];
 
     if (!transport) {
       throw new Error('Missing bundle-transport in endpointDescription');
@@ -157,7 +132,213 @@ export class CoreFunctions {
       throw new Error('Missing ice in endpointDescription');
     }
 
-    for (const media of parsedOffer.media) {
+    const audioMedia = {
+      ...offer.media.find((media) => media.type === 'audio')
+    } as MediaDescription;
+
+    transport.ice.ufrag = offer.iceUfrag ?? audioMedia?.iceUfrag ?? '';
+    transport.ice.pwd = offer.icePwd ?? audioMedia?.icePwd ?? '';
+    transport.dtls.hash =
+      offer.fingerprint?.hash ?? audioMedia?.fingerprint?.hash ?? '';
+    transport.dtls.type =
+      offer.fingerprint?.type ?? audioMedia?.fingerprint?.type ?? '';
+    transport.dtls.setup = offer.setup ?? audioMedia?.setup ?? '';
+
+    if (!transport.ice.candidates || transport.ice.candidates.length === 0) {
+      throw new Error('ICE candidates missing in transport');
+    }
+
+    const videoStreams: any[] = [];
+    const streamsMap = new Map();
+
+    for (const media of offer.media) {
+      if (media.type === 'audio') {
+        endpoint.audio.ssrcs = [];
+        media.ssrcs
+          ?.filter((ssrc) => ssrc.attribute === 'msid')
+          .forEach((ssrc) => endpoint.audio.ssrcs.push(parseInt(`${ssrc.id}`)));
+        endpoint.audio['payload-type'].id = media.rtp[0].payload;
+        endpoint.audio['rtp-hdrexts'] = [];
+        media.ext?.forEach((ext: RtpHeaderExt) =>
+          endpoint.audio['rtp-hdrexts'].push({
+            id: ext.value,
+            uri: ext.uri
+          })
+        );
+      } else if (media.type === 'video') {
+        media.ssrcs
+          ?.filter((ssrc) => ssrc.attribute === 'msid' && ssrc.value)
+          .forEach((ssrc) => {
+            const mediaStreamId = ssrc.value?.split(' ')[0];
+            let smbVideoStream = streamsMap.get(mediaStreamId);
+            if (!smbVideoStream) {
+              smbVideoStream = {
+                sources: [],
+                id: mediaStreamId,
+                content: 'video'
+              };
+              streamsMap.set(mediaStreamId, smbVideoStream);
+            }
+
+            const feedbackGroup = media.ssrcGroups
+              ?.filter((element) => element.semantics === 'FID')
+              .filter((element) => element.ssrcs.indexOf(`${ssrc.id}`) !== -1)
+              .pop();
+
+            if (feedbackGroup) {
+              const ssrcsSplit = feedbackGroup.ssrcs.split(' ');
+              if (`${ssrc.id}` === ssrcsSplit[0]) {
+                smbVideoStream.sources = [
+                  {
+                    main: parseInt(ssrcsSplit[0]),
+                    feedback: parseInt(ssrcsSplit[1])
+                  }
+                ];
+              }
+            } else {
+              smbVideoStream.sources = [
+                {
+                  main: parseInt(`${ssrc.id}`)
+                }
+              ];
+            }
+          });
+
+        streamsMap.forEach((value) => videoStreams.push(value));
+        const supportedCodecs = ['VP8', 'H264', 'VP9'];
+        const matchingCodecs =
+          media.rtp?.filter((rtp: RtpCodec) =>
+            supportedCodecs.includes(rtp.codec.toUpperCase())
+          ) || [];
+
+        if (matchingCodecs.length > 0) {
+          media.rtp = matchingCodecs;
+        }
+
+        const seenPayloads = new Set<number>();
+        media.rtp = media.rtp.filter((rtp: RtpCodec) => {
+          if (seenPayloads.has(rtp.payload)) return false;
+          seenPayloads.add(rtp.payload);
+          return true;
+        });
+
+        media.fmtp =
+          media.fmtp?.filter((fmtp: Fmtp) =>
+            media.rtp.some((rtp: RtpCodec) => rtp.payload === fmtp.payload)
+          ) ?? [];
+
+        media.rtcpFb =
+          media.rtcpFb?.filter((fb: RtcpFb) =>
+            media.rtp.some((rtp: RtpCodec) => rtp.payload === fb.payload)
+          ) ?? [];
+
+        media.payloads = media.rtp
+          .map((rtp: RtpCodec) => rtp.payload)
+          .join(' ');
+
+        media.ext =
+          media.ext?.filter(
+            (ext: RtpHeaderExt) =>
+              ext.uri ===
+                'http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time' ||
+              ext.uri === 'urn:ietf:params:rtp-hdrext:sdes:rtp-stream-id'
+          ) ?? [];
+
+        media.ssrcGroups = undefined;
+
+        endpoint.video = endpoint.video || {};
+
+        const selectedCodec = media.rtp[0];
+        if (typeof selectedCodec.rate !== 'number') {
+          throw new Error('Selected video codec is missing a valid clockrate');
+        }
+
+        const payload = {
+          id: selectedCodec.payload,
+          name: selectedCodec.codec,
+          clockrate: selectedCodec.rate,
+          parameters: {},
+          'rtcp-fbs': [] as { type: string; subtype?: string }[]
+        };
+
+        const fmtp = media.fmtp.find(
+          (f) => f.payload === selectedCodec.payload
+        );
+        if (fmtp?.config) {
+          payload.parameters = Object.fromEntries(
+            fmtp.config.split(';').map((kv) => {
+              const [key, val] = kv.trim().split('=');
+              return [key, val ?? ''];
+            })
+          );
+        }
+
+        const rtcpFbs = media.rtcpFb?.filter(
+          (f: RtcpFb) => f.payload === selectedCodec.payload
+        );
+        if (rtcpFbs?.length) {
+          payload['rtcp-fbs'] = rtcpFbs.map((fb: RtcpFb) => ({
+            type: fb.type,
+            subtype: fb.subtype ?? undefined
+          }));
+        }
+
+        endpoint.video['payload-type'] = payload;
+        endpoint.video['rtp-hdrexts'] = media.ext.map((ext: RtpHeaderExt) => ({
+          id: ext.value,
+          uri: ext.uri
+        }));
+
+        endpoint.video.ssrcs =
+          media.ssrcs?.map((ssrc) => Number(ssrc.id)) ?? [];
+      }
+    }
+
+    await smb.configureEndpoint(
+      smbServerUrl,
+      smbConferenceId,
+      endpointId,
+      endpoint,
+      smbServerApiKey
+    );
+  }
+
+  async createAnswer(
+    offer: SessionDescription,
+    endpoint: SmbEndpointDescription
+  ): Promise<string> {
+    if (!endpoint) {
+      throw new Error('Missing endpointDescription when handling sdp offer');
+    }
+    if (!endpoint.audio) {
+      throw new Error(
+        'Missing endpointDescription audio when handling sdp offer'
+      );
+    }
+    if (!endpoint.audio.ssrcs || endpoint.audio.ssrcs.length === 0) {
+      throw new Error('Missing audio ssrcs in SMB endpoint description');
+    }
+
+    if (offer.origin) {
+      offer.origin.sessionVersion++;
+    }
+
+    if (!offer.msidSemantic) {
+      offer.msidSemantic = { semantic: 'WMS', token: '' };
+    } else {
+      offer.msidSemantic.token = '*';
+    }
+
+    const transport = endpoint['bundle-transport'];
+    if (!transport)
+      throw new Error('Missing bundle-transport in endpointDescription');
+    if (!transport.dtls) throw new Error('Missing dtls in endpointDescription');
+    if (!transport.ice) throw new Error('Missing ice in endpointDescription');
+
+    let bundleGroupMids = '';
+    let candidatesAdded = false;
+
+    for (const media of offer.media) {
       bundleGroupMids =
         bundleGroupMids === ''
           ? `${media.mid}`
@@ -248,7 +429,6 @@ export class CoreFunctions {
           : defaultAudioExts;
 
         media.ext = audioExts.map((ext) => ({ value: ext.id, uri: ext.uri }));
-        endpointDescription.audio['rtp-hdrexts'] = audioExts;
       } else if (media.type === 'video') {
         const vp8Codec = media.rtp.find(
           (rtp: RtpCodec) => rtp.codec.toUpperCase() === 'VP8'
@@ -303,278 +483,21 @@ export class CoreFunctions {
       }
     }
 
-    parsedOffer.groups = [
+    offer.groups = [
       {
         type: 'BUNDLE',
         mids: bundleGroupMids
       }
     ];
 
-    return { modifiedOffer: parsedOffer, originalMedia: originalMedia };
-  }
+    const sdpAnswer = write(offer);
 
-  finalizeEndpointDescription(
-    parsedOffer: SessionDescription,
-    originalOffer: SessionDescription,
-    originalMedia: MediaDescription,
-    endpointDescription: SmbEndpointDescription
-  ): void {
-    const transport = endpointDescription['bundle-transport'];
-
-    if (!transport) {
-      throw new Error('Missing bundle-transport in endpointDescription');
-    }
-    if (!transport.dtls) {
-      throw new Error('Missing dtls in endpointDescription');
-    }
-    if (!transport.ice) {
-      throw new Error('Missing ice in endpointDescription');
-    }
-
-    transport.ice.ufrag =
-      (originalOffer.iceUfrag
-        ? originalOffer.iceUfrag
-        : originalMedia?.iceUfrag) || '';
-    transport.ice.pwd =
-      (originalOffer.icePwd ? originalOffer.icePwd : originalMedia?.icePwd) ||
-      '';
-    transport.dtls.hash =
-      (originalOffer.fingerprint?.hash
-        ? originalOffer.fingerprint.hash
-        : originalMedia?.fingerprint?.hash) || '';
-    transport.dtls.type =
-      (originalOffer.fingerprint?.type
-        ? originalOffer.fingerprint.type
-        : originalMedia?.fingerprint?.type) || '';
-    transport.dtls.setup =
-      (originalOffer.setup ? originalOffer.setup : originalMedia?.setup) || '';
-
-    if (!transport.ice.candidates || transport.ice.candidates.length === 0) {
-      throw new Error('ICE candidates missing in transport');
-    }
-
-    const videoStreams: any[] = [];
-    const streamsMap = new Map();
-
-    for (const media of parsedOffer.media) {
-      if (media.type === 'audio') {
-        endpointDescription.audio.ssrcs = [];
-        media.ssrcs
-          ?.filter((ssrc) => ssrc.attribute === 'msid')
-          .forEach((ssrc) =>
-            endpointDescription.audio.ssrcs.push(parseInt(`${ssrc.id}`))
-          );
-      } else if (media.type === 'video') {
-        media.ssrcs
-          ?.filter((ssrc) => ssrc.attribute === 'msid' && ssrc.value)
-          .forEach((ssrc) => {
-            const mediaStreamId = ssrc.value?.split(' ')[0];
-            let smbVideoStream = streamsMap.get(mediaStreamId);
-            if (!smbVideoStream) {
-              smbVideoStream = {
-                sources: [],
-                id: mediaStreamId,
-                content: 'video'
-              };
-              streamsMap.set(mediaStreamId, smbVideoStream);
-            }
-
-            const feedbackGroup = media.ssrcGroups
-              ?.filter((element) => element.semantics === 'FID')
-              .filter((element) => element.ssrcs.indexOf(`${ssrc.id}`) !== -1)
-              .pop();
-
-            if (feedbackGroup) {
-              const ssrcsSplit = feedbackGroup.ssrcs.split(' ');
-              if (`${ssrc.id}` === ssrcsSplit[0]) {
-                smbVideoStream.sources = [
-                  {
-                    main: parseInt(ssrcsSplit[0]),
-                    feedback: parseInt(ssrcsSplit[1])
-                  }
-                ];
-              }
-            } else {
-              smbVideoStream.sources = [
-                {
-                  main: parseInt(`${ssrc.id}`)
-                }
-              ];
-            }
-          });
-
-        streamsMap.forEach((value) => videoStreams.push(value));
-      }
-    }
-
-    for (const media of parsedOffer.media) {
-      if (media.type === 'audio') {
-        endpointDescription.audio['payload-type'].id = media.rtp[0].payload;
-        endpointDescription.audio['rtp-hdrexts'] = [];
-        media.ext?.forEach((ext: RtpHeaderExt) =>
-          endpointDescription.audio['rtp-hdrexts'].push({
-            id: ext.value,
-            uri: ext.uri
-          })
-        );
-      } else if (media.type === 'video') {
-        const supportedCodecs = ['VP8', 'H264', 'VP9'];
-        const matchingCodecs =
-          media.rtp?.filter((rtp: RtpCodec) =>
-            supportedCodecs.includes(rtp.codec.toUpperCase())
-          ) || [];
-
-        if (matchingCodecs.length > 0) {
-          media.rtp = matchingCodecs;
-        }
-
-        const seenPayloads = new Set<number>();
-        media.rtp = media.rtp.filter((rtp: RtpCodec) => {
-          if (seenPayloads.has(rtp.payload)) return false;
-          seenPayloads.add(rtp.payload);
-          return true;
-        });
-
-        media.fmtp =
-          media.fmtp?.filter((fmtp: Fmtp) =>
-            media.rtp.some((rtp: RtpCodec) => rtp.payload === fmtp.payload)
-          ) ?? [];
-
-        media.rtcpFb =
-          media.rtcpFb?.filter((fb: RtcpFb) =>
-            media.rtp.some((rtp: RtpCodec) => rtp.payload === fb.payload)
-          ) ?? [];
-
-        media.payloads = media.rtp
-          .map((rtp: RtpCodec) => rtp.payload)
-          .join(' ');
-
-        media.ext =
-          media.ext?.filter(
-            (ext: RtpHeaderExt) =>
-              ext.uri ===
-                'http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time' ||
-              ext.uri === 'urn:ietf:params:rtp-hdrext:sdes:rtp-stream-id'
-          ) ?? [];
-
-        media.ssrcGroups = undefined;
-
-        endpointDescription.video = endpointDescription.video || {};
-
-        const selectedCodec = media.rtp[0];
-        if (typeof selectedCodec.rate !== 'number') {
-          throw new Error('Selected video codec is missing a valid clockrate');
-        }
-
-        const payload = {
-          id: selectedCodec.payload,
-          name: selectedCodec.codec,
-          clockrate: selectedCodec.rate,
-          parameters: {},
-          'rtcp-fbs': [] as { type: string; subtype?: string }[]
-        };
-
-        const fmtp = media.fmtp.find(
-          (f) => f.payload === selectedCodec.payload
-        );
-        if (fmtp?.config) {
-          payload.parameters = Object.fromEntries(
-            fmtp.config.split(';').map((kv) => {
-              const [key, val] = kv.trim().split('=');
-              return [key, val ?? ''];
-            })
-          );
-        }
-
-        const rtcpFbs = media.rtcpFb?.filter(
-          (f: RtcpFb) => f.payload === selectedCodec.payload
-        );
-        if (rtcpFbs?.length) {
-          payload['rtcp-fbs'] = rtcpFbs.map((fb: RtcpFb) => ({
-            type: fb.type,
-            subtype: fb.subtype ?? undefined
-          }));
-        }
-
-        endpointDescription.video['payload-type'] = payload;
-        endpointDescription.video['rtp-hdrexts'] = media.ext.map(
-          (ext: RtpHeaderExt) => ({
-            id: ext.value,
-            uri: ext.uri
-          })
-        );
-
-        endpointDescription.video.ssrcs =
-          media.ssrcs?.map((ssrc) => Number(ssrc.id)) ?? [];
-      }
-    }
-  }
-
-  async buildSdpAnswer(
-    endpointDescription: SmbEndpointDescription,
-    offer: string
-  ): Promise<{
-    sdpAnswer: string;
-    updatedDescription: SmbEndpointDescription;
-  }> {
-    if (!endpointDescription) {
-      throw new Error('Missing endpointDescription when handling sdp offer');
-    }
-    if (!endpointDescription.audio) {
-      throw new Error(
-        'Missing endpointDescription audio when handling sdp offer'
-      );
-    }
-    if (
-      !endpointDescription.audio.ssrcs ||
-      endpointDescription.audio.ssrcs.length === 0
-    ) {
-      throw new Error('Missing audio ssrcs in SMB endpoint description');
-    }
-
-    const parsedOffer = parse(offer);
-
-    if (parsedOffer.origin) {
-      parsedOffer.origin.sessionVersion++;
-    }
-
-    if (!parsedOffer.msidSemantic) {
-      parsedOffer.msidSemantic = { semantic: 'WMS', token: '' };
-    } else {
-      parsedOffer.msidSemantic.token = '*';
-    }
-
-    const transport = endpointDescription['bundle-transport'];
-    if (!transport)
-      throw new Error('Missing bundle-transport in endpointDescription');
-    if (!transport.dtls) throw new Error('Missing dtls in endpointDescription');
-    if (!transport.ice) throw new Error('Missing ice in endpointDescription');
-
-    const originalOffer = { ...parsedOffer };
-    const { modifiedOffer, originalMedia } = this.prepareParsedOffer(
-      parsedOffer,
-      endpointDescription,
-      transport
-    );
-
-    const sdpAnswer = write(modifiedOffer);
-
-    const offerMediaDescription = modifiedOffer.media[0];
+    const offerMediaDescription = offer.media[0];
     if (!offerMediaDescription) {
       throw new Error('Missing audio media description in offer');
     }
 
-    this.finalizeEndpointDescription(
-      modifiedOffer,
-      originalOffer,
-      originalMedia,
-      endpointDescription
-    );
-
-    return {
-      sdpAnswer,
-      updatedDescription: endpointDescription
-    };
+    return sdpAnswer;
   }
 
   async handleAnswerRequest(
@@ -757,60 +680,6 @@ export class CoreFunctions {
       })
     );
     return allLinesResponse;
-  }
-
-  async trickleIceCandidateToSMB(
-    smb: SmbProtocol,
-    smbServerUrl: string,
-    smbServerApiKey: string,
-    conferenceId: string,
-    endpointId: string,
-    candidateLine: string,
-    endpointDescription: SmbEndpointDescription
-  ): Promise<void> {
-    const iceTransport = endpointDescription['bundle-transport']?.ice;
-
-    if (!iceTransport) {
-      throw new Error(
-        'ICE transport section missing from endpoint description'
-      );
-    }
-
-    if (!iceTransport.candidates) {
-      iceTransport.candidates = [];
-    }
-
-    // Parse a=candidate:... line
-    const line = candidateLine.replace(/^a=/, '').trim();
-    const parts = line.split(' ');
-
-    if (parts.length < 8 || !parts[0].startsWith('candidate:')) {
-      throw new Error(`Invalid ICE candidate line: ${candidateLine}`);
-    }
-
-    const parsed = {
-      foundation: parts[0].split(':')[1],
-      component: parseInt(parts[1], 10),
-      protocol: parts[2].toLowerCase(),
-      priority: parseInt(parts[3], 10),
-      ip: parts[4],
-      port: parseInt(parts[5], 10),
-      type: parts[7],
-      relAddr: parts[9] || undefined,
-      relPort: parts[11] ? parseInt(parts[11], 10) : undefined,
-      generation: 0,
-      network: 0
-    };
-
-    iceTransport.candidates.push(parsed);
-
-    await smb.configureEndpoint(
-      smbServerUrl,
-      conferenceId,
-      endpointId,
-      endpointDescription,
-      smbServerApiKey
-    );
   }
 
   private toStringIfNumber(value: string | number | undefined): string {
