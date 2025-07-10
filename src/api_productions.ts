@@ -1,32 +1,31 @@
 import { Type } from '@sinclair/typebox';
+import dotenv from 'dotenv';
 import { FastifyPluginCallback } from 'fastify';
+import { v4 as uuidv4 } from 'uuid';
+import { CoreFunctions } from './api_productions_core_functions';
+import { DbManager } from './db/interface';
+import { Log } from './log';
 import {
-  NewProduction,
+  DetailedProductionResponse,
+  ErrorResponse,
   LineResponse,
+  NewProduction,
+  NewProductionLine,
+  NewSession,
+  PatchLine,
+  PatchLineResponse,
+  PatchProduction,
+  PatchProductionResponse,
+  ProductionListResponse,
+  ProductionResponse,
+  SdpAnswer,
+  SessionResponse,
   SmbEndpointDescription,
   UserResponse,
-  ProductionResponse,
-  DetailedProductionResponse,
-  UserSession,
-  NewSession,
-  SessionResponse,
-  SdpAnswer,
-  NewProductionLine,
-  ErrorResponse,
-  PatchLineResponse,
-  PatchLine,
-  ProductionListResponse,
-  PatchProduction,
-  PatchProductionResponse
+  UserSession
 } from './models';
-import { SmbProtocol } from './smb';
 import { ProductionManager } from './production_manager';
-import dotenv from 'dotenv';
-import { v4 as uuidv4 } from 'uuid';
-import { ConnectionQueue } from './connection_queue';
-import { CoreFunctions } from './api_productions_core_functions';
-import { Log } from './log';
-import { DbManager } from './db/interface';
+import { SmbProtocol } from './smb';
 dotenv.config();
 
 export interface ApiProductionsOptions {
@@ -35,6 +34,7 @@ export interface ApiProductionsOptions {
   smbServerApiKey?: string;
   dbManager: DbManager;
   productionManager: ProductionManager;
+  coreFunctions: CoreFunctions;
 }
 
 const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
@@ -50,8 +50,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   const smbServerApiKey = opts.smbServerApiKey || '';
 
   const productionManager = opts.productionManager;
-  const connectionQueue = new ConnectionQueue();
-  const coreFunctions = new CoreFunctions(productionManager, connectionQueue);
+  const coreFunctions = opts.coreFunctions;
 
   fastify.post<{
     Body: NewProduction;
@@ -578,8 +577,10 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           smbServerApiKey,
           smbConferenceId,
           endpointId,
-          true,
-          true,
+          true, // audio
+          true, // data
+          true, // iceControlling
+          'ssrc-rewrite', // relayType
           parseInt(opts.endpointIdleTimeout, 10)
         );
         if (!endpoint.audio) {

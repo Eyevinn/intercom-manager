@@ -1,4 +1,4 @@
-import { Type, Static } from '@sinclair/typebox';
+import { Static, Type } from '@sinclair/typebox';
 
 export type NewProduction = Static<typeof NewProduction>;
 export type NewProductionLine = Static<typeof NewProductionLine>;
@@ -15,6 +15,9 @@ export type PatchLineResponse = Static<typeof PatchLineResponse>;
 export type PatchProduction = Static<typeof PatchProduction>;
 export type PatchProductionResponse = Static<typeof PatchProductionResponse>;
 export type SmbEndpointDescription = Static<typeof SmbEndpointDescription>;
+export type SmbAudioEndpointDescription = Static<
+  typeof SmbAudioEndpointDescription
+>;
 export type DetailedConference = Static<typeof DetailedConference>;
 export type Endpoint = Static<typeof Endpoint>;
 export type UserResponse = Static<typeof UserResponse>;
@@ -23,6 +26,7 @@ export type NewSession = Static<typeof NewSession>;
 export type SessionResponse = Static<typeof SessionResponse>;
 export type SdpAnswer = Static<typeof SdpAnswer>;
 export type ErrorResponse = Static<typeof ErrorResponse>;
+export type IceCandidate = Static<typeof IceCandidate>;
 
 export type NewIngest = Static<typeof NewIngest>;
 export type Ingest = Static<typeof Ingest>;
@@ -89,16 +93,16 @@ export const NewProductionLine = Type.Object({
 });
 
 const SmbCandidate = Type.Object({
-  generation: Type.Number(),
-  component: Type.Number(),
-  protocol: Type.String(),
+  generation: Type.Any(),
+  component: Type.Any(),
+  protocol: Type.Any(),
   port: Type.Number(),
   ip: Type.String(),
   'rel-port': Type.Optional(Type.Number()),
   'rel-addr': Type.Optional(Type.String()),
-  foundation: Type.String(),
-  priority: Type.Number(),
-  type: Type.String(),
+  foundation: Type.Optional(Type.String()),
+  priority: Type.Any(),
+  type: Type.Optional(Type.String()),
   network: Type.Optional(Type.Number())
 });
 
@@ -108,7 +112,8 @@ export const SmbTransport = Type.Object({
     Type.Object({
       ufrag: Type.String(),
       pwd: Type.String(),
-      candidates: Type.Array(SmbCandidate)
+      candidates: Type.Array(SmbCandidate),
+      controlling: Type.Optional(Type.Boolean())
     })
   ),
   dtls: Type.Optional(
@@ -126,8 +131,9 @@ const RtcpFeedback = Type.Object({
 });
 
 const AudioSmbPayloadParameters = Type.Object({
-  minptime: Type.String(),
-  useinbandfec: Type.String()
+  minptime: Type.Optional(Type.String()),
+  useinbandfec: Type.Optional(Type.String()),
+  apt: Type.Optional(Type.String())
 });
 
 const AudioSmbPayloadType = Type.Object({
@@ -144,12 +150,59 @@ const SmbRtpHeaderExtension = Type.Object({
   uri: Type.String()
 });
 
+const VideoSmbPayloadParameters = Type.Object({
+  'x-google-start-bitrate': Type.Optional(Type.String()),
+  'x-google-max-bitrate': Type.Optional(Type.String()),
+  'x-google-min-bitrate': Type.Optional(Type.String())
+});
+
+const VideoSmbPayloadType = Type.Object({
+  id: Type.Number(),
+  name: Type.String(),
+  clockrate: Type.Number(),
+  parameters: VideoSmbPayloadParameters,
+  'rtcp-fbs': Type.Array(
+    Type.Object({
+      type: Type.String(),
+      subtype: Type.Optional(Type.String()),
+      payload: Type.Optional(Type.Number())
+    })
+  )
+});
+
+export const SmbVideoEndpointDescription = Type.Object({
+  video: Type.Object({
+    ssrcs: Type.Array(Type.Number()),
+    'payload-type': VideoSmbPayloadType,
+    'rtp-hdrexts': Type.Array(SmbRtpHeaderExtension),
+    transport: SmbTransport
+  }),
+  data: Type.Optional(Type.Object({ port: Type.Number() })),
+  idleTimeout: Type.Optional(Type.Number())
+});
+
 export const SmbEndpointDescription = Type.Object({
   'bundle-transport': Type.Optional(SmbTransport),
   audio: Type.Object({
     ssrcs: Type.Array(Type.Number()),
     'payload-type': AudioSmbPayloadType,
     'rtp-hdrexts': Type.Array(SmbRtpHeaderExtension)
+  }),
+  video: Type.Object({
+    ssrcs: Type.Array(Type.Number()),
+    'payload-type': VideoSmbPayloadType,
+    'rtp-hdrexts': Type.Array(SmbRtpHeaderExtension)
+  }),
+  data: Type.Optional(Type.Object({ port: Type.Number() })),
+  idleTimeout: Type.Optional(Type.Number())
+});
+
+export const SmbAudioEndpointDescription = Type.Object({
+  audio: Type.Object({
+    ssrcs: Type.Array(Type.Number()),
+    'payload-type': AudioSmbPayloadType,
+    'rtp-hdrexts': Type.Array(SmbRtpHeaderExtension),
+    transport: SmbTransport
   }),
   data: Type.Optional(Type.Object({ port: Type.Number() })),
   idleTimeout: Type.Optional(Type.Number())
@@ -161,6 +214,12 @@ export const Endpoint = Type.Object({
 });
 
 export const Connections = Type.Record(Type.String(), Endpoint);
+
+// ICE candidate type for WHIP Trickle ICE
+export const IceCandidate = Type.Object({
+  candidate: Type.String(),
+  timestamp: Type.Number()
+});
 
 export const UserResponse = Type.Object({
   name: Type.String(),
@@ -177,7 +236,8 @@ export const UserSession = Type.Object({
   isActive: Type.Boolean(),
   isExpired: Type.Boolean(),
   endpointId: Type.Optional(Type.String()),
-  sessionDescription: Type.Optional(SmbEndpointDescription)
+  sessionDescription: Type.Optional(SmbEndpointDescription),
+  iceCandidates: Type.Optional(Type.Array(IceCandidate))
 });
 
 export const Line = Type.Object({
@@ -260,6 +320,16 @@ export const ReAuthResponse = Type.Object({
   token: Type.String({ description: 'The new OSC Service Access Token' })
 });
 export type ReAuthResponse = Static<typeof ReAuthResponse>;
+
+// WHIP endpoint request body schema
+export const WhipRequest = Type.String({
+  description: 'WebRTC SDP offer'
+});
+
+// WHIP endpoint response schema
+export const WhipResponse = Type.String({
+  description: 'Created'
+});
 
 export const NewIngest = Type.Object({
   label: Type.String(),

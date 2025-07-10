@@ -1,5 +1,9 @@
 import { Log } from './log';
-import { SmbEndpointDescription, DetailedConference } from './models';
+import {
+  DetailedConference,
+  SmbAudioEndpointDescription,
+  SmbEndpointDescription
+} from './models';
 
 interface AllocateConferenceResponse {
   id: string;
@@ -13,6 +17,14 @@ interface BaseAllocationRequest {
     dtls: boolean;
     sdes: boolean;
   };
+  audio?: object;
+  video?: object;
+  data?: object;
+  idleTimeout?: number;
+}
+
+interface AudioAllocationRequest {
+  action: string;
   audio?: object;
   data?: object;
   idleTimeout?: number;
@@ -48,22 +60,31 @@ export class SmbProtocol {
     endpointId: string,
     audio: boolean,
     data: boolean,
+    iceControlling: boolean,
+    relayType: 'ssrc-rewrite' | 'forwarder',
     idleTimeout: number,
     smbKey: string
   ): Promise<SmbEndpointDescription> {
     const request: BaseAllocationRequest = {
       action: 'allocate',
       'bundle-transport': {
-        'ice-controlling': true,
+        'ice-controlling': iceControlling,
         ice: true,
         dtls: true,
         sdes: false
+      },
+      audio: {
+        ssrcs: []
+      },
+      video: {
+        ssrcs: []
       }
     };
 
     if (audio) {
-      request['audio'] = { 'relay-type': 'ssrc-rewrite' };
+      request['audio'] = { 'relay-type': relayType };
     }
+
     if (data) {
       request['data'] = {};
     }
@@ -93,6 +114,55 @@ export class SmbProtocol {
 
     const smbEndpointDescription: SmbEndpointDescription =
       (await response.json()) as SmbEndpointDescription;
+
+    return smbEndpointDescription;
+  }
+
+  async allocateAudioEndpoint(
+    smbUrl: string,
+    conferenceId: string,
+    endpointId: string,
+    relayType: 'ssrc-rewrite' | 'forwarder',
+    idleTimeout: number,
+    smbKey: string
+  ): Promise<SmbAudioEndpointDescription> {
+    const request: AudioAllocationRequest = {
+      action: 'allocate',
+      audio: {
+        'relay-type': relayType,
+        transport: {
+          ice: true,
+          dtls: true,
+          sdes: false
+        }
+      },
+      idleTimeout: idleTimeout
+    };
+
+    Log().debug(request);
+
+    const url = smbUrl + conferenceId + '/' + endpointId;
+    Log().debug(url);
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(smbKey !== '' && { Authorization: `Bearer ${smbKey}` })
+      },
+      body: JSON.stringify(request)
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to allocate endpoint:  ${JSON.stringify(
+          request
+        )}, responds with: ${response.statusText}`
+      );
+    }
+
+    const smbEndpointDescription: SmbAudioEndpointDescription =
+      (await response.json()) as SmbAudioEndpointDescription;
+
     return smbEndpointDescription;
   }
 
@@ -107,18 +177,15 @@ export class SmbProtocol {
     request['action'] = 'configure';
     const url = smbUrl + conferenceId + '/' + endpointId;
     const response = await fetch(url, {
-      method: 'POST',
+      method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
         ...(smbKey !== '' && { Authorization: `Bearer ${smbKey}` })
       },
       body: JSON.stringify(request)
     });
-    Log().debug(request);
 
     if (!response.ok) {
-      Log().debug(JSON.stringify(request));
-
       const contentType = response.headers.get('content-type');
 
       let text;
