@@ -108,7 +108,8 @@ export default async (opts: ApiOptions) => {
     endpointIdleTimeout: opts.endpointIdleTimeout,
     smbServerBaseUrl: opts.smbServerBaseUrl,
     coreFunctions: opts.coreFunctions,
-    productionManager: opts.productionManager
+    productionManager: opts.productionManager,
+    publicHost: opts.publicHost
   });
   api.register(apiShare, { publicHost: opts.publicHost, prefix: 'api/v1' });
   api.register(apiReAuth, { prefix: 'api/v1' });
