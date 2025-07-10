@@ -39,6 +39,9 @@ coreFunctions.createConferenceForLine = jest
   .fn()
   .mockResolvedValue('mock-conference-id') as any;
 coreFunctions.createEndpoint = jest.fn().mockResolvedValue({}) as any;
+coreFunctions.configureEndpointForWhip = jest
+  .fn()
+  .mockResolvedValue(undefined) as any;
 coreFunctions.createAnswer = jest
   .fn()
   .mockResolvedValue(
@@ -50,8 +53,7 @@ const defaultOptions = {
   smbServerBaseUrl: 'http://localhost:3000',
   smbServerApiKey: 'dummy-key',
   coreFunctions: coreFunctions,
-  endpointIdleTimeout: '60',
-  publicHost: 'https://example.com'
+  endpointIdleTimeout: '60'
 };
 
 const createTestServer = async () => {
@@ -93,7 +95,7 @@ describe('apiWhip', () => {
       expect(response.statusCode).toBe(201);
       expect(response.headers['content-type']).toBe('application/sdp');
       expect(response.headers['location']).toContain(
-        '/whip/prod1/line1/mock-session-id'
+        '/api/v1/whip/prod1/line1/mock-session-id'
       );
       expect(response.payload).toContain('v=0');
     });
