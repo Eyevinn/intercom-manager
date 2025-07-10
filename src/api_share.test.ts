@@ -1,4 +1,6 @@
 import api from './api';
+import { CoreFunctions } from './api_productions_core_functions';
+import { ConnectionQueue } from './connection_queue';
 
 jest.mock('./db/interface', () => ({
   getIngests: jest.fn().mockResolvedValue([]),
@@ -52,7 +54,11 @@ describe('share api', () => {
       publicHost: 'https://example.com',
       dbManager: mockDbManager,
       productionManager: mockProductionManager,
-      ingestManager: mockIngestManager
+      ingestManager: mockIngestManager,
+      coreFunctions: new CoreFunctions(
+        mockProductionManager,
+        new ConnectionQueue()
+      )
     });
     const response = await server.inject({
       method: 'POST',

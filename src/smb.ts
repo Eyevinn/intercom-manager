@@ -1,8 +1,8 @@
 import { Log } from './log';
 import {
-  SmbEndpointDescription,
   DetailedConference,
-  SmbAudioEndpointDescription
+  SmbAudioEndpointDescription,
+  SmbEndpointDescription
 } from './models';
 
 interface AllocateConferenceResponse {
@@ -186,9 +186,6 @@ export class SmbProtocol {
     });
 
     if (!response.ok) {
-      console.log('url', url);
-      console.log('request', JSON.stringify(request));
-      console.log('response', response.statusText);
       const contentType = response.headers.get('content-type');
 
       let text;
