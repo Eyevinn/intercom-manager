@@ -112,14 +112,19 @@ export class CoreFunctions {
   }
 
   async configureEndpointForWhip(
-    offer: SessionDescription,
-    endpoint: SmbEndpointDescription,
+    sdpOffer: SessionDescription,
+    endpointDescription: SmbEndpointDescription,
     smb: SmbProtocol,
     smbServerUrl: string,
     smbServerApiKey: string,
     smbConferenceId: string,
     endpointId: string
   ): Promise<void> {
+    const offer: SessionDescription = JSON.parse(JSON.stringify(sdpOffer));
+    const endpoint: SmbEndpointDescription = JSON.parse(
+      JSON.stringify(endpointDescription)
+    );
+
     const transport = endpoint['bundle-transport'];
 
     if (!transport) {
