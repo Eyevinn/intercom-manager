@@ -70,7 +70,9 @@ export default async (opts: ApiOptions) => {
 
   // register the cors plugin, configure it for better security
   api.register(cors, {
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    exposedHeaders: ['Content-Type']
   });
 
   await api.register(fastifyRateLimit, {
