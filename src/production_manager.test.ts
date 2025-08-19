@@ -264,7 +264,13 @@ describe('production_manager', () => {
 
     const productionManagerTest = new ProductionManager(dbManager);
 
-    productionManagerTest.createUserSession('1', '1', 'sessionId', 'userName');
+    productionManagerTest.createUserSession(
+      'smbUrl',
+      '1',
+      '1',
+      'sessionId',
+      'userName'
+    );
     productionManagerTest.updateUserEndpoint(
       'sessionId',
       'endpointId',

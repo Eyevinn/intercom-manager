@@ -233,7 +233,7 @@ export class ProductionManager extends EventEmitter {
     lineId: string,
     sessionId: string,
     name: string,
-    isWhip: boolean
+    isWhip: boolean = false
   ): void {
     this.userSessions[sessionId] = {
       smbConferenceId,
