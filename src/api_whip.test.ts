@@ -65,12 +65,8 @@ const defaultOptions = {
   smbServerBaseUrl: 'http://localhost:3000',
   smbServerApiKey: 'dummy-key',
   coreFunctions: coreFunctions,
-<<<<<<< HEAD
-  endpointIdleTimeout: '60'
-=======
   endpointIdleTimeout: '60',
   publicHost: 'https://example.com'
->>>>>>> main
 };
 
 const createTestServer = async () => {

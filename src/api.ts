@@ -79,10 +79,6 @@ export default async (opts: ApiOptions) => {
     global: false // Only apply to specific routes
   });
 
-  await api.register(fastifyRateLimit, {
-    global: false // Only apply to specific routes
-  });
-
   // register the swagger plugins, it will automagically do magic
   api.register(swagger, {
     swagger: {
