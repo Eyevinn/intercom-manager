@@ -65,9 +65,6 @@ export class ProductionManager extends EventEmitter {
             conference.users.includes(userSession.endpointId)
           ) {
             this.updateUserLastSeen(sessionId, true);
-          } else {
-            this.removeUserSession(sessionId);
-            hasChanged = true;
           }
         }
       }, 60_000);
@@ -90,6 +87,10 @@ export class ProductionManager extends EventEmitter {
           isExpired !== userSession.isExpired
         ) {
           Object.assign(userSession, { isActive, isExpired });
+          hasChanged = true;
+        }
+        if (userSession.isWhip && isExpired) {
+          this.removeUserSession(sessionId);
           hasChanged = true;
         }
       }
@@ -261,7 +262,7 @@ export class ProductionManager extends EventEmitter {
     const userSession = this.userSessions[sessionId];
     if (userSession) {
       this.userSessions[sessionId].lastSeen = includeBuffer
-        ? Date.now() + 10000
+        ? Date.now() + 20000
         : Date.now();
       return true;
     }
