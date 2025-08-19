@@ -226,7 +226,8 @@ export const UserResponse = Type.Object({
   name: Type.String(),
   sessionId: Type.String(),
   endpointId: Type.Optional(Type.String()),
-  isActive: Type.Boolean()
+  isActive: Type.Boolean(),
+  isWhip: Type.Boolean()
 });
 
 export const UserSession = Type.Object({

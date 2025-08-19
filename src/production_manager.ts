@@ -12,7 +12,6 @@ import { assert } from './utils';
 import { Log } from './log';
 import { DbManager } from './db/interface';
 import { SmbProtocol } from './smb';
-import uniq from 'lodash/uniq';
 
 const SESSION_INACTIVE_THRESHOLD = 60_000;
 const SESSION_EXPIRED_THRESHOLD = 120_000;
@@ -304,7 +303,8 @@ export class ProductionManager extends EventEmitter {
             sessionId,
             endpointId: userSession.endpointId,
             name: userSession.name,
-            isActive: userSession.isActive
+            isActive: userSession.isActive,
+            isWhip: userSession.isWhip
           };
         }
         return [];
