@@ -8,7 +8,7 @@ import { Log } from './log';
 import { ProductionManager } from './production_manager';
 
 const SMB_ADDRESS: string = process.env.SMB_ADDRESS ?? 'http://localhost:8080';
-const PUBLIC_HOST: string = process.env.PUBLIC_HOST ?? 'http://localhost:3000';
+const PUBLIC_HOST: string = process.env.PUBLIC_HOST ?? 'http://localhost:8000';
 
 if (!process.env.SMB_ADDRESS) {
   console.warn('SMB_ADDRESS environment variable not set, using defaults');
