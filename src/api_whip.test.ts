@@ -35,13 +35,25 @@ const coreFunctions = new CoreFunctions(
   mockProductionManager,
   new ConnectionQueue()
 );
+
 coreFunctions.createConferenceForLine = jest
   .fn()
   .mockResolvedValue('mock-conference-id') as any;
-coreFunctions.createEndpoint = jest.fn().mockResolvedValue({}) as any;
-coreFunctions.configureEndpointForWhip = jest
-  .fn()
-  .mockResolvedValue(undefined) as any;
+coreFunctions.createEndpoint = jest.fn().mockResolvedValue({
+  'bundle-transport': {
+    'rtcp-mux': true,
+    ice: {
+      ufrag: 'test-ufrag',
+      pwd: 'test-pwd',
+      candidates: []
+    },
+    dtls: {
+      fingerprint: 'sha-256 FAKEFINGERPRINT',
+      setup: 'actpass'
+    }
+  }
+}) as any;
+coreFunctions.configureEndpointForWhip = jest.fn().mockResolvedValue(undefined);
 coreFunctions.createAnswer = jest
   .fn()
   .mockResolvedValue(
@@ -53,13 +65,17 @@ const defaultOptions = {
   smbServerBaseUrl: 'http://localhost:3000',
   smbServerApiKey: 'dummy-key',
   coreFunctions: coreFunctions,
+<<<<<<< HEAD
   endpointIdleTimeout: '60'
+=======
+  endpointIdleTimeout: '60',
+  publicHost: 'https://example.com'
+>>>>>>> main
 };
 
 const createTestServer = async () => {
   const fastify = Fastify();
 
-  // Allow unsupported content types to flow through (for 415 test)
   fastify.addContentTypeParser(
     'application/json',
     { parseAs: 'string' },
@@ -95,12 +111,12 @@ describe('apiWhip', () => {
       expect(response.statusCode).toBe(201);
       expect(response.headers['content-type']).toBe('application/sdp');
       expect(response.headers['location']).toContain(
-        '/api/v1/whip/prod1/line1/mock-session-id'
+        '/whip/prod1/line1/mock-session-id'
       );
       expect(response.payload).toContain('v=0');
     });
+
     it('should return 406 if SDP answer misses m= sections', async () => {
-      // Answer with no media or mids
       (coreFunctions.createAnswer as jest.Mock).mockResolvedValueOnce(
         'v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\nc=IN IP4 0.0.0.0\r\nt=0 0\r\n'
       );

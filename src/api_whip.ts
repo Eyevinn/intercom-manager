@@ -15,6 +15,7 @@ export interface ApiWhipOptions {
   smbServerApiKey?: string;
   coreFunctions: CoreFunctions;
   productionManager: ProductionManager;
+  publicHost: string;
 }
 
 export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
@@ -164,8 +165,9 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
         productionManager.updateUserEndpoint(sessionId, endpointId, endpoint);
 
         // Create the Location URL for the WHIP resource
-        const baseUrl =
-          request.protocol + '://' + request.hostname + ':' + request.port;
+        const baseUrl = opts.publicHost.endsWith('/')
+          ? opts.publicHost.slice(0, -1)
+          : opts.publicHost;
         const locationUrl = `${baseUrl}/api/v1/whip/${productionId}/${lineId}/${sessionId}`;
 
         // Set response headers

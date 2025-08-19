@@ -70,7 +70,13 @@ export default async (opts: ApiOptions) => {
 
   // register the cors plugin, configure it for better security
   api.register(cors, {
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    exposedHeaders: ['Content-Type']
+  });
+
+  await api.register(fastifyRateLimit, {
+    global: false // Only apply to specific routes
   });
 
   await api.register(fastifyRateLimit, {
@@ -108,7 +114,8 @@ export default async (opts: ApiOptions) => {
     endpointIdleTimeout: opts.endpointIdleTimeout,
     smbServerBaseUrl: opts.smbServerBaseUrl,
     coreFunctions: opts.coreFunctions,
-    productionManager: opts.productionManager
+    productionManager: opts.productionManager,
+    publicHost: opts.publicHost
   });
   api.register(apiShare, { publicHost: opts.publicHost, prefix: 'api/v1' });
   api.register(apiReAuth, { prefix: 'api/v1' });
