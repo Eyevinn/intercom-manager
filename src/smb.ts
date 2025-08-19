@@ -1,5 +1,6 @@
 import { Log } from './log';
 import {
+  Conference,
   DetailedConference,
   SmbAudioEndpointDescription,
   SmbEndpointDescription
@@ -216,6 +217,26 @@ export class SmbProtocol {
     }
 
     const responseBody: string[] = (await response.json()) as string[];
+    return responseBody;
+  }
+
+  async getConferencesWithUsers(
+    smbUrl: string,
+    smbKey: string
+  ): Promise<Conference[]> {
+    const url = smbUrl + '?brief';
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        ...(smbKey !== '' && { Authorization: `Bearer ${smbKey}` })
+      }
+    });
+
+    if (!response.ok) {
+      return [];
+    }
+
+    const responseBody: Conference[] = (await response.json()) as Conference[];
     return responseBody;
   }
 

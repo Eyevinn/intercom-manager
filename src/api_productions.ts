@@ -52,6 +52,11 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   const productionManager = opts.productionManager;
   const coreFunctions = opts.coreFunctions;
 
+  setInterval(
+    () => productionManager.checkUserStatus(smb, smbServerUrl, smbServerApiKey),
+    2_000
+  );
+
   fastify.post<{
     Body: NewProduction;
     Reply: ProductionResponse | ErrorResponse | string;
@@ -591,6 +596,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         }
 
         const sdpOffer = await coreFunctions.createConnection(
+          smbConferenceId,
           productionId,
           lineId,
           endpoint,

@@ -41,8 +41,6 @@ if (dbUrl.protocol === 'mongodb:') {
   const ingestManager = new IngestManager(dbManager);
   await ingestManager.load();
 
-  setInterval(() => productionManager.checkUserStatus(), 2_000);
-
   const server = await api({
     title: 'intercom-manager',
     smbServerBaseUrl: SMB_ADDRESS,

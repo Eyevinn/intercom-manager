@@ -22,7 +22,6 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
   opts,
   next
 ) => {
-  const whipHeartbeatIntervals: Record<string, NodeJS.Timeout> = {};
   const productionManager = opts.productionManager;
 
   fastify.addContentTypeParser(
@@ -153,25 +152,16 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
 
         // Create user session in production manager
         productionManager.createUserSession(
+          smbConferenceId,
           productionId,
           lineId,
           sessionId,
-          username
+          username,
+          true
         );
 
         // Update user endpoint information
         productionManager.updateUserEndpoint(sessionId, endpointId, endpoint);
-
-        // Start heartbeat for this WHIP session
-        const interval = setInterval(() => {
-          const success = productionManager.updateUserLastSeen(sessionId);
-          if (!success) {
-            clearInterval(interval);
-            delete whipHeartbeatIntervals[sessionId];
-          }
-        }, 10_000);
-
-        whipHeartbeatIntervals[sessionId] = interval;
 
         // Create the Location URL for the WHIP resource
         const baseUrl =
@@ -218,12 +208,6 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
     async (request, reply) => {
       try {
         const { sessionId } = request.params;
-
-        // Clear heartbeat interval if it exists
-        if (whipHeartbeatIntervals[sessionId]) {
-          clearInterval(whipHeartbeatIntervals[sessionId]);
-          delete whipHeartbeatIntervals[sessionId];
-        }
 
         // Remove the user session
         const deletedSessionId = productionManager.removeUserSession(sessionId);
