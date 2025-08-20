@@ -1,3 +1,4 @@
+import rateLimit from '@fastify/rate-limit';
 import Fastify from 'fastify';
 import { CoreFunctions } from './api_productions_core_functions';
 import apiWhip from './api_whip';
@@ -80,6 +81,10 @@ const createTestServer = async () => {
     }
   );
 
+  fastify.register(rateLimit, {
+    global: false
+  });
+
   fastify.register(apiWhip, defaultOptions);
   await fastify.ready();
   return fastify;
@@ -151,6 +156,39 @@ describe('apiWhip', () => {
       });
 
       expect(response.statusCode).toBe(415);
+    });
+
+    it('should return 429 when rate limit is exceeded', async () => {
+      const fastify = await createTestServer();
+
+      // Send 10 valid requests (these should succeed or at least not trigger 429)
+      for (let i = 0; i < 10; i++) {
+        await fastify.inject({
+          method: 'POST',
+          url: '/whip/prod1/line1/testuser',
+          headers: {
+            'content-type': 'application/sdp'
+          },
+          payload: 'v=0\r\n'
+        });
+      }
+
+      // The 11th request should exceed the rate limit
+      const response = await fastify.inject({
+        method: 'POST',
+        url: '/whip/prod1/line1/testuser',
+        headers: {
+          'content-type': 'application/sdp'
+        },
+        payload: 'v=0\r\n'
+      });
+
+      expect(response.statusCode).toBe(429);
+      expect(JSON.parse(response.body)).toEqual(
+        expect.objectContaining({
+          error: expect.stringMatching(/Too many/i)
+        })
+      );
     });
   });
 
