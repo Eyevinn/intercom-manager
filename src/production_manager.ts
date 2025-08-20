@@ -41,7 +41,7 @@ export class ProductionManager extends EventEmitter {
     let hasChanged = false;
     const userSessionsArray = Object.entries(this.userSessions);
     const activeWhipSessions = userSessionsArray.filter(
-      ([_, userSession]) => userSession.isWhip
+      ([, userSession]) => userSession.isWhip
     );
 
     if (activeWhipSessions.length !== 0 && !this.userSessionsInterval) {
@@ -53,7 +53,7 @@ export class ProductionManager extends EventEmitter {
         // Needs to be redefined for scope
         const innerUserSessionsArray = Object.entries(this.userSessions);
         const innerActiveWhipSessions = innerUserSessionsArray.filter(
-          ([_, userSession]) => userSession.isWhip
+          ([, userSession]) => userSession.isWhip
         );
         for (const [sessionId, userSession] of innerActiveWhipSessions) {
           const conference = conferences.find(
@@ -234,7 +234,7 @@ export class ProductionManager extends EventEmitter {
     lineId: string,
     sessionId: string,
     name: string,
-    isWhip: boolean = false
+    isWhip = false
   ): void {
     this.userSessions[sessionId] = {
       smbConferenceId,
