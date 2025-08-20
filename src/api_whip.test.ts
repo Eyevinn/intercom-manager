@@ -1,3 +1,4 @@
+import rateLimit from '@fastify/rate-limit';
 import Fastify from 'fastify';
 import { CoreFunctions } from './api_productions_core_functions';
 import apiWhip from './api_whip';
@@ -80,7 +81,7 @@ const createTestServer = async () => {
     }
   );
 
-  fastify.register(require('@fastify/rate-limit'), {
+  fastify.register(rateLimit, {
     global: false
   });
 
