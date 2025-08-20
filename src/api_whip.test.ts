@@ -169,7 +169,7 @@ describe('apiWhip', () => {
           headers: {
             'content-type': 'application/sdp'
           },
-          payload: 'v=0\r\n' // minimal SDP body
+          payload: 'v=0\r\n'
         });
       }
 
