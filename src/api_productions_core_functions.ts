@@ -31,6 +31,7 @@ export class CoreFunctions {
   }
 
   async createConnection(
+    smbConferenceId: string,
     productionId: string,
     lineId: string,
     endpoint: SmbEndpointDescription,
@@ -70,10 +71,12 @@ export class CoreFunctions {
 
     if (sdpOffer) {
       this.productionManager.createUserSession(
+        smbConferenceId,
         productionId,
         lineId,
         sessionId,
-        username
+        username,
+        false
       );
       this.productionManager.updateUserEndpoint(
         sessionId,

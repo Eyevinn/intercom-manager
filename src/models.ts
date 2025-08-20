@@ -22,6 +22,7 @@ export type DetailedConference = Static<typeof DetailedConference>;
 export type Endpoint = Static<typeof Endpoint>;
 export type UserResponse = Static<typeof UserResponse>;
 export type UserSession = Static<typeof UserSession>;
+export type Conference = Static<typeof Conference>;
 export type NewSession = Static<typeof NewSession>;
 export type SessionResponse = Static<typeof SessionResponse>;
 export type SdpAnswer = Static<typeof SdpAnswer>;
@@ -225,11 +226,13 @@ export const UserResponse = Type.Object({
   name: Type.String(),
   sessionId: Type.String(),
   endpointId: Type.Optional(Type.String()),
-  isActive: Type.Boolean()
+  isActive: Type.Boolean(),
+  isWhip: Type.Boolean()
 });
 
 export const UserSession = Type.Object({
   name: Type.String(),
+  smbConferenceId: Type.String(),
   productionId: Type.String(),
   lineId: Type.String(),
   lastSeen: Type.Number(),
@@ -237,7 +240,14 @@ export const UserSession = Type.Object({
   isExpired: Type.Boolean(),
   endpointId: Type.Optional(Type.String()),
   sessionDescription: Type.Optional(SmbEndpointDescription),
-  iceCandidates: Type.Optional(Type.Array(IceCandidate))
+  iceCandidates: Type.Optional(Type.Array(IceCandidate)),
+  isWhip: Type.Boolean()
+});
+
+export const Conference = Type.Object({
+  id: Type.String(),
+  userCount: Type.Number(),
+  users: Type.Array(Type.String())
 });
 
 export const Line = Type.Object({

@@ -11,6 +11,7 @@ import {
 import { assert } from './utils';
 import { Log } from './log';
 import { DbManager } from './db/interface';
+import { SmbProtocol } from './smb';
 
 const SESSION_INACTIVE_THRESHOLD = 60_000;
 const SESSION_EXPIRED_THRESHOLD = 120_000;
@@ -19,20 +20,60 @@ const SESSION_PRUNE_THRESHOLD = 7_200_000;
 export class ProductionManager extends EventEmitter {
   private userSessions: Record<string, UserSession>;
   private dbManager: DbManager;
+  private userSessionsInterval: NodeJS.Timeout | undefined;
 
   constructor(dbManager: DbManager) {
     super();
     this.dbManager = dbManager;
     this.userSessions = {};
+    this.userSessionsInterval = undefined;
   }
 
   async load(): Promise<void> {
     this.dbManager.connect();
   }
 
-  checkUserStatus(): void {
+  checkUserStatus(
+    smb: SmbProtocol,
+    smbServerUrl: string,
+    smbServerApiKey: string
+  ) {
     let hasChanged = false;
-    for (const [sessionId, userSession] of Object.entries(this.userSessions)) {
+    const userSessionsArray = Object.entries(this.userSessions);
+    const activeWhipSessions = userSessionsArray.filter(
+      ([, userSession]) => userSession.isWhip
+    );
+
+    if (activeWhipSessions.length !== 0 && !this.userSessionsInterval) {
+      this.userSessionsInterval = setInterval(async () => {
+        const conferences = await smb.getConferencesWithUsers(
+          smbServerUrl,
+          smbServerApiKey
+        );
+        // Needs to be redefined for scope
+        const innerUserSessionsArray = Object.entries(this.userSessions);
+        const innerActiveWhipSessions = innerUserSessionsArray.filter(
+          ([, userSession]) => userSession.isWhip
+        );
+        for (const [sessionId, userSession] of innerActiveWhipSessions) {
+          const conference = conferences.find(
+            (conference) => conference.id === userSession.smbConferenceId
+          );
+          if (
+            conference &&
+            userSession.endpointId &&
+            conference.users.includes(userSession.endpointId)
+          ) {
+            this.updateUserLastSeen(sessionId, true);
+          }
+        }
+      }, 60_000);
+    } else if (activeWhipSessions.length === 0 && this.userSessionsInterval) {
+      clearInterval(this.userSessionsInterval);
+      this.userSessionsInterval = undefined;
+    }
+
+    for (const [sessionId, userSession] of userSessionsArray) {
       if (userSession.lastSeen < Date.now() - SESSION_PRUNE_THRESHOLD) {
         delete this.userSessions[sessionId];
         hasChanged = true;
@@ -46,6 +87,10 @@ export class ProductionManager extends EventEmitter {
           isExpired !== userSession.isExpired
         ) {
           Object.assign(userSession, { isActive, isExpired });
+          hasChanged = true;
+        }
+        if (userSession.isWhip && isExpired) {
+          this.removeUserSession(sessionId);
           hasChanged = true;
         }
       }
@@ -184,18 +229,22 @@ export class ProductionManager extends EventEmitter {
   }
 
   createUserSession(
+    smbConferenceId: string,
     productionId: string,
     lineId: string,
     sessionId: string,
-    name: string
+    name: string,
+    isWhip = false
   ): void {
     this.userSessions[sessionId] = {
+      smbConferenceId,
       productionId,
       lineId,
       name,
-      lastSeen: Date.now(),
+      lastSeen: isWhip ? Date.now() + 20000 : Date.now(),
       isActive: true,
-      isExpired: false
+      isExpired: false,
+      isWhip
     };
     Log().info(`Created user session: "${name}": ${sessionId}`);
     this.emit('users:change');
@@ -209,10 +258,12 @@ export class ProductionManager extends EventEmitter {
     return undefined;
   }
 
-  updateUserLastSeen(sessionId: string): boolean {
+  updateUserLastSeen(sessionId: string, includeBuffer = false): boolean {
     const userSession = this.userSessions[sessionId];
     if (userSession) {
-      this.userSessions[sessionId].lastSeen = Date.now();
+      this.userSessions[sessionId].lastSeen = includeBuffer
+        ? Date.now() + 10000
+        : Date.now();
       return true;
     }
     return false;
@@ -253,7 +304,8 @@ export class ProductionManager extends EventEmitter {
             sessionId,
             endpointId: userSession.endpointId,
             name: userSession.name,
-            isActive: userSession.isActive
+            isActive: userSession.isActive,
+            isWhip: userSession.isWhip
           };
         }
         return [];
