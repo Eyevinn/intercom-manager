@@ -241,7 +241,7 @@ export class ProductionManager extends EventEmitter {
       productionId,
       lineId,
       name,
-      lastSeen: Date.now(),
+      lastSeen: isWhip ? Date.now() + 20000 : Date.now(),
       isActive: true,
       isExpired: false,
       isWhip
@@ -262,7 +262,7 @@ export class ProductionManager extends EventEmitter {
     const userSession = this.userSessions[sessionId];
     if (userSession) {
       this.userSessions[sessionId].lastSeen = includeBuffer
-        ? Date.now() + 20000
+        ? Date.now() + 10000
         : Date.now();
       return true;
     }
