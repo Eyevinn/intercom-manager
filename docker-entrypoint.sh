@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 if [ ! -z "$OSC_HOSTNAME" ]; then
   export PUBLIC_HOST="https://$OSC_HOSTNAME"
