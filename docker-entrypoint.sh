@@ -1,17 +1,12 @@
-#!/bin/sh
+#!/bin/bash
 
 if [ ! -z "$OSC_HOSTNAME" ]; then
   export PUBLIC_HOST="https://$OSC_HOSTNAME"
   echo "Setting PUBLIC_HOST to $PUBLIC_HOST"
-  
-  # Determine environment from hostname
-  if [[ "$OSC_HOSTNAME" == *"-dev."* ]]; then
-    export OSC_ENVIRONMENT="dev"
-  elif [[ "$OSC_HOSTNAME" == *"-stage."* ]]; then
-    export OSC_ENVIRONMENT="stage"
-  elif [[ "$OSC_HOSTNAME" == *".prod."* ]]; then
-    export OSC_ENVIRONMENT="prod"
-  fi
+
+  # Extract environment from auto.{env}.osaas.io format
+  OSC_ENVIRONMENT=$(echo "$OSC_HOSTNAME" | sed 's/.*auto\.\(.*\)\.osaas\.io/\1/')
+  export OSC_ENVIRONMENT
   
   if [ -z "$OSC_ACCESS_TOKEN" ]; then
     echo "OSC_ACCESS_TOKEN is not set. Limited functionality will be available."
