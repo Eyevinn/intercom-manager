@@ -62,6 +62,9 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
         response: {
           201: WhipResponse,
           400: Type.Object({ error: Type.String() }),
+          406: Type.Object({ error: Type.String() }),
+          415: Type.Object({ error: Type.String() }),
+          429: Type.Object({ error: Type.String() }),
           500: Type.Object({ error: Type.String() })
         }
       },
@@ -69,10 +72,15 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
         rateLimit: {
           max: 10,
           timeWindow: '1 minute',
-          errorResponseBuilder: () => ({
-            error: 'Too many requests, please try again later',
-            code: 429
-          })
+          hook: 'onRequest',
+          errorResponseBuilder: (_req, context) => {
+            return {
+              statusCode: 429,
+              error: 'Too Many Requests',
+              message: 'Too many requests, please try again later',
+              expiresIn: context.after
+            };
+          }
         }
       }
     },
