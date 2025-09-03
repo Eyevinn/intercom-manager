@@ -29,8 +29,9 @@ export class IngestManager extends EventEmitter {
    */
   async load(): Promise<void> {
     this.dbManager.connect();
-    const ingests = await this.dbManager.getIngests(0, 0);
-    ingests.forEach((ingest) => this.startPolling(ingest));
+    // TODO: uncomment this when we have an ingest that needs to be polled
+    // const ingests = await this.dbManager.getIngests(0, 0);
+    // ingests.forEach((ingest) => this.startPolling(ingest));
   }
 
   async createIngest(newIngest: NewIngest): Promise<Ingest | undefined> {
@@ -95,14 +96,15 @@ export class IngestManager extends EventEmitter {
    * @param ingest - The ingest to poll
    * @param intervalMs - The interval in milliseconds to poll the device data
    */
-  startPolling(ingest: Ingest, intervalMs = 10000) {
-    // TODO: make sure the interval is correct
-    const poll = async () => {
-      await this.pollDeviceData(ingest);
-      setTimeout(poll, intervalMs);
-    };
-    poll();
-  }
+  // TODO: uncomment this when we have an ingest that needs to be polled
+  // startPolling(ingest: Ingest, intervalMs = 10000) {
+  //   // TODO: make sure the interval is correct
+  //   const poll = async () => {
+  //     await this.pollDeviceData(ingest);
+  //     setTimeout(poll, intervalMs);
+  //   };
+  //   poll();
+  // }
 
   async getIngest(ingestId: number): Promise<Ingest | undefined> {
     return this.dbManager.getIngest(ingestId);
