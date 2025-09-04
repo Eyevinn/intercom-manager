@@ -22,6 +22,7 @@
     "@fastify/swagger": "^9.5.1",
     "@fastify/swagger-ui": "^5.2.2",
     "@fastify/type-provider-typebox": "^5.1.0",
+    "@fastify/rate-limit": "^10.3.0",
     "@sinclair/typebox": "^0.32.35",
     "dotenv": "^16.5.0",
     "fastify": "^5.3.3",
@@ -35,7 +36,6 @@
   "devDependencies": {
     "@commitlint/cli": "^17.8.1",
     "@commitlint/config-conventional": "^17.8.1",
-    "@fastify/rate-limit": "^10.3.0",
     "@types/jest": "^29.5.14",
     "@types/node": "^18.19.100",
     "@types/sdp-transform": "^2.4.9",
