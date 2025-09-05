@@ -28,7 +28,6 @@ export class IngestManager extends EventEmitter {
    * Load the ingests from the db and start polling them
    */
   async load(): Promise<void> {
-    this.dbManager.connect();
     // TODO: uncomment this when we have an ingest that needs to be polled
     // const ingests = await this.dbManager.getIngests(0, 0);
     // ingests.forEach((ingest) => this.startPolling(ingest));
