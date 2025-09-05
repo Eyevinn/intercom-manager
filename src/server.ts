@@ -34,6 +34,7 @@ if (dbUrl.protocol === 'mongodb:') {
 }
 
 (async function startServer() {
+  await dbManager.connect();
   const productionManager = new ProductionManager(dbManager);
   await productionManager.load();
 
