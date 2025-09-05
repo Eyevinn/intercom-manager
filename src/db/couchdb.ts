@@ -18,12 +18,13 @@ export class DbManagerCouchDb implements DbManager {
   async connect(): Promise<void> {
     if (!this.nanoDb) {
       const dbList = await this.client.db.list();
-      Log().debug(dbList);
+      Log().debug('List of databases', dbList);
       const dbName = this.dbConnectionUrl.pathname.replace(/^\//, '');
       if (!dbList.includes(dbName)) {
         Log().info('Creating database', dbName);
         await this.client.db.create(dbName);
       }
+      Log().info('Using database', dbName);
       this.nanoDb = this.client.db.use(
         this.dbConnectionUrl.pathname.replace(/^\//, '')
       );
