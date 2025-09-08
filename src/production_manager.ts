@@ -30,7 +30,7 @@ export class ProductionManager extends EventEmitter {
   }
 
   async load(): Promise<void> {
-    this.dbManager.connect();
+    // empty for now
   }
 
   checkUserStatus(

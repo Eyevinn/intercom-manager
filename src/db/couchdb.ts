@@ -1,3 +1,4 @@
+import { Log } from '../log';
 import { Ingest, Line, NewIngest, Production } from '../models';
 import { assert } from '../utils';
 import { DbManager } from './interface';
@@ -5,18 +6,29 @@ import nano from 'nano';
 
 export class DbManagerCouchDb implements DbManager {
   private client;
-  private nanoDb;
+  private nanoDb: nano.DocumentScope<unknown> | undefined;
+  private dbConnectionUrl: URL;
 
   constructor(dbConnectionUrl: URL) {
-    const server = new URL('/', dbConnectionUrl).toString();
+    this.dbConnectionUrl = dbConnectionUrl;
+    const server = new URL('/', this.dbConnectionUrl).toString();
     this.client = nano(server);
-    this.nanoDb = this.client.db.use(
-      dbConnectionUrl.pathname.replace(/^\//, '')
-    );
   }
 
   async connect(): Promise<void> {
-    // CouchDB does not require a connection
+    if (!this.nanoDb) {
+      const dbList = await this.client.db.list();
+      Log().debug('List of databases', dbList);
+      const dbName = this.dbConnectionUrl.pathname.replace(/^\//, '');
+      if (!dbList.includes(dbName)) {
+        Log().info('Creating database', dbName);
+        await this.client.db.create(dbName);
+      }
+      Log().info('Using database', dbName);
+      this.nanoDb = this.client.db.use(
+        this.dbConnectionUrl.pathname.replace(/^\//, '')
+      );
+    }
   }
 
   async disconnect(): Promise<void> {
@@ -24,6 +36,10 @@ export class DbManagerCouchDb implements DbManager {
   }
 
   private async getNextSequence(collectionName: string): Promise<number> {
+    await this.connect();
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
     const counterDocId = `counter_${collectionName}`;
     interface CounterDoc {
       _id: string;
@@ -44,6 +60,10 @@ export class DbManagerCouchDb implements DbManager {
 
   /** Get all productions from the database in reverse natural order, limited by the limit parameter */
   async getProductions(): Promise<Production[]> {
+    await this.connect();
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
     const productions: Production[] = [];
     const response = await this.nanoDb.list({
       include_docs: true
@@ -57,11 +77,20 @@ export class DbManagerCouchDb implements DbManager {
   }
 
   async getProductionsLength(): Promise<number> {
+    await this.connect();
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
     const productions = await this.nanoDb.list({ include_docs: false });
     return productions.rows.length;
   }
 
   async getProduction(id: number): Promise<Production | undefined> {
+    await this.connect();
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
+
     const production = await this.nanoDb.get(id.toString());
     // eslint-disable-next-line
     return production as any | undefined;
@@ -70,6 +99,11 @@ export class DbManagerCouchDb implements DbManager {
   async updateProduction(
     production: Production
   ): Promise<Production | undefined> {
+    await this.connect();
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
+
     const existingProduction = await this.nanoDb.get(production._id.toString());
     const updatedProduction = {
       ...existingProduction,
@@ -81,6 +115,11 @@ export class DbManagerCouchDb implements DbManager {
   }
 
   async addProduction(name: string, lines: Line[]): Promise<Production> {
+    await this.connect();
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
+
     const _id = await this.getNextSequence('productions');
     if (_id === -1) {
       throw new Error('Failed to get next sequence');
@@ -94,6 +133,11 @@ export class DbManagerCouchDb implements DbManager {
   }
 
   async deleteProduction(productionId: number): Promise<boolean> {
+    await this.connect();
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
+
     const production = await this.nanoDb.get(productionId.toString());
     const response = await this.nanoDb.destroy(production._id, production._rev);
     return response.ok;
@@ -104,6 +148,11 @@ export class DbManagerCouchDb implements DbManager {
     lineId: string,
     conferenceId: string
   ): Promise<void> {
+    await this.connect();
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
+
     const production = await this.getProduction(productionId);
     assert(production, `Production with id "${productionId}" does not exist`);
     const line = production.lines.find((line) => line.id === lineId);
@@ -125,6 +174,11 @@ export class DbManagerCouchDb implements DbManager {
   }
 
   async addIngest(newIngest: NewIngest): Promise<Ingest> {
+    await this.connect();
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
+
     const _id = await this.getNextSequence('ingests');
     if (_id === -1) {
       throw new Error('Failed to get next sequence');
@@ -142,6 +196,11 @@ export class DbManagerCouchDb implements DbManager {
 
   /** Get all ingests from the database in reverse natural order, limited by the limit parameter */
   async getIngests(): Promise<Ingest[]> {
+    await this.connect();
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
+
     const ingests: Ingest[] = [];
     const response = await this.nanoDb.list({
       include_docs: true
@@ -155,17 +214,32 @@ export class DbManagerCouchDb implements DbManager {
   }
 
   async getIngestsLength(): Promise<number> {
+    await this.connect();
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
+
     const ingests = await this.nanoDb.list({ include_docs: false });
     return ingests.rows.length;
   }
 
   async getIngest(id: number): Promise<Ingest | undefined> {
+    await this.connect();
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
+
     const ingest = await this.nanoDb.get(id.toString());
     // eslint-disable-next-line
     return ingest as any | undefined;
   }
 
   async updateIngest(ingest: Ingest): Promise<Ingest | undefined> {
+    await this.connect();
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
+
     const existingIngest = await this.nanoDb.get(ingest._id.toString());
     const updatedIngest = {
       ...existingIngest,
@@ -177,6 +251,11 @@ export class DbManagerCouchDb implements DbManager {
   }
 
   async deleteIngest(ingestId: number): Promise<boolean> {
+    await this.connect();
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
+
     const ingest = await this.nanoDb.get(ingestId.toString());
     const response = await this.nanoDb.destroy(ingest._id, ingest._rev);
     return response.ok;
