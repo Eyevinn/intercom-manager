@@ -48,10 +48,11 @@ if (dbUrl.protocol === 'mongodb:') {
     endpointIdleTimeout: ENDPOINT_IDLE_TIMEOUT_S,
     smbServerApiKey: process.env.SMB_APIKEY,
     publicHost: PUBLIC_HOST,
+    whipAuthKey: process.env.WHIP_AUTH_KEY,
     dbManager: dbManager,
     productionManager: productionManager,
     ingestManager: ingestManager,
-    coreFunctions: new CoreFunctions(productionManager, connectionQueue)
+    coreFunctions: new CoreFunctions(productionManager, connectionQueue),
   });
 
   server.listen({ port: PORT, host: '0.0.0.0' }, (err, address) => {

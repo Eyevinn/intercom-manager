@@ -90,6 +90,30 @@ const createTestServer = async () => {
   return fastify;
 };
 
+const createAuthServer = async () => {
+  const fastify = Fastify();
+
+  fastify.addContentTypeParser(
+    'application/json',
+    { parseAs: 'string' },
+    (req, body, done) => {
+      done(null, body);
+    }
+  );
+
+  fastify.register(rateLimit, { global: false });
+  fastify.register(apiWhip, { ...defaultOptions, whipAuthKey: 'secret-123' });
+  await fastify.ready();
+  return fastify;
+};
+
+const createTestServerWithAuth = async () => {
+  const fastify = await createTestServer();
+  fastify.register(apiWhip, { ...defaultOptions, whipAuthKey: 'test-auth-key' });
+  await fastify.ready();
+  return fastify;
+};
+
 describe('apiWhip', () => {
   afterEach(() => {
     jest.clearAllMocks();
@@ -185,6 +209,7 @@ describe('apiWhip', () => {
 
       expect(response.statusCode).toBe(429);
       expect(JSON.parse(response.body)).toEqual(
+        
         expect.objectContaining({
           error: expect.stringMatching(/Too many/i)
         })
@@ -192,7 +217,69 @@ describe('apiWhip', () => {
     });
   });
 
+  describe('POST /whip/:productionId/:lineId/:username (auth enabled)', () => {
+    it('POST without Authorization returns 401 when auth enabled', async () => {
+      const fastify = await createAuthServer();
+      const res = await fastify.inject({
+        method: 'POST',
+        url: '/whip/prod1/line1/testuser',
+        headers: { 'content-type': 'application/sdp' },
+        payload: 'v=0\r\n'
+      });
+      expect(res.statusCode).toBe(401);
+      expect(res.headers['www-authenticate']).toMatch(/Bearer.*realm="whip"/i);
+    });
+
+    it('POST with wrong token returns 401', async () => {
+      const fastify = await createAuthServer();
+      const res = await fastify.inject({
+        method: 'POST',
+        url: '/whip/prod1/line1/testuser',
+        headers: {
+          'content-type': 'application/sdp',
+          authorization: 'Bearer wrong'
+        },
+        payload:
+          'v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\nm=audio 0 RTP/AVP 0\r\na=mid:0\r\n'
+      });
+      expect(res.statusCode).toBe(401);
+    });
+
+    it('POST with correct token returns 201', async () => {
+      const fastify = await createAuthServer();
+      const res = await fastify.inject({
+        method: 'POST',
+        url: '/whip/prod1/line1/testuser',
+        headers: {
+          'content-type': 'application/sdp',
+          authorization: 'Bearer secret-123'
+        },
+        payload:
+          'v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\nm=audio 0 RTP/AVP 0\r\na=mid:0\r\n'
+      });
+      expect(res.statusCode).toBe(201);
+    });
+  });
+
   describe('DELETE /whip/:productionId/:lineId/:sessionId', () => {
+    it('DELETE without Authorization returns 401 when auth enabled', async () => {
+      const fastify = await createAuthServer();
+      const res = await fastify.inject({
+        method: 'DELETE',
+        url: '/whip/prod1/line1/mock-session-id'
+      });
+      expect(res.statusCode).toBe(401);
+    });
+
+    it('DELETE with correct token returns 200', async () => {
+      const fastify = await createAuthServer();
+      const res = await fastify.inject({
+        method: 'DELETE',
+        url: '/whip/prod1/line1/mock-session-id',
+        headers: { authorization: 'Bearer secret-123' }
+      });
+      expect(res.statusCode).toBe(200);
+    });
     it('should terminate a session and return 200 OK', async () => {
       const fastify = await createTestServer();
 
