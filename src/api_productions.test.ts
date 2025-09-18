@@ -46,8 +46,26 @@ const mockIngestManager = {
 } as any;
 
 const mockCoreFunctions = {
-  getAllLinesResponse: jest.fn().mockImplementation((production) => production.lines)
+  getAllLinesResponse: jest.fn().mockImplementation((production) => production.lines), 
+  createConferenceForLine: jest.fn().mockResolvedValue('mock-conference-id'),
+  createEndpoint: jest.fn().mockResolvedValue({
+    audio: {ssrcs: [12345],'payload-type': {}, 'rtp-hdrexts': []}
+  }),
+  createConnection: jest.fn().mockResolvedValue('fake-sdp-offer'),
 } as any;
+
+const mockNewSession = {
+  productionId: '1',
+  lineId: '1',
+  username: "Lo"
+};
+
+/* Needed? 
+export const SessionResponse = Type.Object({
+  sdp: Type.String(),
+  sessionId: Type.String()
+});
+*/
 
 const mockUserSession = {
   name: "usersession",
@@ -69,8 +87,6 @@ const mockProductionManager = {
   getUsersForLine: jest.fn(),
   userSessions: {'mock-session': mockUserSession}
 } as any;
-
-
 
 // Describes a set of tests under the name 'Prodcution API'. 
 // sets up a mock server to simulate the api calls.
@@ -123,6 +139,16 @@ describe('Production API', () => {
     });
     console.log(response.payload)
     expect(response.statusCode).toBe(200);
+  })
+
+  // setting up session protocol
+  test("can create a session", async () => {
+    const response = await server.inject({
+      method: 'POST', 
+      url: '/api/v1/session',
+      body: mockNewSession
+    });
+    expect(response.statusCode).toBe(201);
   })
 });
  
