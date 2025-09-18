@@ -112,10 +112,6 @@ describe('Production API', () => {
     
   // long poll endpoint for participants
   test("can do long polling for change in line participants", async () => {
-   mockProductionManager.getUsersForLine.mockImplementation((productionId: string | number, lineId: string | number) => {
-      console.log('getUsersForLine called with:', { productionId, lineId });
-      return [{ id: '1', name: 'Alice', isActive: true }];
-    });
     mockProductionManager.once = jest.fn().mockImplementation((event, callback) => {
       if (event === 'users:change') {
         callback();
@@ -128,6 +124,5 @@ describe('Production API', () => {
     console.log(response.payload)
     expect(response.statusCode).toBe(200);
   })
-
 });
  
