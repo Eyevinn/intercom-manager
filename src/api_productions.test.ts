@@ -1,16 +1,17 @@
 import api from './api';
 import { CoreFunctions } from './api_productions_core_functions';
 import { ConnectionQueue } from './connection_queue';
-import { NewProduction, Production } from './models';
+import { NewProduction, NewProductionLine, Production } from './models';
 
 // Mocking production objects for the api object.
 const newProduction: NewProduction = {
-  name: 'A test',
+  name: 'productionname',
   lines: [{
       name: 'linename'
     }]
 };
-const existingProduction: Production = {
+
+const createdProduction: Production = {
   _id: 1,
   name: 'productionname',
   lines: [{
@@ -19,6 +20,7 @@ const existingProduction: Production = {
       smbConferenceId: 'smbineid'
     }]
 };
+
 const mockDbManager = { // Sam setup as other tests.
   connect: jest.fn().mockResolvedValue(undefined),
   disconnect: jest.fn().mockResolvedValue(undefined),
@@ -41,32 +43,40 @@ const mockIngestManager = {
   startPolling: jest.fn()
 } as any;
 
+const mockCoreFunctions = {
+  getAllLinesResponse: jest.fn().mockImplementation((production) => production.lines)
+} as any;
+
 // Setting up manager mocks
 const mockProductionManager = {
-  createProduction: jest.fn()
+  createProduction: jest.fn().mockResolvedValue(createdProduction),
+  requireProduction: jest.fn().mockResolvedValue( {_id: 1, name: "prod", lines: []} ),
+  addProductionLine: jest.fn().mockResolvedValue(undefined),
+  getUsersForLine: jest.fn()
 } as any;
-// Defines the resolved value of the mock function "createProduction". 
-mockProductionManager.createProduction.mockResolvedValue(existingProduction);
+
 
 // Describes a set of tests under the name 'Prodcution API'. 
 // sets up a mock server to simulate the api calls.
 describe('Production API', () => {
-  test('A test', async () => {
+  let server: any;
+
+  beforeAll( async () => {
     // The mock server is set up inside the test. Anyway to have it outside the test, then define a set of tests that 
     // uses the setup mock server? Otherwise have to set up new server for every test. 
-    const server = await api({
-      title: 'my awesome service',
+    server = await api({
+      title: 'my awesome service production',
       smbServerBaseUrl: 'http://localhost',
       endpointIdleTimeout: '60',
       publicHost: 'https://example.com',
       dbManager: mockDbManager,
       productionManager: mockProductionManager,
       ingestManager: mockIngestManager,
-      coreFunctions: new CoreFunctions(
-        mockProductionManager,
-        new ConnectionQueue()
-      )
+      coreFunctions: mockCoreFunctions
     });
+  });
+
+  test('can create a new production from setup values', async () => {
     const response = await server.inject({
         method: 'POST',
         url: '/api/v1/production',
@@ -74,5 +84,24 @@ describe('Production API', () => {
     });
     expect(response.statusCode).toBe(200);
     });
+
+    // Check with adding more lines to existing production
+    test("can add a new production line", async () => {
+      const response = await server.inject({
+        method: 'POST', 
+        url: '/api/v1/production/1/line',
+        body: { name: "newLine", programOutputLine: true}
+      });
+      expect(response.statusCode).toBe(200);
+    });
+    
+    // Test long poll endpoint
+  test("", async () => {
+    
+  })
+
+
+
+    
 });
  
