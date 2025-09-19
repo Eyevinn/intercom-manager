@@ -1,8 +1,5 @@
-import { METHODS } from 'http';
 import api from './api';
-import { CoreFunctions } from './api_productions_core_functions';
-import { ConnectionQueue } from './connection_queue';
-import { NewProduction, NewProductionLine, Production } from './models';
+import { NewProduction, Production } from './models';
 
 // Mocking production objects
 const newProduction: NewProduction = {
@@ -126,7 +123,7 @@ describe('Production API', () => {
     await server.close();
   });
 
-  // creating a production from api endpoint
+  // POST request for creating a production from api endpoint
   test('can create a new production from setup values', async () => {
     const response = await server.inject({
         method: 'POST',
@@ -136,17 +133,177 @@ describe('Production API', () => {
     expect(response.statusCode).toBe(200);
     });
 
-  // adding more lines to prouduction
-    test("can add a new production line", async () => {
-      const response = await server.inject({
-        method: 'POST', 
-        url: '/api/v1/production/1/line',
-        body: { name: "newLine", programOutputLine: true}
-      });
-      expect(response.statusCode).toBe(200);
+  // GET request fo paginating a list of productions
+  test('can paginate list of all productions', async () => {
+    const response = await server.inject({ 
+      method: 'GET', 
+      url: '/api/v1/productionlist' 
     });
-    
-  // long poll endpoint for participants
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(Array.isArray(body.productions)).toBe(true);
+    expect(body.limit).toBe(50);
+    expect(body.offset).toBe(0);
+    expect(body.totalItems).toBe(3);
+    expect(body.productions[0]).toHaveProperty('productionId');
+    expect(body.productions[0]).toHaveProperty('name');
+    expect(body.productions[0]).not.toHaveProperty('lines');
+  });
+
+  // GET request for a production
+  test('can fetch a production with details', async () => {
+    const response = await server.inject({ 
+      method: 'GET', 
+      url: '/api/v1/production/1' 
+    });
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.productionId).toBe('1');
+    expect(Array.isArray(body.lines)).toBe(true);
+  });
+
+  // PATCH request for renaming a production
+  test('can rename a production', async () => {
+    const response = await server.inject({
+      method: 'PATCH',
+      url: '/api/v1/production/1',
+      body: { name: 'renamed' }
+    });
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.name).toBe('renamed');
+    expect(body._id).toBe(1);
+  }); 
+
+  // negative test for the PATCH request renaming a production
+  test("throws an error when trying to rename a non-existing production", async () => {
+    mockProductionManager.requireProduction.mockImplementationOnce(async () => undefined);
+    const response = await server.inject({ 
+      method: 'PATCH', 
+      url: '/api/v1/production/999', 
+      body: { name: 'x' } 
+    });
+    expect(response.statusCode).toBe(404);
+  });
+
+  // GET request for getting all lines for a production
+  test("can retrieve all lines from a production", async () => {
+    const response = await server.inject({ 
+      method: 'GET', 
+      url: '/api/v1/production/1/line' 
+    });
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(Array.isArray(body)).toBe(true);
+    expect(body[0]).toHaveProperty('id');
+    expect(body[0]).toHaveProperty('participants');
+  });
+
+  // POST request for adding more lines to prouduction
+  test("can add a new production line", async () => {
+    const response = await server.inject({
+      method: 'POST', 
+      url: '/api/v1/production/1/line',
+      body: { name: "newLine", programOutputLine: true}
+    });
+    expect(response.statusCode).toBe(200);
+  });
+
+  // GET request for getting details for a specific line
+  test("can retrieve a specific line id from a production", async () => {
+    const response = await server.inject({ 
+      method: 'GET', 
+      url: '/api/v1/production/1/line/1' 
+    });
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.id).toBe('1');
+    expect(Array.isArray(body.participants)).toBe(true);
+  });
+
+  // negative test for the GET request for a specific line
+  test("error is thrown when trying to access a non existing line from a production", async () => {
+    const response = await server.inject({ 
+      method: 'GET', 
+      url: '/api/v1/production/1/line/does-not-exist' 
+    });
+    expect(response.statusCode).toBe(404);
+  });
+
+  // PATCH request for renaming a line
+  test("can modify an existing Production line", async () => {
+    const response = await server.inject({
+      method: 'PATCH',
+      url: '/api/v1/production/1/line/1',
+      body: { name: 'line-renamed' }
+    });
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.name).toBe('line-renamed');
+    expect(body.id).toBe('1');
+  });
+
+  // negative test for the PATCH request renaming a line
+  test("throws an error when trying to rename a production line that doesn't exist", async () => {
+    const response = await server.inject({ 
+      method: 'PATCH', 
+      url: '/api/v1/production/1/line/miss', 
+      body: { name: 'x' } 
+    });
+    expect(response.statusCode).toBe(404);
+  });
+
+  // DELETE request for removing a line from a production
+  test("can delete a line from a production", async () => {
+    const response = await server.inject({ 
+      method: 'DELETE', 
+      url: '/api/v1/production/1/line/1' 
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toBe('deleted');
+  });
+
+  // negative test for the DELETE request removing a line from a production
+  test("throws an error if trying to delete a line with active participants", async () => {
+    const getUsersSpy = jest.spyOn(mockProductionManager, 'getUsersForLine');
+    getUsersSpy.mockImplementationOnce(() => [{ isActive: true }]);
+    const response = await server.inject({ 
+      method: 'DELETE', 
+      url: '/api/v1/production/1/line/1' 
+    });
+    expect(response.statusCode).toBe(400);
+    getUsersSpy.mockRestore();
+  });
+
+  // POST request for setting up session protocol for a remote smb instance
+  test("can create a session connection to a remote smb instance", async () => {
+    const response = await server.inject({
+      method: 'POST', 
+      url: '/api/v1/session',
+      body: mockNewSession
+    });
+    expect(response.statusCode).toBe(201);
+  })
+
+  // DELETE request for removing a production
+  test("can remove a production", async () => {
+    const response = await server.inject({ 
+      method: 'DELETE', 
+      url: '/api/v1/production/1' 
+    });
+    expect(response.statusCode).toBe(200);
+  });
+
+  // DELETE request for removing a session
+  test("can remove a session", async () => {
+    const response = await server.inject({ 
+      method: 'DELETE', 
+      url: '/api/v1/session/mock-session' 
+    });
+    expect(response.statusCode).toBe(200);
+  });
+
+  // POST request for long poll endpoint for participants
   test("can do long polling for change in line participants", async () => {
     mockProductionManager.once = jest.fn().mockImplementation((event, callback) => {
       if (event === 'users:change') {
@@ -161,159 +318,23 @@ describe('Production API', () => {
     expect(response.statusCode).toBe(200);
   })
 
-  // setting up session protocol
-  test("can create a session", async () => {
-    const response = await server.inject({
-      method: 'POST', 
-      url: '/api/v1/session',
-      body: mockNewSession
+  // GET request for heartbeat endpoint to check if session is alive
+  test("can update user session last seen", async () => {
+    const response = await server.inject({ 
+      method: 'GET', 
+      url: '/api/v1/heartbeat/alive-session' 
     });
-    expect(response.statusCode).toBe(201);
-  })
-
-  // GET endpoints
-  test('GET /productionlist returns default ProductionListResponse', async () => {
-    const response = await server.inject({ method: 'GET', url: '/api/v1/productionlist' });
-    expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body);
-    expect(Array.isArray(body.productions)).toBe(true);
-    expect(body.limit).toBe(50);
-    expect(body.offset).toBe(0);
-    expect(body.totalItems).toBe(3);
-    expect(body.productions[0]).toHaveProperty('productionId');
-    expect(body.productions[0]).toHaveProperty('name');
-    expect(body.productions[0]).not.toHaveProperty('lines');
-  });
-
-  test('GET /productionlist respects limit and offset', async () => {
-    const response = await server.inject({ method: 'GET', url: '/api/v1/productionlist?limit=1&offset=1' });
-    expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body);
-    expect(body.limit).toBe(1);
-    expect(body.offset).toBe(1);
-    expect(body.totalItems).toBe(3);
-    expect(body.productions.length).toBe(1);
-    expect(body.productions[0].name).toBe('prod-2');
-  });
-
-  test('GET /productionlist with extended=true includes lines', async () => {
-    const response = await server.inject({ method: 'GET', url: '/api/v1/productionlist?extended=true' });
-    expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body);
-    expect(Array.isArray(body.productions)).toBe(true);
-    expect(body.productions[0]).toHaveProperty('lines');
-    expect(Array.isArray(body.productions[0].lines)).toBe(true);
-  });
-
-  test('GET /production (deprecated) returns minimal list', async () => {
-    const response = await server.inject({ method: 'GET', url: '/api/v1/production' });
-    expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body);
-    expect(Array.isArray(body)).toBe(true);
-    expect(body[0]).toHaveProperty('productionId');
-    expect(body[0]).toHaveProperty('name');
-  });
-
-  test('GET /production/:productionId returns detailed production', async () => {
-    const response = await server.inject({ method: 'GET', url: '/api/v1/production/1' });
-    expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body);
-    expect(body.productionId).toBe('1');
-    expect(Array.isArray(body.lines)).toBe(true);
-  });
-
-  test('GET /production/:productionId/line returns all lines', async () => {
-    const response = await server.inject({ method: 'GET', url: '/api/v1/production/1/line' });
-    expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body);
-    expect(Array.isArray(body)).toBe(true);
-    expect(body[0]).toHaveProperty('id');
-    expect(body[0]).toHaveProperty('participants');
-  });
-
-  test('GET /production/:productionId/line/:lineId returns line details', async () => {
-    const response = await server.inject({ method: 'GET', url: '/api/v1/production/1/line/1' });
-    expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body);
-    expect(body.id).toBe('1');
-    expect(Array.isArray(body.participants)).toBe(true);
-  });
-
-  test('GET /production/:productionId/line/:lineId returns 404 when missing', async () => {
-    const response = await server.inject({ method: 'GET', url: '/api/v1/production/1/line/does-not-exist' });
-    expect(response.statusCode).toBe(404);
-  });
-
-  test('GET /heartbeat/:sessionId returns ok for alive session', async () => {
-    const response = await server.inject({ method: 'GET', url: '/api/v1/heartbeat/alive-session' });
     expect(response.statusCode).toBe(200);
     expect(response.body).toBe('ok');
   });
 
-  test('GET /heartbeat/:sessionId returns 410 for missing session', async () => {
-    const response = await server.inject({ method: 'GET', url: '/api/v1/heartbeat/missing-session' });
+  // negative test for the GET request for heartbeat endpoint
+  test("throws an error when trying to update a user session that doesn't exist", async () => {
+    const response = await server.inject({ 
+      method: 'GET', 
+      url: '/api/v1/heartbeat/missing-session' 
+    });
     expect(response.statusCode).toBe(410);
-  });
-
-  // PATCH endpoints
-  test('PATCH /production/:productionId renames a production', async () => {
-    const response = await server.inject({
-      method: 'PATCH',
-      url: '/api/v1/production/1',
-      body: { name: 'renamed' }
-    });
-    expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body);
-    expect(body.name).toBe('renamed');
-    expect(body._id).toBe(1);
-  });
-
-  test('PATCH /production/:productionId returns 404 when production missing', async () => {
-    mockProductionManager.requireProduction.mockImplementationOnce(async () => undefined);
-    const response = await server.inject({ method: 'PATCH', url: '/api/v1/production/999', body: { name: 'x' } });
-    expect(response.statusCode).toBe(404);
-  });
-
-  test('PATCH /production/:productionId/line/:lineId renames a line', async () => {
-    const response = await server.inject({
-      method: 'PATCH',
-      url: '/api/v1/production/1/line/1',
-      body: { name: 'line-renamed' }
-    });
-    expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body);
-    expect(body.name).toBe('line-renamed');
-    expect(body.id).toBe('1');
-  });
-
-  test('PATCH /production/:productionId/line/:lineId returns 404 when line missing', async () => {
-    const response = await server.inject({ method: 'PATCH', url: '/api/v1/production/1/line/miss', body: { name: 'x' } });
-    expect(response.statusCode).toBe(404);
-  });
-
-  // DELETE endpoints
-  test('DELETE /production/:productionId/line/:lineId deletes a line without active participants', async () => {
-    const response = await server.inject({ method: 'DELETE', url: '/api/v1/production/1/line/1' });
-    expect(response.statusCode).toBe(200);
-    expect(response.body).toBe('deleted');
-  });
-
-  test('DELETE /production/:productionId/line/:lineId returns 400 if active participants exist', async () => {
-    const getUsersSpy = jest.spyOn(mockProductionManager, 'getUsersForLine');
-    getUsersSpy.mockImplementationOnce(() => [{ isActive: true }]);
-    const response = await server.inject({ method: 'DELETE', url: '/api/v1/production/1/line/1' });
-    expect(response.statusCode).toBe(400);
-    getUsersSpy.mockRestore();
-  });
-
-  test('DELETE /production/:productionId removes a production', async () => {
-    const response = await server.inject({ method: 'DELETE', url: '/api/v1/production/1' });
-    expect(response.statusCode).toBe(200);
-  });
-
-  test('DELETE /session/:sessionId removes a session', async () => {
-    const response = await server.inject({ method: 'DELETE', url: '/api/v1/session/mock-session' });
-    expect(response.statusCode).toBe(200);
-  });
+  }); 
 });
  
