@@ -19,7 +19,7 @@ const createdProduction: Production = {
     }]
 };
 
-const mockDbManager = { // Same setup as other tests.
+const mockDbManager = { 
   connect: jest.fn().mockResolvedValue(undefined),
   disconnect: jest.fn().mockResolvedValue(undefined),
   getProduction: jest.fn().mockResolvedValue(undefined),
@@ -60,7 +60,7 @@ const mockCoreFunctions = {
 const mockNewSession = {
   productionId: '1',
   lineId: '1',
-  username: "Lo"
+  username: "maximus"
 };
 
 const mockUserSession = {
@@ -102,7 +102,7 @@ const mockProductionManager = {
   removeUserSession: jest.fn().mockImplementation((sessionId: string) => sessionId)
 } as any;
 
-// sets up a mock server to simulate the api calls.
+
 describe('Production API', () => {
   let server: any;
 
@@ -123,7 +123,6 @@ describe('Production API', () => {
     await server.close();
   });
 
-  // POST request for creating a production from api endpoint
   test('can create a new production from setup values', async () => {
     const response = await server.inject({
         method: 'POST',
@@ -133,7 +132,6 @@ describe('Production API', () => {
     expect(response.statusCode).toBe(200);
     });
 
-  // GET request fo paginating a list of productions
   test('can paginate list of all productions', async () => {
     const response = await server.inject({ 
       method: 'GET', 
@@ -150,7 +148,6 @@ describe('Production API', () => {
     expect(body.productions[0]).not.toHaveProperty('lines');
   });
 
-  // GET request for a production
   test('can fetch a production with details', async () => {
     const response = await server.inject({ 
       method: 'GET', 
@@ -162,7 +159,6 @@ describe('Production API', () => {
     expect(Array.isArray(body.lines)).toBe(true);
   });
 
-  // PATCH request for renaming a production
   test('can rename a production', async () => {
     const response = await server.inject({
       method: 'PATCH',
@@ -175,7 +171,6 @@ describe('Production API', () => {
     expect(body._id).toBe(1);
   }); 
 
-  // negative test for the PATCH request renaming a production
   test("throws an error when trying to rename a non-existing production", async () => {
     mockProductionManager.requireProduction.mockImplementationOnce(async () => undefined);
     const response = await server.inject({ 
@@ -186,7 +181,6 @@ describe('Production API', () => {
     expect(response.statusCode).toBe(404);
   });
 
-  // GET request for getting all lines for a production
   test("can retrieve all lines from a production", async () => {
     const response = await server.inject({ 
       method: 'GET', 
@@ -199,7 +193,6 @@ describe('Production API', () => {
     expect(body[0]).toHaveProperty('participants');
   });
 
-  // POST request for adding more lines to prouduction
   test("can add a new production line", async () => {
     const response = await server.inject({
       method: 'POST', 
@@ -209,7 +202,6 @@ describe('Production API', () => {
     expect(response.statusCode).toBe(200);
   });
 
-  // GET request for getting details for a specific line
   test("can retrieve a specific line id from a production", async () => {
     const response = await server.inject({ 
       method: 'GET', 
@@ -221,7 +213,6 @@ describe('Production API', () => {
     expect(Array.isArray(body.participants)).toBe(true);
   });
 
-  // negative test for the GET request for a specific line
   test("error is thrown when trying to access a non existing line from a production", async () => {
     const response = await server.inject({ 
       method: 'GET', 
@@ -230,7 +221,6 @@ describe('Production API', () => {
     expect(response.statusCode).toBe(404);
   });
 
-  // PATCH request for renaming a line
   test("can modify an existing Production line", async () => {
     const response = await server.inject({
       method: 'PATCH',
@@ -243,7 +233,7 @@ describe('Production API', () => {
     expect(body.id).toBe('1');
   });
 
-  // negative test for the PATCH request renaming a line
+  // negative test for the PATCH request renaming a production line
   test("throws an error when trying to rename a production line that doesn't exist", async () => {
     const response = await server.inject({ 
       method: 'PATCH', 
@@ -253,7 +243,6 @@ describe('Production API', () => {
     expect(response.statusCode).toBe(404);
   });
 
-  // DELETE request for removing a line from a production
   test("can delete a line from a production", async () => {
     const response = await server.inject({ 
       method: 'DELETE', 
@@ -263,7 +252,7 @@ describe('Production API', () => {
     expect(response.body).toBe('deleted');
   });
 
-  // negative test for the DELETE request removing a line from a production
+  // negative test for deleting a production line with active participants
   test("throws an error if trying to delete a line with active participants", async () => {
     const getUsersSpy = jest.spyOn(mockProductionManager, 'getUsersForLine');
     getUsersSpy.mockImplementationOnce(() => [{ isActive: true }]);
@@ -275,7 +264,6 @@ describe('Production API', () => {
     getUsersSpy.mockRestore();
   });
 
-  // POST request for setting up session protocol for a remote smb instance
   test("can create a session connection to a remote smb instance", async () => {
     const response = await server.inject({
       method: 'POST', 
@@ -285,7 +273,6 @@ describe('Production API', () => {
     expect(response.statusCode).toBe(201);
   })
 
-  // DELETE request for removing a production
   test("can remove a production", async () => {
     const response = await server.inject({ 
       method: 'DELETE', 
@@ -294,7 +281,6 @@ describe('Production API', () => {
     expect(response.statusCode).toBe(200);
   });
 
-  // DELETE request for removing a session
   test("can remove a session", async () => {
     const response = await server.inject({ 
       method: 'DELETE', 
@@ -303,7 +289,6 @@ describe('Production API', () => {
     expect(response.statusCode).toBe(200);
   });
 
-  // POST request for long poll endpoint for participants
   test("can do long polling for change in line participants", async () => {
     mockProductionManager.once = jest.fn().mockImplementation((event, callback) => {
       if (event === 'users:change') {
@@ -318,7 +303,6 @@ describe('Production API', () => {
     expect(response.statusCode).toBe(200);
   })
 
-  // GET request for heartbeat endpoint to check if session is alive
   test("can update user session last seen", async () => {
     const response = await server.inject({ 
       method: 'GET', 
