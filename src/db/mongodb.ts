@@ -1,6 +1,6 @@
 import { MongoClient } from 'mongodb';
 import { DbManager } from './interface';
-import { Ingest, Line, NewIngest, Production } from '../models';
+import { Ingest, Line, NewIngest, Production, UserSession } from '../models';
 import { assert } from '../utils';
 
 export class DbManagerMongoDb implements DbManager {
@@ -154,5 +154,54 @@ export class DbManagerMongoDb implements DbManager {
       .collection<Ingest>('ingests')
       .deleteOne({ _id: ingestId as any });
     return result.deletedCount === 1;
+  }
+
+  // Session management methods
+  async saveUserSession(sessionId: string, userSession: UserSession): Promise<void> {
+    const db = this.client.db();
+    await db.collection('sessions').updateOne(
+      { _id: sessionId },
+      { $set: { ...userSession, _id: sessionId } },
+      { upsert: true }
+    );
+  }
+
+  async getUserSession(sessionId: string): Promise<UserSession | undefined> {
+    const db = this.client.db();
+    const session = await db.collection('sessions').findOne({ _id: sessionId });
+    if (!session) {
+      return undefined;
+    }
+    // Remove the MongoDB _id field from the returned session
+    const { _id, ...userSession } = session;
+    return userSession as UserSession;
+  }
+
+  async getAllUserSessions(): Promise<Record<string, UserSession>> {
+    const db = this.client.db();
+    const sessions = await db.collection('sessions').find({}).toArray();
+    const result: Record<string, UserSession> = {};
+
+    for (const session of sessions) {
+      const { _id, ...userSession } = session;
+      result[_id as string] = userSession as UserSession;
+    }
+
+    return result;
+  }
+
+  async deleteUserSession(sessionId: string): Promise<boolean> {
+    const db = this.client.db();
+    const result = await db.collection('sessions').deleteOne({ _id: sessionId });
+    return result.deletedCount === 1;
+  }
+
+  async updateUserSession(sessionId: string, updates: Partial<UserSession>): Promise<boolean> {
+    const db = this.client.db();
+    const result = await db.collection('sessions').updateOne(
+      { _id: sessionId },
+      { $set: updates }
+    );
+    return result.modifiedCount === 1;
   }
 }
