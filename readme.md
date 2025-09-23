@@ -22,13 +22,7 @@ Available as an open web service in [Eyevinn Open Source Cloud](https://www.osaa
 
 ### Deploy to Eyevinn Open Source Cloud using Terraform
 
-You can deploy the Intercom Manager to Eyevinn Open Source Cloud using Terraform. This provides a fully managed deployment with infrastructure as code.
-
-#### Prerequisites
-
-1. **Terraform installed** (version >= 1.2.0)
-2. **Eyevinn OSC account** - Sign up at [osaas.io](https://www.osaas.io/)
-3. **OSC Personal Access Token** - Generate from your OSC account settings
+You can deploy the Intercom Manager to Eyevinn Open Source Cloud using Terraform. See the [OSC Intercom Terraform Examples](https://github.com/EyevinnOSC/terraform-examples/tree/main/examples/intercom) repository for complete configuration examples.
 
 #### Quick Setup
 
@@ -38,58 +32,29 @@ You can deploy the Intercom Manager to Eyevinn Open Source Cloud using Terraform
    cd terraform-examples/examples/intercom
    ```
 
-2. **Configure your OSC credentials:**
+2. **Set required environment variables:**
    ```sh
-   export OSC_ACCESS_TOKEN="your-personal-access-token"
+   export TF_VAR_osc_pat="your-personal-access-token"
+   export TF_VAR_smb_api_key="your-smb-api-key"
+   export TF_VAR_db_admin_password="your-db-password"
    ```
 
-3. **Initialize Terraform:**
+3. **Initialize and deploy:**
    ```sh
    terraform init
-   ```
-
-4. **Review and customize variables:**
-   Edit the `terraform.tfvars` file to configure your deployment:
-   ```hcl
-   # Example configuration
-   name = "my-intercom"
-   # Add other configuration variables as needed
-   ```
-
-5. **Deploy the infrastructure:**
-   ```sh
    terraform plan
    terraform apply
    ```
 
-6. **Access your deployment:**
-   After successful deployment, Terraform will output the URL where your Intercom Manager is accessible.
+#### Configuration Variables
 
-#### Configuration Options
+The `osc_eyevinn_intercom_manager` resource requires these variables:
 
-The Terraform deployment supports all standard environment variables mentioned in the [Environment Variables](#environment-variables) section. Key configurations include:
-
-- **SMB_ADDRESS**: Symphony Media Bridge endpoint
-- **DB_CONNECTION_STRING**: Database connection (managed MongoDB instance provided)
-- **ICE_SERVERS**: WebRTC ICE servers for media connectivity
-- **OSC_ACCESS_TOKEN**: Your OSC access token for service integration
-
-#### Advanced Configuration
-
-For more advanced setups and examples, see the [OSC Intercom Terraform Examples](https://github.com/EyevinnOSC/terraform-examples/tree/main/examples/intercom) repository which includes:
-
-- Multi-environment deployments
-- Custom networking configurations
-- Integration with existing OSC services
-- Scaling and high availability setups
-
-#### Benefits of OSC Deployment
-
-- **Fully managed infrastructure**: No need to manage servers, databases, or networking
-- **Automatic scaling**: Resources scale based on usage
-- **Built-in monitoring**: Comprehensive logging and metrics
-- **Security**: Enterprise-grade security and compliance
-- **Cost-effective**: Pay only for resources used
+- **`name`**: Intercom system name (lowercase letters and numbers only)
+- **`smb_url`**: Symphony Media Bridge instance URL
+- **`smb_api_key`**: Symphony Media Bridge API key
+- **`db_url`**: Database connection URL
+- **`osc_access_token`**: OSC Personal Access Token (optional)
 
 ## Environment variables
 
