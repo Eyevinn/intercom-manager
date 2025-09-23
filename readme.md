@@ -20,6 +20,42 @@ The solution is built on top of WebRTC technology and provides a user-friendly i
 
 Available as an open web service in [Eyevinn Open Source Cloud](https://www.osaas.io/). Read this [documentation to quickly get started](https://docs.osaas.io/osaas.wiki/Service%3A-Intercom.html) with the hosted solution.
 
+### Deploy to Eyevinn Open Source Cloud using Terraform
+
+You can deploy the complete Open Intercom solution (including database, media bridge, and intercom manager) to Eyevinn Open Source Cloud using Terraform. See the [OSC Intercom Terraform Examples](https://github.com/EyevinnOSC/terraform-examples/tree/main/examples/intercom) repository for complete configuration examples.
+
+#### Quick Setup
+
+1. **Clone the Terraform examples repository:**
+   ```sh
+   git clone https://github.com/EyevinnOSC/terraform-examples.git
+   cd terraform-examples/examples/intercom
+   ```
+
+2. **Set required environment variables:**
+   ```sh
+   export TF_VAR_osc_pat="your-personal-access-token"
+   export TF_VAR_smb_api_key="your-smb-api-key"
+   export TF_VAR_db_admin_password="your-db-password"
+   ```
+
+3. **Initialize and deploy:**
+   ```sh
+   terraform init
+   terraform plan
+   terraform apply
+   ```
+
+#### Configuration Variables
+
+The `osc_eyevinn_intercom_manager` resource requires these variables:
+
+- **`name`**: Intercom system name (lowercase letters and numbers only)
+- **`smb_url`**: Symphony Media Bridge instance URL
+- **`smb_api_key`**: Symphony Media Bridge API key
+- **`db_url`**: Database connection URL
+- **`osc_access_token`**: OSC Personal Access Token (optional)
+
 ## Environment variables
 
 | Variable name               | Description                                                                                                                                                                                                                                                 |
