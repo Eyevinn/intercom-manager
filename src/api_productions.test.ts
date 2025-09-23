@@ -54,7 +54,7 @@ const mockCoreFunctions = {
   createEndpoint: jest.fn().mockResolvedValue({
     audio: {ssrcs: [12345],'payload-type': {}, 'rtp-hdrexts': []}
   }),
-  createConnection: jest.fn().mockResolvedValue('fake-sdp-offer'),
+  createConnection: jest.fn().mockResolvedValue('sdp-offer-mock'),
 } as any;
 
 const mockNewSession = {
@@ -130,7 +130,8 @@ describe('Production API', () => {
           body: newProduction
       });
       expect(response.statusCode).toBe(200);
-      // Insert body comparison
+      const body = JSON.parse(response.body);
+      expect(body).toEqual({ name: 'productionname', productionId: '1' });
     });
     test("returns 400 when body is missing", async () => {
       const response = await server.inject({
@@ -241,7 +242,12 @@ describe('Production API', () => {
         body: { name: "newLine", programOutputLine: true}
       });
       expect(response.statusCode).toBe(200);
-      // Insert body comparison. 
+      const body = JSON.parse(response.body);
+      expect(Array.isArray(body)).toBe(true);
+      expect(body.length).toBeGreaterThanOrEqual(1);
+      expect(body[0]).toHaveProperty('id', '1');
+      expect(body[0]).toHaveProperty('name', 'l1');
+      expect(body[0]).toHaveProperty('participants');
     });
     test("returns 400 when adding a duplicate line name", async () => {
       const response = await server.inject({
@@ -324,7 +330,10 @@ describe('Production API', () => {
         body: mockNewSession
       });
       expect(response.statusCode).toBe(201);
-      // Insert body comparison.
+      const body = JSON.parse(response.body);
+      expect(typeof body.sessionId).toBe('string');
+      expect(body.sessionId.length).toBeGreaterThan(0);
+      expect(body.sdp).toBe('sdp-offer-mock'); 
     }); 
     test("returns 400 when session body is missing", async () => {
       const response = await server.inject({
@@ -386,7 +395,8 @@ describe('Production API', () => {
         url: '/api/v1/production/1/line/1/participants',
       });
       expect(response.statusCode).toBe(200);
-      // Insert body comparison.
+      const body = response.body ? JSON.parse(response.body) : [];
+      expect(Array.isArray(body)).toBe(true);
     }); 
     test("returns 500 when long poll fails due to internal error", async () => {
       const getUsersSpy = jest.spyOn(mockProductionManager, 'getUsersForLine');
