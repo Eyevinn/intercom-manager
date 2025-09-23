@@ -132,9 +132,14 @@ describe('Production API', () => {
       expect(response.statusCode).toBe(200);
       // Insert body comparison
     });
-
-    // Insert negative test.
-
+    test("returns 400 when body is missing", async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/v1/production',
+        body: {}
+      });
+      expect(response.statusCode).toBe(400);
+    });
   })
   
   describe("GET /productionlist", () =>{
@@ -153,9 +158,13 @@ describe('Production API', () => {
       expect(body.productions[0]).toHaveProperty('name');
       expect(body.productions[0]).not.toHaveProperty('lines');
     });
-
-    // Insert negative test. 
-
+    test("returns 400 when query params are invalid", async () => {
+      const response = await server.inject({ 
+        method: 'GET', 
+        url: '/api/v1/productionlist?limit=not-a-number&offset=also-bad&extended=not-bool' 
+      });
+      expect(response.statusCode).toBe(400);
+    });
   })
   
   describe("GET /production/:id", () => {
@@ -169,9 +178,14 @@ describe('Production API', () => {
       expect(body.productionId).toBe('1');
       expect(Array.isArray(body.lines)).toBe(true);
     });
-
-    // Insert negative test.
-
+    test("returns 500 when failing to fetch a production", async () => {
+      mockProductionManager.requireProduction.mockRejectedValueOnce(new Error('lookup error'));
+      const response = await server.inject({
+        method: 'GET',
+        url: '/api/v1/production/999'
+      });
+      expect(response.statusCode).toBe(500);
+    });
   })
 
   describe("PATCH /production/:id", () => {
@@ -209,9 +223,14 @@ describe('Production API', () => {
       expect(body[0]).toHaveProperty('id');
       expect(body[0]).toHaveProperty('participants');
     });
-
-    // Insert negative test. 
-
+    test("returns 500 when failing to retrieve lines for a production", async () => {
+      mockProductionManager.requireProduction.mockRejectedValueOnce(new Error('not found'));
+      const response = await server.inject({
+        method: 'GET',
+        url: '/api/v1/production/999/line'
+      });
+      expect(response.statusCode).toBe(500);
+    });
   })
   
   describe("POST /production/:id/line", () => {
@@ -224,9 +243,14 @@ describe('Production API', () => {
       expect(response.statusCode).toBe(200);
       // Insert body comparison. 
     });
-
-    // Insert negative test. 
-
+    test("returns 400 when adding a duplicate line name", async () => {
+      const response = await server.inject({
+        method: 'POST', 
+        url: '/api/v1/production/1/line',
+        body: { name: 'l1', programOutputLine: false }
+      });
+      expect(response.statusCode).toBe(400);
+    });
   })
  
   describe("GET /production/:id/line/:id", () => {
@@ -239,8 +263,7 @@ describe('Production API', () => {
         const body = JSON.parse(response.body);
         expect(body.id).toBe('1');
         expect(Array.isArray(body.participants)).toBe(true);
-      });
-
+    });
     test("error is thrown when trying to access a non existing line from a production", async () => {
       const response = await server.inject({ 
         method: 'GET', 
@@ -303,9 +326,14 @@ describe('Production API', () => {
       expect(response.statusCode).toBe(201);
       // Insert body comparison.
     }); 
-
-    // Insert negative test
-
+    test("returns 400 when session body is missing", async () => {
+      const response = await server.inject({
+        method: 'POST', 
+        url: '/api/v1/session',
+        body: {}
+      });
+      expect(response.statusCode).toBe(400);
+    });
   })
   
   describe("DELETE /production/:id", () => {
@@ -316,9 +344,14 @@ describe('Production API', () => {
       });
       expect(response.statusCode).toBe(200);
     });
-
-    // Insert negative test.
-
+    test("returns 500 when production deletion fails", async () => {
+      mockProductionManager.deleteProduction.mockResolvedValueOnce(false);
+      const response = await server.inject({ 
+        method: 'DELETE', 
+        url: '/api/v1/production/1' 
+      });
+      expect(response.statusCode).toBe(500);
+    });
   })
   
   describe("DELETE /session/:id", () => {
@@ -329,9 +362,16 @@ describe('Production API', () => {
       });
       expect(response.statusCode).toBe(200);
     });
-
-    // Insert negative test.
-
+    test("returns 500 when session deletion fails", async () => {
+      const removeSpy = jest.spyOn(mockProductionManager, 'removeUserSession');
+      removeSpy.mockImplementationOnce(() => undefined as any);
+      const response = await server.inject({ 
+        method: 'DELETE', 
+        url: '/api/v1/session/mock-session' 
+      });
+      expect(response.statusCode).toBe(500);
+      removeSpy.mockRestore();
+    });
   })
   
   describe("POST /production/:id/line/:id/participants", () => {
@@ -348,8 +388,16 @@ describe('Production API', () => {
       expect(response.statusCode).toBe(200);
       // Insert body comparison.
     }); 
-
-    // Insert negative tes. 
+    test("returns 500 when long poll fails due to internal error", async () => {
+      const getUsersSpy = jest.spyOn(mockProductionManager, 'getUsersForLine');
+      getUsersSpy.mockImplementationOnce(() => { throw new Error('read error') });
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/v1/production/1/line/1/participants',
+      });
+      expect(response.statusCode).toBe(500);
+      getUsersSpy.mockRestore();
+    });
   })
  
   describe("GET /heartbeat/:status", () => {
