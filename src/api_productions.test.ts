@@ -122,44 +122,60 @@ describe('Production API', () => {
     await server.close();
   });
 
-  test('can create a new production from setup values', async () => {
-    const response = await server.inject({
-        method: 'POST',
-        url: '/api/v1/production',
-        body: newProduction
-    });
-    expect(response.statusCode).toBe(200);
+  describe("POST /production", () => {
+    test("can create a new production from setup values", async () => {
+      const response = await server.inject({
+          method: 'POST',
+          url: '/api/v1/production',
+          body: newProduction
+      });
+      expect(response.statusCode).toBe(200);
+      // Insert body comparison
     });
 
-  test('can paginate list of all productions', async () => {
-    const response = await server.inject({ 
-      method: 'GET', 
-      url: '/api/v1/productionlist' 
-    });
-    expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body);
-    expect(Array.isArray(body.productions)).toBe(true);
-    expect(body.limit).toBe(50);
-    expect(body.offset).toBe(0);
-    expect(body.totalItems).toBe(3);
-    expect(body.productions[0]).toHaveProperty('productionId');
-    expect(body.productions[0]).toHaveProperty('name');
-    expect(body.productions[0]).not.toHaveProperty('lines');
-  });
+    // Insert negative test.
 
-  test('can fetch a production with details', async () => {
-    const response = await server.inject({ 
-      method: 'GET', 
-      url: '/api/v1/production/1' 
+  })
+  
+  describe("GET /productionlist", () =>{
+    test("can paginate list of all productions", async () => {
+      const response = await server.inject({ 
+        method: 'GET', 
+        url: '/api/v1/productionlist' 
+      });
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(Array.isArray(body.productions)).toBe(true);
+      expect(body.limit).toBe(50);
+      expect(body.offset).toBe(0);
+      expect(body.totalItems).toBe(3);
+      expect(body.productions[0]).toHaveProperty('productionId');
+      expect(body.productions[0]).toHaveProperty('name');
+      expect(body.productions[0]).not.toHaveProperty('lines');
     });
-    expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body);
-    expect(body.productionId).toBe('1');
-    expect(Array.isArray(body.lines)).toBe(true);
-  });
+
+    // Insert negative test. 
+
+  })
+  
+  describe("GET /production/:id", () => {
+    test("can fetch a production with details", async () => {
+      const response = await server.inject({ 
+        method: 'GET', 
+        url: '/api/v1/production/1' 
+      });
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.productionId).toBe('1');
+      expect(Array.isArray(body.lines)).toBe(true);
+    });
+
+    // Insert negative test.
+
+  })
 
   describe("PATCH /production/:id", () => {
-    test('can rename a production', async () => {
+    test("can rename a production", async () => {
       const response = await server.inject({
         method: 'PATCH',
         url: '/api/v1/production/1',
@@ -181,27 +197,38 @@ describe('Production API', () => {
     });
   })
 
-  test("can retrieve all lines from a production", async () => {
-    const response = await server.inject({ 
-      method: 'GET', 
-      url: '/api/v1/production/1/line' 
+  describe("GET /production/:id/line", () => {
+    test("can retrieve all lines from a production", async () => {
+      const response = await server.inject({ 
+        method: 'GET', 
+        url: '/api/v1/production/1/line' 
+      });
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(Array.isArray(body)).toBe(true);
+      expect(body[0]).toHaveProperty('id');
+      expect(body[0]).toHaveProperty('participants');
     });
-    expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body);
-    expect(Array.isArray(body)).toBe(true);
-    expect(body[0]).toHaveProperty('id');
-    expect(body[0]).toHaveProperty('participants');
-  });
 
-  test("can add a new production line", async () => {
-    const response = await server.inject({
-      method: 'POST', 
-      url: '/api/v1/production/1/line',
-      body: { name: "newLine", programOutputLine: true}
+    // Insert negative test. 
+
+  })
+  
+  describe("POST /production/:id/line", () => {
+     test("can add a new production line", async () => {
+      const response = await server.inject({
+        method: 'POST', 
+        url: '/api/v1/production/1/line',
+        body: { name: "newLine", programOutputLine: true}
+      });
+      expect(response.statusCode).toBe(200);
+      // Insert body comparison. 
     });
-    expect(response.statusCode).toBe(200);
-  });
 
+    // Insert negative test. 
+
+  })
+ 
   describe("GET /production/:id/line/:id", () => {
     test("can retrieve a specific line id from a production", async () => {
         const response = await server.inject({ 
@@ -266,44 +293,65 @@ describe('Production API', () => {
     });
   })
 
-  test("can create a session connection to a remote smb instance", async () => {
-    const response = await server.inject({
-      method: 'POST', 
-      url: '/api/v1/session',
-      body: mockNewSession
-    });
-    expect(response.statusCode).toBe(201);
+  describe("POST /session", () => {
+    test("can create a session connection to a remote smb instance", async () => {
+      const response = await server.inject({
+        method: 'POST', 
+        url: '/api/v1/session',
+        body: mockNewSession
+      });
+      expect(response.statusCode).toBe(201);
+      // Insert body comparison.
+    }); 
+
+    // Insert negative test
+
   })
+  
+  describe("DELETE /production/:id", () => {
+    test("can remove a production", async () => {
+      const response = await server.inject({ 
+        method: 'DELETE', 
+        url: '/api/v1/production/1' 
+      });
+      expect(response.statusCode).toBe(200);
+    });
 
-  test("can remove a production", async () => {
-    const response = await server.inject({ 
-      method: 'DELETE', 
-      url: '/api/v1/production/1' 
-    });
-    expect(response.statusCode).toBe(200);
-  });
+    // Insert negative test.
 
-  test("can remove a session", async () => {
-    const response = await server.inject({ 
-      method: 'DELETE', 
-      url: '/api/v1/session/mock-session' 
-    });
-    expect(response.statusCode).toBe(200);
-  });
-
-  test("can do long polling for change in line participants", async () => {
-    mockProductionManager.once = jest.fn().mockImplementation((event, callback) => {
-      if (event === 'users:change') {
-        callback();
-      }
-    });
-    const response = await server.inject({
-      method: 'POST',
-      url: '/api/v1/production/1/line/1/participants',
-    });
-    expect(response.statusCode).toBe(200);
   })
+  
+  describe("DELETE /session/:id", () => {
+    test("can remove a session", async () => {
+      const response = await server.inject({ 
+        method: 'DELETE', 
+        url: '/api/v1/session/mock-session' 
+      });
+      expect(response.statusCode).toBe(200);
+    });
 
+    // Insert negative test.
+
+  })
+  
+  describe("POST /production/:id/line/:id/participants", () => {
+    test("can do long polling for change in line participants", async () => {
+      mockProductionManager.once = jest.fn().mockImplementation((event, callback) => {
+        if (event === 'users:change') {
+          callback();
+        }
+      });
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/v1/production/1/line/1/participants',
+      });
+      expect(response.statusCode).toBe(200);
+      // Insert body comparison.
+    }); 
+
+    // Insert negative tes. 
+  })
+ 
   describe("GET /heartbeat/:status", () => {
     test("can update user session last seen", async () => {
       const response = await server.inject({ 
