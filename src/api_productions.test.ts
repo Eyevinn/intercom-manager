@@ -102,7 +102,6 @@ const mockProductionManager = {
   removeUserSession: jest.fn().mockImplementation((sessionId: string) => sessionId)
 } as any;
 
-
 describe('Production API', () => {
   let server: any;
 
@@ -159,27 +158,28 @@ describe('Production API', () => {
     expect(Array.isArray(body.lines)).toBe(true);
   });
 
-  test('can rename a production', async () => {
-    const response = await server.inject({
-      method: 'PATCH',
-      url: '/api/v1/production/1',
-      body: { name: 'renamed' }
+  describe("PATCH /production/:id", () => {
+    test('can rename a production', async () => {
+      const response = await server.inject({
+        method: 'PATCH',
+        url: '/api/v1/production/1',
+        body: { name: 'renamed' }
+      });
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.name).toBe('renamed');
+      expect(body._id).toBe(1);
+    }); 
+    test("throws an error when trying to rename a non-existing production", async () => {
+      mockProductionManager.requireProduction.mockImplementationOnce(async () => undefined);
+      const response = await server.inject({ 
+        method: 'PATCH', 
+        url: '/api/v1/production/999', 
+        body: { name: 'x' } 
+      });
+      expect(response.statusCode).toBe(404);
     });
-    expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body);
-    expect(body.name).toBe('renamed');
-    expect(body._id).toBe(1);
-  }); 
-
-  test("throws an error when trying to rename a non-existing production", async () => {
-    mockProductionManager.requireProduction.mockImplementationOnce(async () => undefined);
-    const response = await server.inject({ 
-      method: 'PATCH', 
-      url: '/api/v1/production/999', 
-      body: { name: 'x' } 
-    });
-    expect(response.statusCode).toBe(404);
-  });
+  })
 
   test("can retrieve all lines from a production", async () => {
     const response = await server.inject({ 
@@ -202,67 +202,69 @@ describe('Production API', () => {
     expect(response.statusCode).toBe(200);
   });
 
-  test("can retrieve a specific line id from a production", async () => {
-    const response = await server.inject({ 
-      method: 'GET', 
-      url: '/api/v1/production/1/line/1' 
+  describe("GET /production/:id/line/:id", () => {
+    test("can retrieve a specific line id from a production", async () => {
+        const response = await server.inject({ 
+          method: 'GET', 
+          url: '/api/v1/production/1/line/1' 
+        });
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body);
+        expect(body.id).toBe('1');
+        expect(Array.isArray(body.participants)).toBe(true);
+      });
+
+    test("error is thrown when trying to access a non existing line from a production", async () => {
+      const response = await server.inject({ 
+        method: 'GET', 
+        url: '/api/v1/production/1/line/does-not-exist' 
+      });
+      expect(response.statusCode).toBe(404);
     });
-    expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body);
-    expect(body.id).toBe('1');
-    expect(Array.isArray(body.participants)).toBe(true);
   });
 
-  test("error is thrown when trying to access a non existing line from a production", async () => {
-    const response = await server.inject({ 
-      method: 'GET', 
-      url: '/api/v1/production/1/line/does-not-exist' 
+  describe("PATCH /production/:id/line/:id", () => {
+    test("can modify an existing Production line", async () => {
+          const response = await server.inject({
+            method: 'PATCH',
+            url: '/api/v1/production/1/line/1',
+            body: { name: 'line-renamed' }
+          });
+          expect(response.statusCode).toBe(200);
+          const body = JSON.parse(response.body);
+          expect(body.name).toBe('line-renamed');
+          expect(body.id).toBe('1');
     });
-    expect(response.statusCode).toBe(404);
-  });
-
-  test("can modify an existing Production line", async () => {
-    const response = await server.inject({
-      method: 'PATCH',
-      url: '/api/v1/production/1/line/1',
-      body: { name: 'line-renamed' }
+    test("throws an error when trying to rename a production line that doesn't exist", async () => {
+      const response = await server.inject({ 
+        method: 'PATCH', 
+        url: '/api/v1/production/1/line/miss', 
+        body: { name: 'x' } 
+      });
+      expect(response.statusCode).toBe(404);
     });
-    expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body);
-    expect(body.name).toBe('line-renamed');
-    expect(body.id).toBe('1');
   });
-
-  // negative test for the PATCH request renaming a production line
-  test("throws an error when trying to rename a production line that doesn't exist", async () => {
-    const response = await server.inject({ 
-      method: 'PATCH', 
-      url: '/api/v1/production/1/line/miss', 
-      body: { name: 'x' } 
+  
+  describe("DELETE /production/:id/line/:id", () => {
+    test("can delete a line from a production", async () => {
+      const response = await server.inject({ 
+        method: 'DELETE', 
+        url: '/api/v1/production/1/line/1' 
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toBe('deleted');
     });
-    expect(response.statusCode).toBe(404);
-  });
-
-  test("can delete a line from a production", async () => {
-    const response = await server.inject({ 
-      method: 'DELETE', 
-      url: '/api/v1/production/1/line/1' 
+    test("throws an error if trying to delete a line with active participants", async () => {
+      const getUsersSpy = jest.spyOn(mockProductionManager, 'getUsersForLine');
+      getUsersSpy.mockImplementationOnce(() => [{ isActive: true }]);
+      const response = await server.inject({ 
+        method: 'DELETE', 
+        url: '/api/v1/production/1/line/1' 
+      });
+      expect(response.statusCode).toBe(400);
+      getUsersSpy.mockRestore();
     });
-    expect(response.statusCode).toBe(200);
-    expect(response.body).toBe('deleted');
-  });
-
-  // negative test for deleting a production line with active participants
-  test("throws an error if trying to delete a line with active participants", async () => {
-    const getUsersSpy = jest.spyOn(mockProductionManager, 'getUsersForLine');
-    getUsersSpy.mockImplementationOnce(() => [{ isActive: true }]);
-    const response = await server.inject({ 
-      method: 'DELETE', 
-      url: '/api/v1/production/1/line/1' 
-    });
-    expect(response.statusCode).toBe(400);
-    getUsersSpy.mockRestore();
-  });
+  })
 
   test("can create a session connection to a remote smb instance", async () => {
     const response = await server.inject({
@@ -299,26 +301,25 @@ describe('Production API', () => {
       method: 'POST',
       url: '/api/v1/production/1/line/1/participants',
     });
-    console.log(response.payload)
     expect(response.statusCode).toBe(200);
   })
 
-  test("can update user session last seen", async () => {
-    const response = await server.inject({ 
-      method: 'GET', 
-      url: '/api/v1/heartbeat/alive-session' 
+  describe("GET /heartbeat/:status", () => {
+    test("can update user session last seen", async () => {
+      const response = await server.inject({ 
+        method: 'GET', 
+        url: '/api/v1/heartbeat/alive-session' 
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toBe('ok');
     });
-    expect(response.statusCode).toBe(200);
-    expect(response.body).toBe('ok');
-  });
-
-  // negative test for the GET request for heartbeat endpoint
-  test("throws an error when trying to update a user session that doesn't exist", async () => {
-    const response = await server.inject({ 
-      method: 'GET', 
-      url: '/api/v1/heartbeat/missing-session' 
-    });
-    expect(response.statusCode).toBe(410);
-  }); 
+    test("throws an error when trying to update a user session that doesn't exist", async () => {
+      const response = await server.inject({ 
+        method: 'GET', 
+        url: '/api/v1/heartbeat/missing-session' 
+      });
+      expect(response.statusCode).toBe(410);
+    }); 
+  })
 });
  
