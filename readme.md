@@ -22,7 +22,7 @@ Available as an open web service in [Eyevinn Open Source Cloud](https://www.osaa
 
 ### Deploy to Eyevinn Open Source Cloud using Terraform
 
-You can deploy the Intercom Manager to Eyevinn Open Source Cloud using Terraform. See the [OSC Intercom Terraform Examples](https://github.com/EyevinnOSC/terraform-examples/tree/main/examples/intercom) repository for complete configuration examples.
+You can deploy the complete Open Intercom solution (including database, media bridge, and intercom manager) to Eyevinn Open Source Cloud using Terraform. See the [OSC Intercom Terraform Examples](https://github.com/EyevinnOSC/terraform-examples/tree/main/examples/intercom) repository for complete configuration examples.
 
 #### Quick Setup
 
