@@ -33,7 +33,9 @@ export class ProductionManager extends EventEmitter {
     // Load sessions from database on startup
     try {
       this.userSessions = await this.dbManager.getAllUserSessions();
-      Log().info(`Loaded ${Object.keys(this.userSessions).length} sessions from database`);
+      Log().info(
+        `Loaded ${Object.keys(this.userSessions).length} sessions from database`
+      );
     } catch (error) {
       Log().error('Failed to load sessions from database:', error);
       this.userSessions = {};
@@ -85,7 +87,10 @@ export class ProductionManager extends EventEmitter {
         delete this.userSessions[sessionId];
         // Remove from database
         this.dbManager.deleteUserSession(sessionId).catch((error) => {
-          Log().error(`Failed to delete session ${sessionId} from database:`, error);
+          Log().error(
+            `Failed to delete session ${sessionId} from database:`,
+            error
+          );
         });
         hasChanged = true;
       } else {
@@ -99,9 +104,14 @@ export class ProductionManager extends EventEmitter {
         ) {
           Object.assign(userSession, { isActive, isExpired });
           // Update in database
-          this.dbManager.updateUserSession(sessionId, { isActive, isExpired }).catch((error) => {
-            Log().error(`Failed to update session ${sessionId} status in database:`, error);
-          });
+          this.dbManager
+            .updateUserSession(sessionId, { isActive, isExpired })
+            .catch((error) => {
+              Log().error(
+                `Failed to update session ${sessionId} status in database:`,
+                error
+              );
+            });
           hasChanged = true;
         }
         if (userSession.isWhip && isExpired) {
@@ -288,9 +298,14 @@ export class ProductionManager extends EventEmitter {
       this.userSessions[sessionId].lastSeen = lastSeen;
 
       // Update in database
-      this.dbManager.updateUserSession(sessionId, { lastSeen }).catch((error) => {
-        Log().error(`Failed to update session ${sessionId} lastSeen in database:`, error);
-      });
+      this.dbManager
+        .updateUserSession(sessionId, { lastSeen })
+        .catch((error) => {
+          Log().error(
+            `Failed to update session ${sessionId} lastSeen in database:`,
+            error
+          );
+        });
 
       return true;
     }
@@ -308,9 +323,14 @@ export class ProductionManager extends EventEmitter {
       this.userSessions[sessionId].sessionDescription = sessionDescription;
 
       // Update in database
-      this.dbManager.updateUserSession(sessionId, { endpointId, sessionDescription }).catch((error) => {
-        Log().error(`Failed to update session ${sessionId} endpoint in database:`, error);
-      });
+      this.dbManager
+        .updateUserSession(sessionId, { endpointId, sessionDescription })
+        .catch((error) => {
+          Log().error(
+            `Failed to update session ${sessionId} endpoint in database:`,
+            error
+          );
+        });
 
       return true;
     }
@@ -323,7 +343,10 @@ export class ProductionManager extends EventEmitter {
 
       // Remove from database
       this.dbManager.deleteUserSession(sessionId).catch((error) => {
-        Log().error(`Failed to delete session ${sessionId} from database:`, error);
+        Log().error(
+          `Failed to delete session ${sessionId} from database:`,
+          error
+        );
       });
 
       this.emit('users:change');

@@ -262,7 +262,10 @@ export class DbManagerCouchDb implements DbManager {
   }
 
   // Session management methods
-  async saveUserSession(sessionId: string, userSession: UserSession): Promise<void> {
+  async saveUserSession(
+    sessionId: string,
+    userSession: UserSession
+  ): Promise<void> {
     await this.connect();
     if (!this.nanoDb) {
       throw new Error('Database not connected');
@@ -345,7 +348,10 @@ export class DbManagerCouchDb implements DbManager {
     }
   }
 
-  async updateUserSession(sessionId: string, updates: Partial<UserSession>): Promise<boolean> {
+  async updateUserSession(
+    sessionId: string,
+    updates: Partial<UserSession>
+  ): Promise<boolean> {
     await this.connect();
     if (!this.nanoDb) {
       throw new Error('Database not connected');

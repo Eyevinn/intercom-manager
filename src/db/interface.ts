@@ -26,5 +26,8 @@ export interface DbManager {
   getUserSession(sessionId: string): Promise<UserSession | undefined>;
   getAllUserSessions(): Promise<Record<string, UserSession>>;
   deleteUserSession(sessionId: string): Promise<boolean>;
-  updateUserSession(sessionId: string, updates: Partial<UserSession>): Promise<boolean>;
+  updateUserSession(
+    sessionId: string,
+    updates: Partial<UserSession>
+  ): Promise<boolean>;
 }

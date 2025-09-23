@@ -157,13 +157,18 @@ export class DbManagerMongoDb implements DbManager {
   }
 
   // Session management methods
-  async saveUserSession(sessionId: string, userSession: UserSession): Promise<void> {
+  async saveUserSession(
+    sessionId: string,
+    userSession: UserSession
+  ): Promise<void> {
     const db = this.client.db();
-    await db.collection('sessions').updateOne(
-      { _id: sessionId },
-      { $set: { ...userSession, _id: sessionId } },
-      { upsert: true }
-    );
+    await db
+      .collection('sessions')
+      .updateOne(
+        { _id: sessionId },
+        { $set: { ...userSession, _id: sessionId } },
+        { upsert: true }
+      );
   }
 
   async getUserSession(sessionId: string): Promise<UserSession | undefined> {
@@ -192,16 +197,20 @@ export class DbManagerMongoDb implements DbManager {
 
   async deleteUserSession(sessionId: string): Promise<boolean> {
     const db = this.client.db();
-    const result = await db.collection('sessions').deleteOne({ _id: sessionId });
+    const result = await db
+      .collection('sessions')
+      .deleteOne({ _id: sessionId });
     return result.deletedCount === 1;
   }
 
-  async updateUserSession(sessionId: string, updates: Partial<UserSession>): Promise<boolean> {
+  async updateUserSession(
+    sessionId: string,
+    updates: Partial<UserSession>
+  ): Promise<boolean> {
     const db = this.client.db();
-    const result = await db.collection('sessions').updateOne(
-      { _id: sessionId },
-      { $set: updates }
-    );
+    const result = await db
+      .collection('sessions')
+      .updateOne({ _id: sessionId }, { $set: updates });
     return result.modifiedCount === 1;
   }
 }
