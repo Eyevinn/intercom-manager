@@ -36,10 +36,14 @@ const mockDbManager = {
   updateIngest: jest.fn().mockResolvedValue(undefined),
   deleteIngest: jest.fn().mockResolvedValue(true),
   saveUserSession: jest.fn().mockResolvedValue(undefined),
-  getUserSession: jest.fn().mockResolvedValue(undefined as UserSession | undefined),
-  getAllUserSessions: jest.fn().mockResolvedValue({} as Record<string, UserSession>),
+  getUserSession: jest
+    .fn()
+    .mockResolvedValue(undefined as UserSession | undefined),
+  getAllUserSessions: jest
+    .fn()
+    .mockResolvedValue({} as Record<string, UserSession>),
   deleteUserSession: jest.fn().mockResolvedValue(true),
-  updateUserSession: jest.fn().mockResolvedValue(true),
+  updateUserSession: jest.fn().mockResolvedValue(true)
 };
 
 const mockProductionManager = {
