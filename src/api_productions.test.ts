@@ -154,11 +154,24 @@ const mockProductionManager = {
   deleteProduction: jest.fn().mockResolvedValue(true),
   removeUserSession: jest
     .fn()
-    .mockImplementation((sessionId: string) => sessionId)
+    .mockImplementation((sessionId: string) => sessionId),
+  checkUserStatus: jest.fn()
 } as any;
 
 describe('Production API', () => {
   let server: any;
+  let setIntervalSpy: jest.SpyInstance<any, any>;
+  let consoleErrorSpy: jest.SpyInstance<any, any>; // to remove negative test errors from console (console.error)
+
+  // uses jest spy to keep track of 'setInterval' in api_productions, otherwise won't close properly
+  beforeAll(() => {
+    setIntervalSpy = jest
+      .spyOn(global, 'setInterval')
+      .mockImplementation(jest.fn());
+    consoleErrorSpy = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+  });
 
   beforeAll(async () => {
     server = await api({
@@ -173,8 +186,11 @@ describe('Production API', () => {
     });
   });
 
+  // mock server teardown
   afterAll(async () => {
     await server.close();
+    setIntervalSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
   });
 
   describe('POST /production', () => {
