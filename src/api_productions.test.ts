@@ -1,6 +1,7 @@
 import api from './api';
 import { NewProduction, Production } from './models';
 
+
 // Mocking production objects
 const newProduction: NewProduction = {
   name: 'productionname',
@@ -147,18 +148,25 @@ const mockProductionManager = {
     .mockImplementation((lines: any[], id: string) =>
       lines.find((l) => l.id === id)
     ),
-  updateUserLastSeen: jest
-    .fn()
+  updateUserLastSeen: jest.fn()
     .mockImplementation((sessionId: string) => sessionId === 'alive-session'),
   deleteProductionLine: jest.fn().mockResolvedValue(undefined),
   deleteProduction: jest.fn().mockResolvedValue(true),
-  removeUserSession: jest
-    .fn()
-    .mockImplementation((sessionId: string) => sessionId)
+  removeUserSession: jest.fn()
+    .mockImplementation((sessionId: string) => sessionId), 
+  checkUserStatus: jest.fn(async () => undefined)
 } as any;
 
 describe('Production API', () => {
   let server: any;
+  let setIntervalSpy: jest.SpyInstance<any, any>;
+  let clearIntervalSpy: jest.SpyInstance<any, any>;
+
+  // uses jest spy to keep track of 'setInterval' in api_productions, otherwise won't close propely
+  beforeAll(() => {
+    setIntervalSpy = jest.spyOn(global, 'setInterval')
+      .mockImplementation((..._args: any[]) => 1 as unknown as NodeJS.Timeout);
+  });
 
   beforeAll(async () => {
     server = await api({
@@ -173,8 +181,10 @@ describe('Production API', () => {
     });
   });
 
+  // mock server teardown
   afterAll(async () => {
     await server.close();
+    setIntervalSpy.mockRestore();
   });
 
   describe('POST /production', () => {
