@@ -160,12 +160,13 @@ const mockProductionManager = {
 describe('Production API', () => {
   let server: any;
   let setIntervalSpy: jest.SpyInstance<any, any>;
-  let clearIntervalSpy: jest.SpyInstance<any, any>;
+  let consoleErrorSpy: jest.SpyInstance<any, any>; // to remove negative test errors from console (console.error)
 
-  // uses jest spy to keep track of 'setInterval' in api_productions, otherwise won't close propely
+  // uses jest spy to keep track of 'setInterval' in api_productions, otherwise won't close properly
   beforeAll(() => {
     setIntervalSpy = jest.spyOn(global, 'setInterval')
       .mockImplementation((..._args: any[]) => 1 as unknown as NodeJS.Timeout);
+    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   beforeAll(async () => {
@@ -185,6 +186,7 @@ describe('Production API', () => {
   afterAll(async () => {
     await server.close();
     setIntervalSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
   });
 
   describe('POST /production', () => {
