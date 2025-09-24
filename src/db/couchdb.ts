@@ -59,7 +59,7 @@ export class DbManagerCouchDb implements DbManager {
   }
 
   /** Get all productions from the database in reverse natural order, limited by the limit parameter */
-  async getProductions(): Promise<Production[]> {
+  async getProductions(limit: number, offset: number): Promise<Production[]> {
     await this.connect();
     if (!this.nanoDb) {
       throw new Error('Database not connected');
@@ -70,10 +70,16 @@ export class DbManagerCouchDb implements DbManager {
     });
     // eslint-disable-next-line
     response.rows.forEach((row: any) => {
-      if (row.doc._id.toLowerCase().indexOf('counter') === -1)
+      if (
+        row.doc._id.toLowerCase().indexOf('counter') === -1 &&
+        row.doc._id.toLowerCase().indexOf('session_') === -1
+      )
         productions.push(row.doc);
     });
-    return productions as any as Production[];
+
+    // Apply offset and limit
+    const result = productions.slice(offset, offset + limit);
+    return result as any as Production[];
   }
 
   async getProductionsLength(): Promise<number> {
@@ -82,7 +88,13 @@ export class DbManagerCouchDb implements DbManager {
       throw new Error('Database not connected');
     }
     const productions = await this.nanoDb.list({ include_docs: false });
-    return productions.rows.length;
+    // Filter out counter and session documents
+    const filteredRows = productions.rows.filter(
+      (row: any) =>
+        row.id.toLowerCase().indexOf('counter') === -1 &&
+        row.id.toLowerCase().indexOf('session_') === -1
+    );
+    return filteredRows.length;
   }
 
   async getProduction(id: number): Promise<Production | undefined> {
@@ -195,7 +207,7 @@ export class DbManagerCouchDb implements DbManager {
   }
 
   /** Get all ingests from the database in reverse natural order, limited by the limit parameter */
-  async getIngests(): Promise<Ingest[]> {
+  async getIngests(limit: number, offset: number): Promise<Ingest[]> {
     await this.connect();
     if (!this.nanoDb) {
       throw new Error('Database not connected');
@@ -207,10 +219,16 @@ export class DbManagerCouchDb implements DbManager {
     });
     // eslint-disable-next-line
     response.rows.forEach((row: any) => {
-      if (row.doc._id.toLowerCase().indexOf('counter') === -1)
+      if (
+        row.doc._id.toLowerCase().indexOf('counter') === -1 &&
+        row.doc._id.toLowerCase().indexOf('session_') === -1
+      )
         ingests.push(row.doc);
     });
-    return ingests as any as Ingest[];
+
+    // Apply offset and limit
+    const result = ingests.slice(offset, offset + limit);
+    return result as any as Ingest[];
   }
 
   async getIngestsLength(): Promise<number> {
@@ -220,7 +238,13 @@ export class DbManagerCouchDb implements DbManager {
     }
 
     const ingests = await this.nanoDb.list({ include_docs: false });
-    return ingests.rows.length;
+    // Filter out counter and session documents
+    const filteredRows = ingests.rows.filter(
+      (row: any) =>
+        row.id.toLowerCase().indexOf('counter') === -1 &&
+        row.id.toLowerCase().indexOf('session_') === -1
+    );
+    return filteredRows.length;
   }
 
   async getIngest(id: number): Promise<Ingest | undefined> {
