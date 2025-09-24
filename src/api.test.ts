@@ -54,7 +54,13 @@ const mockProductionManager = {
   getUser: jest.fn().mockResolvedValue(undefined),
   requireLine: jest.fn().mockResolvedValue({}),
   updateUserLastSeen: jest.fn().mockResolvedValue(true),
-  once: jest.fn()
+  getProduction: jest.fn().mockResolvedValue(undefined),
+  setLineId: jest.fn().mockResolvedValue(undefined),
+  createUserSession: jest.fn(),
+  updateUserEndpoint: jest.fn().mockResolvedValue(true),
+  on: jest.fn(),
+  once: jest.fn(),
+  emit: jest.fn()
 } as any;
 
 const mockIngestManager = {

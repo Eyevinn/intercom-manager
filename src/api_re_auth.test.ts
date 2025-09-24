@@ -37,7 +37,30 @@ const mockDbManager = {
 };
 
 const mockProductionManager = {
-  checkUserStatus: jest.fn()
+  checkUserStatus: jest.fn(),
+  load: jest.fn().mockResolvedValue(undefined),
+  createProduction: jest.fn().mockResolvedValue({}),
+  getProductions: jest.fn().mockResolvedValue([]),
+  getNumberOfProductions: jest.fn().mockResolvedValue(0),
+  requireProduction: jest.fn().mockResolvedValue({}),
+  updateProduction: jest.fn().mockResolvedValue({}),
+  addProductionLine: jest.fn().mockResolvedValue(undefined),
+  getLine: jest.fn().mockResolvedValue(undefined),
+  getUsersForLine: jest.fn().mockResolvedValue([]),
+  updateProductionLine: jest.fn().mockResolvedValue({}),
+  deleteProductionLine: jest.fn().mockResolvedValue(undefined),
+  deleteProduction: jest.fn().mockResolvedValue(true),
+  removeUserSession: jest.fn().mockResolvedValue('session-id'),
+  getUser: jest.fn().mockResolvedValue(undefined),
+  requireLine: jest.fn().mockResolvedValue({}),
+  updateUserLastSeen: jest.fn().mockResolvedValue(true),
+  getProduction: jest.fn().mockResolvedValue(undefined),
+  setLineId: jest.fn().mockResolvedValue(undefined),
+  createUserSession: jest.fn(),
+  updateUserEndpoint: jest.fn().mockResolvedValue(true),
+  on: jest.fn(),
+  once: jest.fn(),
+  emit: jest.fn()
 } as any;
 
 const mockIngestManager = {
