@@ -1,7 +1,7 @@
 import { MongoClient } from 'mongodb';
-import { DbManager } from './interface';
 import { Ingest, Line, NewIngest, Production, UserSession } from '../models';
 import { assert } from '../utils';
+import { DbManager } from './interface';
 
 export class DbManagerMongoDb implements DbManager {
   private client: MongoClient;
@@ -51,8 +51,10 @@ export class DbManagerMongoDb implements DbManager {
 
   async getProduction(id: number): Promise<Production | undefined> {
     const db = this.client.db();
-    const result = await db.collection('productions').findOne({ _id: id });
-    return result ? (result as Production) : undefined;
+    // eslint-disable-next-line
+    return db.collection('productions').findOne({ _id: id as any }) as
+      | any
+      | undefined;
   }
 
   async updateProduction(
@@ -61,15 +63,15 @@ export class DbManagerMongoDb implements DbManager {
     const db = this.client.db();
     const result = await db
       .collection('productions')
-      .updateOne({ _id: production._id }, { $set: production });
+      .updateOne({ _id: production._id as any }, { $set: production });
     return result.modifiedCount === 1 ? production : undefined;
   }
 
   async addProduction(name: string, lines: Line[]): Promise<Production> {
     const db = this.client.db();
     const _id = await this.getNextSequence('productions');
-    const production: Production = { name, lines, _id };
-    await db.collection('productions').insertOne(production);
+    const production = { name, lines, _id };
+    await db.collection('productions').insertOne(production as any);
     return production;
   }
 
@@ -77,7 +79,7 @@ export class DbManagerMongoDb implements DbManager {
     const db = this.client.db();
     const result = await db
       .collection('productions')
-      .deleteOne({ _id: productionId });
+      .deleteOne({ _id: productionId as any });
     return result.deletedCount === 1;
   }
 
@@ -98,7 +100,7 @@ export class DbManagerMongoDb implements DbManager {
     await db
       .collection('productions')
       .updateOne(
-        { _id: productionId },
+        { _id: productionId as any },
         { $set: { lines: production.lines } }
       );
   }
@@ -106,14 +108,9 @@ export class DbManagerMongoDb implements DbManager {
   async addIngest(newIngest: NewIngest): Promise<Ingest> {
     const db = this.client.db();
     const _id = await this.getNextSequence('ingests');
-    const ingest: Ingest = {
-      ...newIngest,
-      _id,
-      deviceOutput: [],
-      deviceInput: []
-    };
-    await db.collection<Ingest>('ingests').insertOne(ingest);
-    return ingest;
+    const ingest = { ...newIngest, _id };
+    await db.collection<Ingest>('ingests').insertOne(ingest as any);
+    return ingest as Ingest;
   }
 
   /** Get all ingests from the database in reverse natural order, limited by the limit parameter */
@@ -132,8 +129,10 @@ export class DbManagerMongoDb implements DbManager {
 
   async getIngest(id: number): Promise<Ingest | undefined> {
     const db = this.client.db();
-    const result = await db.collection<Ingest>('ingests').findOne({ _id: id });
-    return result ? (result as Ingest) : undefined;
+    // eslint-disable-next-line
+    return db.collection<Ingest>('ingests').findOne({ _id: id as any }) as
+      | any
+      | undefined;
   }
 
   async getIngestsLength(): Promise<number> {
@@ -145,7 +144,7 @@ export class DbManagerMongoDb implements DbManager {
     const db = this.client.db();
     const result = await db
       .collection<Ingest>('ingests')
-      .updateOne({ _id: ingest._id }, { $set: ingest });
+      .updateOne({ _id: ingest._id as any }, { $set: ingest });
     return result.modifiedCount === 1 ? ingest : undefined;
   }
 
@@ -153,7 +152,7 @@ export class DbManagerMongoDb implements DbManager {
     const db = this.client.db();
     const result = await db
       .collection<Ingest>('ingests')
-      .deleteOne({ _id: ingestId });
+      .deleteOne({ _id: ingestId as any });
     return result.deletedCount === 1;
   }
 
@@ -166,7 +165,7 @@ export class DbManagerMongoDb implements DbManager {
     await db
       .collection('sessions')
       .updateOne(
-        { _id: sessionId },
+        { _id: sessionId as any },
         { $set: { ...userSession, _id: sessionId } },
         { upsert: true }
       );
@@ -174,7 +173,9 @@ export class DbManagerMongoDb implements DbManager {
 
   async getUserSession(sessionId: string): Promise<UserSession | undefined> {
     const db = this.client.db();
-    const session = await db.collection('sessions').findOne({ _id: sessionId });
+    const session = await db
+      .collection('sessions')
+      .findOne({ _id: sessionId as any });
     if (!session) {
       return undefined;
     }
@@ -190,7 +191,7 @@ export class DbManagerMongoDb implements DbManager {
 
     for (const session of sessions) {
       const { _id, ...userSession } = session;
-      result[_id as string] = userSession as UserSession;
+      result[_id as any] = userSession as UserSession;
     }
 
     return result;
@@ -200,7 +201,7 @@ export class DbManagerMongoDb implements DbManager {
     const db = this.client.db();
     const result = await db
       .collection('sessions')
-      .deleteOne({ _id: sessionId });
+      .deleteOne({ _id: sessionId as any });
     return result.deletedCount === 1;
   }
 
@@ -211,7 +212,7 @@ export class DbManagerMongoDb implements DbManager {
     const db = this.client.db();
     const result = await db
       .collection('sessions')
-      .updateOne({ _id: sessionId }, { $set: updates });
+      .updateOne({ _id: sessionId as any }, { $set: updates });
     return result.modifiedCount === 1;
   }
 }
