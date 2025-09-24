@@ -1,7 +1,6 @@
 import api from './api';
 import { NewProduction, Production } from './models';
 
-
 // mocking production objects
 const newProduction: NewProduction = {
   name: 'productionname',
@@ -123,32 +122,39 @@ const mockProductionManager = {
     const found = mockProductions.find((p) => p._id === id);
     return found || { _id: id, name: `prod-${id}`, lines: [] };
   }),
-  updateProduction: jest.fn()
+  updateProduction: jest
+    .fn()
     .mockImplementation(async (production: any, newName: string) => ({
       _id: production._id,
       name: newName
     })),
   addProductionLine: jest.fn().mockResolvedValue(undefined),
-  updateProductionLine: jest.fn()
+  updateProductionLine: jest
+    .fn()
     .mockImplementation(
       async (_production: any, _lineId: string, _newName: string) => ({})
     ),
   getUsersForLine: jest.fn().mockImplementation(() => []),
   userSessions: { 'mock-session': mockUserSession },
-  getProductions: jest.fn()
+  getProductions: jest
+    .fn()
     .mockImplementation(async (limit: number, offset: number) =>
       mockProductions.slice(offset, offset + limit)
     ),
   getNumberOfProductions: jest.fn().mockResolvedValue(3),
-  getLine: jest.fn().mockImplementation((lines: any[], id: string) =>
+  getLine: jest
+    .fn()
+    .mockImplementation((lines: any[], id: string) =>
       lines.find((l) => l.id === id)
     ),
-  updateUserLastSeen: jest.fn()
+  updateUserLastSeen: jest
+    .fn()
     .mockImplementation((sessionId: string) => sessionId === 'alive-session'),
   deleteProductionLine: jest.fn().mockResolvedValue(undefined),
   deleteProduction: jest.fn().mockResolvedValue(true),
-  removeUserSession: jest.fn()
-    .mockImplementation((sessionId: string) => sessionId), 
+  removeUserSession: jest
+    .fn()
+    .mockImplementation((sessionId: string) => sessionId),
   checkUserStatus: jest.fn()
 } as any;
 
@@ -158,10 +164,13 @@ describe('Production API', () => {
   let consoleErrorSpy: jest.SpyInstance<any, any>; // to remove negative test errors from console (console.error)
 
   beforeAll(() => {
-      // uses jest spy to keep track of 'setInterval' in api_productions, otherwise won't close properly
-    setIntervalSpy = jest.spyOn(global, 'setInterval')
+    // uses jest spy to keep track of 'setInterval' in api_productions, otherwise won't close properly
+    setIntervalSpy = jest
+      .spyOn(global, 'setInterval')
       .mockImplementation((..._args: any[]) => 1 as unknown as NodeJS.Timeout);
-    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    consoleErrorSpy = jest
+      .spyOn(console, 'error')
+      .mockImplementation((..._args: any[]) => undefined);
   });
 
   beforeAll(async () => {
