@@ -275,6 +275,12 @@ describe('production_manager', () => {
 describe('production_manager', () => {
   it('add an endpoint description to line connections', async () => {
     const dbManager = jest.requireMock('./db/interface');
+
+    dbManager.saveUserSession.mockResolvedValue(undefined);
+    dbManager.updateUserSession.mockResolvedValue(true);
+    dbManager.deleteUserSession.mockResolvedValue(true);
+    dbManager.getAllUserSessions.mockResolvedValue({});
+
     dbManager.getProduction.mockReturnValueOnce(existingProduction);
 
     const productionManagerTest = new ProductionManager(dbManager);
