@@ -1,5 +1,5 @@
 import api from './api';
-import { NewProduction, Production } from './models';
+import { NewProduction, Production, UserSession } from './models';
 
 // Mocking production objects
 const newProduction: NewProduction = {
@@ -38,7 +38,16 @@ const mockDbManager = {
   getIngestsLength: jest.fn().mockResolvedValue(0),
   getIngests: jest.fn().mockResolvedValue([]),
   updateIngest: jest.fn().mockResolvedValue(undefined),
-  deleteIngest: jest.fn().mockResolvedValue(true)
+  deleteIngest: jest.fn().mockResolvedValue(true),
+  saveUserSession: jest.fn().mockResolvedValue(undefined),
+  getUserSession: jest
+    .fn()
+    .mockResolvedValue(undefined as UserSession | undefined),
+  getAllUserSessions: jest
+    .fn()
+    .mockResolvedValue({} as Record<string, UserSession>),
+  deleteUserSession: jest.fn().mockResolvedValue(true),
+  updateUserSession: jest.fn().mockResolvedValue(true)
 };
 
 const mockIngestManager = {
