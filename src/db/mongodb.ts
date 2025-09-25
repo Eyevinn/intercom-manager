@@ -3,6 +3,8 @@ import { Ingest, Line, NewIngest, Production, UserSession } from '../models';
 import { assert } from '../utils';
 import { DbManager } from './interface';
 
+const SESSION_PRUNE_SECONDS = 7_200;
+
 export class DbManagerMongoDb implements DbManager {
   private client: MongoClient;
 
@@ -12,6 +14,13 @@ export class DbManagerMongoDb implements DbManager {
 
   async connect(): Promise<void> {
     await this.client.connect();
+    const db = this.client.db();
+    await db
+      .collection('sessions')
+      .createIndex(
+        { lastSeenAt: 1 },
+        { expireAfterSeconds: SESSION_PRUNE_SECONDS }
+      );
   }
 
   async disconnect(): Promise<void> {
@@ -162,11 +171,16 @@ export class DbManagerMongoDb implements DbManager {
     userSession: UserSession
   ): Promise<void> {
     const db = this.client.db();
+    const document = {
+      ...userSession,
+      _id: sessionId as any,
+      lastSeenAt: new Date(userSession.lastSeen ?? Date.now())
+    };
     await db
       .collection('sessions')
       .updateOne(
         { _id: sessionId as any },
-        { $set: { ...userSession, _id: sessionId } },
+        { $set: document },
         { upsert: true }
       );
   }
@@ -210,9 +224,14 @@ export class DbManagerMongoDb implements DbManager {
     updates: Partial<UserSession>
   ): Promise<boolean> {
     const db = this.client.db();
+    const $set: Record<string, unknown> = { ...updates };
+    if (typeof updates.lastSeen === 'number') {
+      $set.lastSeenAt = new Date(updates.lastSeen);
+    }
+
     const result = await db
       .collection('sessions')
-      .updateOne({ _id: sessionId as any }, { $set: updates });
-    return result.modifiedCount === 1;
+      .updateOne({ _id: sessionId as any }, { $set });
+    return result.matchedCount === 1;
   }
 }
