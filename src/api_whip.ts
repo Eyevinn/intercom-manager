@@ -46,42 +46,36 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
     '/conferences/',
     opts.smbServerBaseUrl
   ).toString();
+
   const smb = new SmbProtocol();
   const smbServerApiKey = opts.smbServerApiKey || '';
   const coreFunctions = opts.coreFunctions;
   const whipAuthKey = opts.whipAuthKey?.trim();
+
   async function requireWhipAuth(request: any, reply: any): Promise<boolean> {
     if (!whipAuthKey) {
       return true; // auth disabled
     }
-  
-    const authHeader = request.headers['authorization'] || request.headers['Authorization'];
-    if (!authHeader || typeof authHeader !== 'string') {
-      reply
-        .header('WWW-Authenticate', 'Bearer realm="whip", charset="UTF-8"')
-        .code(401)
-        .send({ error: 'Unauthorized' });
-    return false;
-    }
-  
+
+    const authHeader =
+      request.headers['authorization'] || request.headers['Authorization'];
     const prefix = 'Bearer ';
-    if (!authHeader.startsWith(prefix)) {
+
+    if (
+      !authHeader ||
+      typeof authHeader !== 'string' ||
+      !authHeader.startsWith(prefix) ||
+      authHeader.slice(prefix.length).trim() !== whipAuthKey //checks if presented key is equal to actual key
+    ) {
       reply
         .header('WWW-Authenticate', 'Bearer realm="whip", charset="UTF-8"')
         .code(401)
         .send({ error: 'Unauthorized' });
       return false;
     }
-    const presented = authHeader.slice(prefix.length).trim();
-    if (presented !== whipAuthKey) {
-      reply
-        .header('WWW-Authenticate', 'Bearer realm="whip", charset="UTF-8"')
-        .code(401)
-        .send({ error: 'Unauthorized' });
-      return false;
-    }
-    return true
+    return true;
   }
+
   fastify.post<{
     Params: { productionId: string; lineId: string; username: string };
     Body: Static<typeof WhipRequest>;
@@ -118,7 +112,7 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
       }
     },
     async (request, reply) => {
-      if (!await requireWhipAuth(request, reply)) return;
+      if (!(await requireWhipAuth(request, reply))) return;
       try {
         const { productionId, lineId, username } = request.params;
 
@@ -250,7 +244,7 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
       }
     },
     async (request, reply) => {
-      if (!await requireWhipAuth(request, reply)) return;
+      if (!(await requireWhipAuth(request, reply))) return;
       try {
         const { sessionId } = request.params;
 
