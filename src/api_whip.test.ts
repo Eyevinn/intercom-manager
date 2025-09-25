@@ -93,23 +93,7 @@ const createTestServer = async () => {
 const createAuthServer = async () => {
   const fastify = Fastify();
 
-  fastify.addContentTypeParser(
-    'application/json',
-    { parseAs: 'string' },
-    (req, body, done) => {
-      done(null, body);
-    }
-  );
-
-  fastify.register(rateLimit, { global: false });
   fastify.register(apiWhip, { ...defaultOptions, whipAuthKey: 'secret-123' });
-  await fastify.ready();
-  return fastify;
-};
-
-const createTestServerWithAuth = async () => {
-  const fastify = await createTestServer();
-  fastify.register(apiWhip, { ...defaultOptions, whipAuthKey: 'test-auth-key' });
   await fastify.ready();
   return fastify;
 };
@@ -217,8 +201,8 @@ describe('apiWhip', () => {
     });
   });
 
-  describe('POST /whip/:productionId/:lineId/:username (auth enabled)', () => {
-    it('POST without Authorization returns 401 when auth enabled', async () => {
+  describe('POST /whip/:productionId/:lineId/:username (WHIP authentication)', () => {
+    it('should return 401 when auth enabled and authorization header missing', async () => {
       const fastify = await createAuthServer();
       const res = await fastify.inject({
         method: 'POST',
@@ -230,7 +214,7 @@ describe('apiWhip', () => {
       expect(res.headers['www-authenticate']).toMatch(/Bearer.*realm="whip"/i);
     });
 
-    it('POST with wrong token returns 401', async () => {
+    it('should return 401 with wrong token auth key', async () => {
       const fastify = await createAuthServer();
       const res = await fastify.inject({
         method: 'POST',
@@ -245,7 +229,7 @@ describe('apiWhip', () => {
       expect(res.statusCode).toBe(401);
     });
 
-    it('POST with correct token returns 201', async () => {
+    it('should return 201 with correct token auth key', async () => {
       const fastify = await createAuthServer();
       const res = await fastify.inject({
         method: 'POST',
@@ -262,7 +246,7 @@ describe('apiWhip', () => {
   });
 
   describe('DELETE /whip/:productionId/:lineId/:sessionId', () => {
-    it('DELETE without Authorization returns 401 when auth enabled', async () => {
+    it('should return 401 when trying to delete WHIP session when it is not active', async () => {
       const fastify = await createAuthServer();
       const res = await fastify.inject({
         method: 'DELETE',
@@ -271,7 +255,7 @@ describe('apiWhip', () => {
       expect(res.statusCode).toBe(401);
     });
 
-    it('DELETE with correct token returns 200', async () => {
+    it('should termninate session and return 200 OK with auth enabled and correct token auth key', async () => {
       const fastify = await createAuthServer();
       const res = await fastify.inject({
         method: 'DELETE',
@@ -280,6 +264,7 @@ describe('apiWhip', () => {
       });
       expect(res.statusCode).toBe(200);
     });
+
     it('should terminate a session and return 200 OK', async () => {
       const fastify = await createTestServer();
 
