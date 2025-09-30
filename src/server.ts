@@ -48,6 +48,7 @@ if (dbUrl.protocol === 'mongodb:') {
     endpointIdleTimeout: ENDPOINT_IDLE_TIMEOUT_S,
     smbServerApiKey: process.env.SMB_APIKEY,
     publicHost: PUBLIC_HOST,
+    whipAuthKey: process.env.WHIP_AUTH_KEY,
     dbManager: dbManager,
     productionManager: productionManager,
     ingestManager: ingestManager,

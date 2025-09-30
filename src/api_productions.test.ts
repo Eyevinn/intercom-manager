@@ -132,7 +132,9 @@ const mockProductionManager = {
   updateProductionLine: jest
     .fn()
     .mockImplementation(
-      async (_production: any, _lineId: string, _newName: string) => ({})
+      async (_production: any, _lineId: string, _newName: string) => {
+        return {};
+      }
     ),
   getUsersForLine: jest.fn().mockImplementation(() => []),
   userSessions: { 'mock-session': mockUserSession },
