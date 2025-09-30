@@ -52,7 +52,7 @@ if (dbUrl.protocol === 'mongodb:') {
     dbManager: dbManager,
     productionManager: productionManager,
     ingestManager: ingestManager,
-    coreFunctions: new CoreFunctions(productionManager, connectionQueue),
+    coreFunctions: new CoreFunctions(productionManager, connectionQueue)
   });
 
   server.listen({ port: PORT, host: '0.0.0.0' }, (err, address) => {

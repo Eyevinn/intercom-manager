@@ -193,7 +193,6 @@ describe('apiWhip', () => {
 
       expect(response.statusCode).toBe(429);
       expect(JSON.parse(response.body)).toEqual(
-        
         expect.objectContaining({
           error: expect.stringMatching(/Too many/i)
         })
@@ -255,7 +254,7 @@ describe('apiWhip', () => {
       expect(res.statusCode).toBe(401);
     });
 
-    it('should termninate session and return 200 OK with auth enabled and correct token auth key', async () => {
+    it('should terminate session and return 200 OK with auth enabled and correct token auth key', async () => {
       const fastify = await createAuthServer();
       const res = await fastify.inject({
         method: 'DELETE',
