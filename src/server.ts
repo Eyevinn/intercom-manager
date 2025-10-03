@@ -25,7 +25,7 @@ const DB_CONNECTION_STRING: string =
   'mongodb://localhost:27017/intercom-manager';
 let dbManager;
 const dbUrl = new URL(DB_CONNECTION_STRING);
-if (dbUrl.protocol === 'mongodb:') {
+if (dbUrl.protocol === 'mongodb:' || dbUrl.protocol === 'mongodb+srv:') {
   dbManager = new DbManagerMongoDb(dbUrl);
 } else if (dbUrl.protocol === 'http:' || dbUrl.protocol === 'https:') {
   dbManager = new DbManagerCouchDb(dbUrl);
