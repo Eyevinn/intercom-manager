@@ -30,16 +30,7 @@ export class ProductionManager extends EventEmitter {
   }
 
   async load(): Promise<void> {
-    // Load sessions from database on startup
-    try {
-      this.userSessions = await this.dbManager.getAllUserSessions();
-      Log().info(
-        `Loaded ${Object.keys(this.userSessions).length} sessions from database`
-      );
-    } catch (error) {
-      Log().error('Failed to load sessions from database:', error);
-      this.userSessions = {};
-    }
+    // empty for now
   }
 
   checkUserStatus(
@@ -85,13 +76,6 @@ export class ProductionManager extends EventEmitter {
     for (const [sessionId, userSession] of userSessionsArray) {
       if (userSession.lastSeen < Date.now() - SESSION_PRUNE_THRESHOLD) {
         delete this.userSessions[sessionId];
-        // Remove from database
-        this.dbManager.deleteUserSession(sessionId).catch((error) => {
-          Log().error(
-            `Failed to delete session ${sessionId} from database:`,
-            error
-          );
-        });
         hasChanged = true;
       } else {
         const isActive =
@@ -103,15 +87,6 @@ export class ProductionManager extends EventEmitter {
           isExpired !== userSession.isExpired
         ) {
           Object.assign(userSession, { isActive, isExpired });
-          // Update in database
-          this.dbManager
-            .updateUserSession(sessionId, { isActive, isExpired })
-            .catch((error) => {
-              Log().error(
-                `Failed to update session ${sessionId} status in database:`,
-                error
-              );
-            });
           hasChanged = true;
         }
         if (userSession.isWhip && isExpired) {
@@ -261,7 +236,7 @@ export class ProductionManager extends EventEmitter {
     name: string,
     isWhip = false
   ): void {
-    const userSession = {
+    this.userSessions[sessionId] = {
       smbConferenceId,
       productionId,
       lineId,
@@ -271,14 +246,6 @@ export class ProductionManager extends EventEmitter {
       isExpired: false,
       isWhip
     };
-
-    this.userSessions[sessionId] = userSession;
-
-    // Save to database
-    this.dbManager.saveUserSession(sessionId, userSession).catch((error) => {
-      Log().error(`Failed to save session ${sessionId} to database:`, error);
-    });
-
     Log().info(`Created user session: "${name}": ${sessionId}`);
     this.emit('users:change');
   }
@@ -294,19 +261,9 @@ export class ProductionManager extends EventEmitter {
   updateUserLastSeen(sessionId: string, includeBuffer = false): boolean {
     const userSession = this.userSessions[sessionId];
     if (userSession) {
-      const lastSeen = includeBuffer ? Date.now() + 10000 : Date.now();
-      this.userSessions[sessionId].lastSeen = lastSeen;
-
-      // Update in database
-      this.dbManager
-        .updateUserSession(sessionId, { lastSeen })
-        .catch((error) => {
-          Log().error(
-            `Failed to update session ${sessionId} lastSeen in database:`,
-            error
-          );
-        });
-
+      this.userSessions[sessionId].lastSeen = includeBuffer
+        ? Date.now() + 10000
+        : Date.now();
       return true;
     }
     return false;
@@ -321,17 +278,6 @@ export class ProductionManager extends EventEmitter {
     if (userSession) {
       this.userSessions[sessionId].endpointId = endpointId;
       this.userSessions[sessionId].sessionDescription = sessionDescription;
-
-      // Update in database
-      this.dbManager
-        .updateUserSession(sessionId, { endpointId, sessionDescription })
-        .catch((error) => {
-          Log().error(
-            `Failed to update session ${sessionId} endpoint in database:`,
-            error
-          );
-        });
-
       return true;
     }
     return false;
@@ -340,15 +286,6 @@ export class ProductionManager extends EventEmitter {
   removeUserSession(sessionId: string): string | undefined {
     if (sessionId in this.userSessions) {
       delete this.userSessions[sessionId];
-
-      // Remove from database
-      this.dbManager.deleteUserSession(sessionId).catch((error) => {
-        Log().error(
-          `Failed to delete session ${sessionId} from database:`,
-          error
-        );
-      });
-
       this.emit('users:change');
       return sessionId;
     }

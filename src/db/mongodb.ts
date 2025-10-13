@@ -1,9 +1,7 @@
 import { MongoClient } from 'mongodb';
-import { Ingest, Line, NewIngest, Production, UserSession } from '../models';
-import { assert } from '../utils';
 import { DbManager } from './interface';
-
-const SESSION_PRUNE_SECONDS = 7_200;
+import { Ingest, Line, NewIngest, Production } from '../models';
+import { assert } from '../utils';
 
 export class DbManagerMongoDb implements DbManager {
   private client: MongoClient;
@@ -14,13 +12,6 @@ export class DbManagerMongoDb implements DbManager {
 
   async connect(): Promise<void> {
     await this.client.connect();
-    const db = this.client.db();
-    await db
-      .collection('sessions')
-      .createIndex(
-        { lastSeenAt: 1 },
-        { expireAfterSeconds: SESSION_PRUNE_SECONDS }
-      );
   }
 
   async disconnect(): Promise<void> {
@@ -36,7 +27,7 @@ export class DbManagerMongoDb implements DbManager {
       new: true,
       upsert: true
     });
-    return ret.value?.seq || 1;
+    return ret.value.seq;
   }
 
   /** Get all productions from the database in reverse natural order, limited by the limit parameter */
@@ -163,75 +154,5 @@ export class DbManagerMongoDb implements DbManager {
       .collection<Ingest>('ingests')
       .deleteOne({ _id: ingestId as any });
     return result.deletedCount === 1;
-  }
-
-  // Session management methods
-  async saveUserSession(
-    sessionId: string,
-    userSession: UserSession
-  ): Promise<void> {
-    const db = this.client.db();
-    const document = {
-      ...userSession,
-      _id: sessionId as any,
-      lastSeenAt: new Date(userSession.lastSeen ?? Date.now())
-    };
-    await db
-      .collection('sessions')
-      .updateOne(
-        { _id: sessionId as any },
-        { $set: document },
-        { upsert: true }
-      );
-  }
-
-  async getUserSession(sessionId: string): Promise<UserSession | undefined> {
-    const db = this.client.db();
-    const session = await db
-      .collection('sessions')
-      .findOne({ _id: sessionId as any });
-    if (!session) {
-      return undefined;
-    }
-    // Remove the MongoDB _id field from the returned session
-    const { _id, ...userSession } = session;
-    return userSession as UserSession;
-  }
-
-  async getAllUserSessions(): Promise<Record<string, UserSession>> {
-    const db = this.client.db();
-    const sessions = await db.collection('sessions').find({}).toArray();
-    const result: Record<string, UserSession> = {};
-
-    for (const session of sessions) {
-      const { _id, ...userSession } = session;
-      result[_id as any] = userSession as UserSession;
-    }
-
-    return result;
-  }
-
-  async deleteUserSession(sessionId: string): Promise<boolean> {
-    const db = this.client.db();
-    const result = await db
-      .collection('sessions')
-      .deleteOne({ _id: sessionId as any });
-    return result.deletedCount === 1;
-  }
-
-  async updateUserSession(
-    sessionId: string,
-    updates: Partial<UserSession>
-  ): Promise<boolean> {
-    const db = this.client.db();
-    const $set: Record<string, unknown> = { ...updates };
-    if (typeof updates.lastSeen === 'number') {
-      $set.lastSeenAt = new Date(updates.lastSeen);
-    }
-
-    const result = await db
-      .collection('sessions')
-      .updateOne({ _id: sessionId as any }, { $set });
-    return result.matchedCount === 1;
   }
 }
