@@ -1,0 +1,110 @@
+name: Generate Release Notes
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - '*'
+
+jobs:
+  generate-release-notes:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch full history for release notes generation
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          npm install @anthropic-ai/sdk
+
+      - name: Generate release notes
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cat > generate_release_notes.js << 'EOF'
+          const { Anthropic } = require('@anthropic-ai/sdk');
+          const { execSync } = require('child_process');
+
+          async function generateReleaseNotes() {
+            try {
+              const anthropic = new Anthropic({
+                apiKey: process.env.ANTHROPIC_API_KEY
+              });
+
+              const currentTag = process.env.GITHUB_REF_NAME;
+              console.log(`Generating release notes for tag: ${currentTag}`);
+
+              // Get the previous tag
+              let previousTag;
+              try {
+                previousTag = execSync('git describe --tags --abbrev=0 HEAD^', { encoding: 'utf-8' }).trim();
+              } catch (error) {
+                // If no previous tag exists, get all commits
+                previousTag = null;
+              }
+
+              // Get commit messages between tags
+              const gitLogCommand = previousTag
+                ? `git log ${previousTag}..HEAD --oneline --no-merges`
+                : `git log --oneline --no-merges`;
+
+              const commits = execSync(gitLogCommand, { encoding: 'utf-8' }).trim();
+
+              if (!commits) {
+                console.log('No commits found for release notes generation');
+                return;
+              }
+
+              const prompt = `Please generate professional release notes for version ${currentTag} based on the following git commits:
+
+              ${commits}
+
+              Please format the release notes with:
+              - A brief summary of the changes
+              - Categorized changes (Features, Bug Fixes, Improvements, etc.)
+              - Clear, user-friendly descriptions
+              - Proper markdown formatting
+
+              The release notes should be professional and suitable for a public release.`;
+
+              const response = await anthropic.messages.create({
+                model: 'claude-3-5-sonnet-20241022',
+                max_tokens: 2000,
+                messages: [{
+                  role: 'user',
+                  content: prompt
+                }]
+              });
+
+              const releaseNotes = response.content[0].text;
+
+              // Create the release using GitHub CLI
+              const releaseNotesFile = 'release_notes.md';
+              require('fs').writeFileSync(releaseNotesFile, releaseNotes);
+
+              execSync(`gh release create ${currentTag} --title "Release ${currentTag}" --notes-file ${releaseNotesFile}`, {
+                stdio: 'inherit',
+                env: { ...process.env, GH_TOKEN: process.env.GITHUB_TOKEN }
+              });
+
+              console.log(`✅ Release notes generated and published for ${currentTag}`);
+
+            } catch (error) {
+              console.error('❌ Error generating release notes:', error);
+              process.exit(1);
+            }
+          }
+
+          generateReleaseNotes();
+          EOF
+
+          node generate_release_notes.js
