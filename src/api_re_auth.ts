@@ -49,7 +49,9 @@ const apiReAuth: FastifyPluginCallback = (fastify, _, next) => {
           });
         }
       } else {
-        reply.code(405).send({ error: 'No OSC_ACCESS_TOKEN set, method not allowed' });
+        reply
+          .code(405)
+          .send({ error: 'No OSC_ACCESS_TOKEN set, method not allowed' });
       }
     }
   );
