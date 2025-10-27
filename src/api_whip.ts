@@ -208,7 +208,7 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
           true
         );
 
-        // Update user endpoint info and store a stable smbPresenceKey
+        // Update user endpoint information
         await productionManager.updateUserEndpoint(
           sessionId,
           endpointId,
@@ -274,6 +274,7 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
           return;
         }
 
+        // Remove the user session
         await opts.dbManager.deleteUserSession(sessionId);
         productionManager.removeUserSession(sessionId);
         productionManager.emit('users:change');
@@ -281,8 +282,7 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
         Log().info(
           `WHIP session deleted successfully - sessionId: ${sessionId}`
         );
-
-        // CORS & response
+        // Add CORS headers for browser compatibility
         reply.headers({
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'POST, DELETE, OPTIONS',

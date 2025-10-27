@@ -1,3 +1,11 @@
+jest.mock('./log', () => ({
+  Log: () => ({
+    error: jest.fn(),
+    warn: jest.fn(),
+    info: jest.fn(),
+    debug: jest.fn()
+  })
+}));
 import api from './api';
 import { NewProduction, Production } from './models';
 
@@ -38,7 +46,12 @@ const mockDbManager = {
   getIngestsLength: jest.fn().mockResolvedValue(0),
   getIngests: jest.fn().mockResolvedValue([]),
   updateIngest: jest.fn().mockResolvedValue(undefined),
-  deleteIngest: jest.fn().mockResolvedValue(true)
+  deleteIngest: jest.fn().mockResolvedValue(true),
+  saveUserSession: jest.fn().mockResolvedValue(undefined),
+  getSession: jest.fn().mockResolvedValue(null),
+  deleteUserSession: jest.fn().mockResolvedValue(true),
+  updateSession: jest.fn().mockResolvedValue(true),
+  getSessionsByQuery: jest.fn().mockResolvedValue([])
 };
 
 const mockIngestManager = {
@@ -118,6 +131,7 @@ const mockProductions = [
 
 const mockProductionManager = {
   createProduction: jest.fn().mockResolvedValue(createdProduction),
+  checkUserStatus: jest.fn().mockResolvedValue(undefined),
   requireProduction: jest.fn().mockImplementation(async (id: number) => {
     const found = mockProductions.find((p) => p._id === id);
     return found || { _id: id, name: `prod-${id}`, lines: [] };
@@ -157,7 +171,8 @@ const mockProductionManager = {
   removeUserSession: jest
     .fn()
     .mockImplementation((sessionId: string) => sessionId),
-  checkUserStatus: jest.fn()
+  createUserSession: jest.fn().mockResolvedValue(undefined),
+  getActiveUsers: jest.fn().mockResolvedValue([])
 } as any;
 
 describe('Production API', () => {
@@ -390,8 +405,8 @@ describe('Production API', () => {
       expect(response.body).toBe('deleted');
     });
     test('throws an error if trying to delete a line with active participants', async () => {
-      const getUsersSpy = jest.spyOn(mockProductionManager, 'getUsersForLine');
-      getUsersSpy.mockImplementationOnce(() => [{ isActive: true }]);
+      const getUsersSpy = jest.spyOn(mockProductionManager, 'getActiveUsers');
+      getUsersSpy.mockResolvedValueOnce([{ lineId: '1', isActive: true }]);
       const response = await server.inject({
         method: 'DELETE',
         url: '/api/v1/production/1/line/1'
@@ -451,8 +466,9 @@ describe('Production API', () => {
       expect(response.statusCode).toBe(200);
     });
     test('returns 500 when session deletion fails', async () => {
-      const removeSpy = jest.spyOn(mockProductionManager, 'removeUserSession');
-      removeSpy.mockImplementationOnce(() => undefined as any);
+      const removeSpy = jest
+        .spyOn(mockDbManager, 'deleteUserSession')
+        .mockResolvedValueOnce(false);
       const response = await server.inject({
         method: 'DELETE',
         url: '/api/v1/session/mock-session'
@@ -480,16 +496,17 @@ describe('Production API', () => {
       expect(Array.isArray(body)).toBe(true);
     });
     test('returns 500 when long poll fails due to internal error', async () => {
-      const getUsersSpy = jest.spyOn(mockProductionManager, 'getUsersForLine');
-      getUsersSpy.mockImplementationOnce(() => {
-        throw new Error('read error');
-      });
+      const sessionsSpy = jest
+        .spyOn(mockDbManager, 'getSessionsByQuery')
+        .mockImplementationOnce(() => {
+          throw new Error('read error');
+        });
       const response = await server.inject({
         method: 'POST',
         url: '/api/v1/production/1/line/1/participants'
       });
       expect(response.statusCode).toBe(500);
-      getUsersSpy.mockRestore();
+      sessionsSpy.mockRestore();
     });
   });
 
