@@ -8,6 +8,7 @@ import { Line, WhipRequest, WhipResponse } from './models';
 import { ProductionManager } from './production_manager';
 import { SmbProtocol } from './smb';
 import { getIceServers } from './utils';
+import { DbManager } from './db/interface';
 
 export interface ApiWhipOptions {
   smbServerBaseUrl: string;
@@ -17,6 +18,7 @@ export interface ApiWhipOptions {
   productionManager: ProductionManager;
   publicHost: string;
   whipAuthKey?: string;
+  dbManager: DbManager;
 }
 
 export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
@@ -187,8 +189,8 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
           return reply.code(400).send({ error: 'Malformed SDP' });
         }
 
-        // Create user session in production manager
-        productionManager.createUserSession(
+        // Create user session in production manager (await to guarantee DB state)
+        await productionManager.createUserSession(
           smbConferenceId,
           productionId,
           lineId,
@@ -198,7 +200,11 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
         );
 
         // Update user endpoint information
-        productionManager.updateUserEndpoint(sessionId, endpointId, endpoint);
+        await productionManager.updateUserEndpoint(
+          sessionId,
+          endpointId,
+          endpoint
+        );
 
         // Create the Location URL for the WHIP resource
         const baseUrl = opts.publicHost.endsWith('/')
@@ -248,12 +254,16 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
       try {
         const { sessionId } = request.params;
 
-        // Remove the user session
-        const deletedSessionId = productionManager.removeUserSession(sessionId);
-        if (!deletedSessionId) {
+        const sessionToDelete = await opts.dbManager.getSession(sessionId);
+        if (!sessionToDelete) {
           reply.code(404).send({ error: 'WHIP session not found' });
           return;
         }
+
+        // Remove the user session
+        await opts.dbManager.deleteUserSession(sessionId);
+        productionManager.removeUserSession(sessionId);
+        productionManager.emit('users:change');
 
         // Add CORS headers for browser compatibility
         reply.headers({
