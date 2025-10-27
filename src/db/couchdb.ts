@@ -1,5 +1,16 @@
 import { Log } from '../log';
-import { Ingest, Line, NewIngest, Production } from '../models';
+import {
+  BridgeStatus,
+  Ingest,
+  Line,
+  NewIngest,
+  NewReceiver,
+  NewTransmitter,
+  Production,
+  Receiver,
+  Transmitter,
+  UserSession
+} from '../models';
 import { assert } from '../utils';
 import { DbManager } from './interface';
 import nano from 'nano';
@@ -13,6 +24,239 @@ export class DbManagerCouchDb implements DbManager {
     this.dbConnectionUrl = dbConnectionUrl;
     const server = new URL('/', this.dbConnectionUrl).toString();
     this.client = nano(server);
+  }
+  async addTransmitter(newTransmitter: NewTransmitter): Promise<Transmitter> {
+    await this.connect();
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
+
+    const now = new Date().toISOString();
+    const transmitter: Transmitter = {
+      _id: String(newTransmitter.port),
+      ...newTransmitter,
+      status: BridgeStatus.IDLE,
+      createdAt: now,
+      updatedAt: now
+    };
+    const response = await this.nanoDb.insert(
+      transmitter as unknown as nano.MaybeDocument
+    );
+    if (!response.ok) throw new Error('Failed to insert transmitter');
+    return transmitter;
+  }
+
+  async getTransmitter(port: number): Promise<Transmitter | undefined> {
+    await this.connect();
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
+
+    try {
+      const transmitter = await this.nanoDb.get(String(port));
+      return transmitter as any | undefined;
+    } catch (error) {
+      return undefined;
+    }
+  }
+
+  async getTransmitters(limit: number, offset: number): Promise<Transmitter[]> {
+    await this.connect();
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
+
+    const transmitters: Transmitter[] = [];
+    const response = await this.nanoDb.list({
+      include_docs: true
+    });
+    response.rows.forEach((row: any) => {
+      if (
+        row.doc._id.toLowerCase().indexOf('counter') === -1 &&
+        row.doc._id.toLowerCase().indexOf('session_') === -1 &&
+        row.doc._id.toLowerCase().indexOf('rx-') === -1 &&
+        !isNaN(Number(row.doc._id))
+      ) {
+        transmitters.push(row.doc);
+      }
+    });
+
+    const result = transmitters.slice(offset, offset + limit);
+    return result as any as Transmitter[];
+  }
+
+  async getTransmittersLength(): Promise<number> {
+    await this.connect();
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
+
+    const response = await this.nanoDb.list({ include_docs: false });
+    const filteredRows = response.rows.filter(
+      (row: any) =>
+        row.id.toLowerCase().indexOf('counter') === -1 &&
+        row.id.toLowerCase().indexOf('session_') === -1 &&
+        row.id.toLowerCase().indexOf('rx-') === -1 &&
+        !isNaN(Number(row.id))
+    );
+    return filteredRows.length;
+  }
+
+  async updateTransmitter(
+    transmitter: Transmitter
+  ): Promise<Transmitter | undefined> {
+    await this.connect();
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
+
+    const now = new Date().toISOString();
+    try {
+      const existingTransmitter = await this.nanoDb.get(
+        String(transmitter.port)
+      );
+      const updatedTransmitter = {
+        ...existingTransmitter,
+        ...transmitter,
+        _id: String(transmitter.port),
+        updatedAt: now
+      };
+      const response = await this.nanoDb.insert(updatedTransmitter);
+      return response.ok ? transmitter : undefined;
+    } catch (error) {
+      return undefined;
+    }
+  }
+
+  async deleteTransmitter(port: number): Promise<boolean> {
+    await this.connect();
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
+
+    try {
+      const transmitter = await this.nanoDb.get(String(port));
+      const response = await this.nanoDb.destroy(
+        transmitter._id,
+        transmitter._rev
+      );
+      return response.ok;
+    } catch (error) {
+      return false;
+    }
+  }
+  async addReceiver(newReceiver: NewReceiver): Promise<Receiver> {
+    await this.connect();
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
+
+    const now = new Date().toISOString();
+    const index = await this.getNextSequence('receivers');
+    const id = `rx-${index}`;
+    const receiver: Receiver = {
+      _id: id,
+      ...newReceiver,
+      status: BridgeStatus.IDLE,
+      createdAt: now,
+      updatedAt: now
+    };
+    const response = await this.nanoDb.insert(
+      receiver as unknown as nano.MaybeDocument
+    );
+    if (!response.ok) throw new Error('Failed to insert receiver');
+    return receiver;
+  }
+
+  async getReceiver(id: string): Promise<Receiver | undefined> {
+    await this.connect();
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
+
+    try {
+      const receiver = await this.nanoDb.get(id);
+      return receiver as any | undefined;
+    } catch (error) {
+      return undefined;
+    }
+  }
+
+  async getReceivers(limit: number, offset: number): Promise<Receiver[]> {
+    await this.connect();
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
+
+    const receivers: Receiver[] = [];
+    const response = await this.nanoDb.list({
+      include_docs: true
+    });
+    response.rows.forEach((row: any) => {
+      if (
+        row.doc._id.toLowerCase().indexOf('counter') === -1 &&
+        row.doc._id.toLowerCase().indexOf('session_') === -1 &&
+        row.doc._id.toLowerCase().startsWith('rx-')
+      ) {
+        receivers.push(row.doc);
+      }
+    });
+
+    const result = receivers.slice(offset, offset + limit);
+    return result as any as Receiver[];
+  }
+
+  async getReceiversLength(): Promise<number> {
+    await this.connect();
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
+
+    const response = await this.nanoDb.list({ include_docs: false });
+    const filteredRows = response.rows.filter(
+      (row: any) =>
+        row.id.toLowerCase().indexOf('counter') === -1 &&
+        row.id.toLowerCase().indexOf('session_') === -1 &&
+        row.id.toLowerCase().startsWith('rx-')
+    );
+    return filteredRows.length;
+  }
+
+  async updateReceiver(receiver: Receiver): Promise<Receiver | undefined> {
+    await this.connect();
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
+
+    const now = new Date().toISOString();
+    try {
+      const existingReceiver = await this.nanoDb.get(receiver._id);
+      const updatedReceiver = {
+        ...existingReceiver,
+        ...receiver,
+        _id: receiver._id,
+        updatedAt: now
+      };
+      const response = await this.nanoDb.insert(updatedReceiver);
+      return response.ok ? receiver : undefined;
+    } catch (error) {
+      return undefined;
+    }
+  }
+
+  async deleteReceiver(id: string): Promise<boolean> {
+    await this.connect();
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
+
+    try {
+      const receiver = await this.nanoDb.get(id);
+      const response = await this.nanoDb.destroy(receiver._id, receiver._rev);
+      return response.ok;
+    } catch (error) {
+      return false;
+    }
   }
 
   async connect(): Promise<void> {

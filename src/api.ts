@@ -11,6 +11,9 @@ import { ApiProductionsOptions, getApiProductions } from './api_productions';
 import apiReAuth from './api_re_auth';
 import apiShare from './api_share';
 import apiWhip, { ApiWhipOptions } from './api_whip';
+import apiWhep, { ApiWhepOptions } from './api_whep';
+import apiBridgeTx, { ApiBridgeTxOptions } from './api_bridge_tx';
+import apiBridgeRx, { ApiBridgeRxOptions } from './api_bridge_rx';
 import { DbManager } from './db/interface';
 import { IngestManager } from './ingest_manager';
 import { ProductionManager } from './production_manager';
@@ -54,11 +57,17 @@ export interface ApiGeneralOptions {
   dbManager: DbManager;
   productionManager: ProductionManager;
   ingestManager: IngestManager;
+  whipGatewayUrl?: string;
+  whipGatewayApiKey?: string;
+  whepGatewayUrl?: string;
+  whepGatewayApiKey?: string;
 }
 
 export type ApiOptions = ApiGeneralOptions &
   ApiProductionsOptions &
-  ApiWhipOptions;
+  ApiWhipOptions &
+  ApiBridgeTxOptions &
+  ApiBridgeRxOptions;
 
 export default async (opts: ApiOptions) => {
   const api = fastify({
@@ -94,6 +103,31 @@ export default async (opts: ApiOptions) => {
   });
 
   api.register(healthcheck, { title: opts.title });
+
+  // Bridge configuration endpoint
+  const BridgeConfig = Type.Object({
+    whipGatewayEnabled: Type.Boolean(),
+    whepGatewayEnabled: Type.Boolean()
+  });
+
+  api.get<{ Reply: Static<typeof BridgeConfig> }>(
+    '/api/v1/bridge/config',
+    {
+      schema: {
+        description: 'Get bridge gateway configuration',
+        response: {
+          200: BridgeConfig
+        }
+      }
+    },
+    async (_, reply) => {
+      reply.send({
+        whipGatewayEnabled: !!opts.whipGatewayUrl,
+        whepGatewayEnabled: !!opts.whepGatewayUrl
+      });
+    }
+  );
+
   // register other API routes here
   api.register(getApiProductions(), {
     prefix: 'api/v1',
@@ -111,11 +145,39 @@ export default async (opts: ApiOptions) => {
     smbServerBaseUrl: opts.smbServerBaseUrl,
     coreFunctions: opts.coreFunctions,
     productionManager: opts.productionManager,
-    publicHost: opts.publicHost,
-    whipAuthKey: opts.whipAuthKey
+    dbManager: opts.dbManager,
+    whipGatewayUrl: opts.whipGatewayUrl
+  });
+  api.register(apiWhep, {
+    prefix: 'api/v1',
+    smbServerApiKey: opts.smbServerApiKey,
+    endpointIdleTimeout: opts.endpointIdleTimeout,
+    smbServerBaseUrl: opts.smbServerBaseUrl,
+    coreFunctions: opts.coreFunctions,
+    productionManager: opts.productionManager,
+    dbManager: opts.dbManager,
+    whepGatewayUrl: opts.whepGatewayUrl
   });
   api.register(apiShare, { publicHost: opts.publicHost, prefix: 'api/v1' });
   api.register(apiReAuth, { prefix: 'api/v1' });
+
+  // Register bridge IO endpoints (only if gateways are configured)
+  if (opts.whipGatewayUrl) {
+    api.register(apiBridgeTx, {
+      prefix: 'api/v1',
+      dbManager: opts.dbManager,
+      whipGatewayUrl: opts.whipGatewayUrl,
+      whipGatewayApiKey: opts.whipGatewayApiKey
+    });
+  }
+  if (opts.whepGatewayUrl) {
+    api.register(apiBridgeRx, {
+      prefix: 'api/v1',
+      dbManager: opts.dbManager,
+      whepGatewayUrl: opts.whepGatewayUrl,
+      whepGatewayApiKey: opts.whepGatewayApiKey
+    });
+  }
 
   api.all('/whip/:productionId/:lineId', async (request, reply) => {
     if (request.method !== 'POST' && request.method !== 'OPTIONS') {
@@ -139,5 +201,6 @@ export default async (opts: ApiOptions) => {
     dbManager: opts.dbManager,
     ingestManager: opts.ingestManager
   });
+
   return api;
 };

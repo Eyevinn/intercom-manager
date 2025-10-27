@@ -388,3 +388,108 @@ export const PatchIngest = Type.Union([
 ]);
 
 export const PatchIngestResponse = Type.Omit(Ingest, ['ipAddress']);
+
+// Bridge IO - Transmitters and Receivers
+
+export enum BridgeStatus {
+  IDLE = 'idle',
+  RUNNING = 'running',
+  STOPPED = 'stopped',
+  FAILED = 'failed'
+}
+
+export const Transmitter = Type.Object({
+  _id: Type.String({ description: 'Unique transmitter ID (port as string)' }),
+  label: Type.Optional(Type.String({ description: 'Human-readable label' })),
+  port: Type.Number({ description: 'SRT port' }),
+  productionId: Type.Number({ description: 'Production ID' }),
+  lineId: Type.Number({ description: 'Line ID' }),
+  whipUrl: Type.String({ description: 'WHIP URL' }),
+  passThroughUrl: Type.Optional(
+    Type.String({ description: 'Pass-through to SRT ingest URL' })
+  ),
+  mode: Type.Union([Type.Literal('caller'), Type.Literal('listener')]),
+  srtUrl: Type.Optional(
+    Type.String({ description: 'SRT URL (for caller mode)' })
+  ),
+  status: Type.Enum(BridgeStatus),
+  desiredStatus: Type.Optional(Type.Enum(BridgeStatus)),
+  createdAt: Type.Optional(Type.String({ format: 'date-time' })),
+  updatedAt: Type.Optional(Type.String({ format: 'date-time' }))
+});
+export type Transmitter = Static<typeof Transmitter>;
+
+export const NewTransmitter = Type.Object({
+  label: Type.Optional(Type.String()),
+  port: Type.Number(),
+  productionId: Type.Number({ description: 'Production ID' }),
+  lineId: Type.Number({ description: 'Line ID' }),
+  whipUrl: Type.String({ description: 'WHIP URL' }),
+  passThroughUrl: Type.Optional(Type.String()),
+  mode: Type.Union([Type.Literal('caller'), Type.Literal('listener')]),
+  srtUrl: Type.Optional(Type.String())
+});
+export type NewTransmitter = Static<typeof NewTransmitter>;
+
+export const TransmitterListResponse = Type.Object({
+  transmitters: Type.Array(Transmitter),
+  offset: Type.Number(),
+  limit: Type.Number(),
+  totalItems: Type.Number()
+});
+export type TransmitterListResponse = Static<typeof TransmitterListResponse>;
+
+export const TransmitterStateChange = Type.Object({
+  desired: Type.Enum(BridgeStatus)
+});
+export type TransmitterStateChange = Static<typeof TransmitterStateChange>;
+
+export const Receiver = Type.Object({
+  _id: Type.String({ description: 'Unique receiver ID' }),
+  label: Type.Optional(Type.String({ description: 'Human-readable label' })),
+  productionId: Type.Number({ description: 'Production ID' }),
+  lineId: Type.Number({ description: 'Line ID' }),
+  whepUrl: Type.String({ description: 'WHEP URL' }),
+  srtUrl: Type.String({ description: 'SRT output URL' }),
+  status: Type.Enum(BridgeStatus),
+  desiredStatus: Type.Optional(Type.Enum(BridgeStatus)),
+  createdAt: Type.Optional(Type.String({ format: 'date-time' })),
+  updatedAt: Type.Optional(Type.String({ format: 'date-time' }))
+});
+export type Receiver = Static<typeof Receiver>;
+
+export const NewReceiver = Type.Object({
+  label: Type.Optional(Type.String()),
+  productionId: Type.Number({ description: 'Production ID' }),
+  lineId: Type.Number({ description: 'Line ID' }),
+  whepUrl: Type.String({ description: 'WHEP URL' }),
+  srtUrl: Type.String()
+});
+export type NewReceiver = Static<typeof NewReceiver>;
+
+export const ReceiverListResponse = Type.Object({
+  receivers: Type.Array(Receiver),
+  offset: Type.Number(),
+  limit: Type.Number(),
+  totalItems: Type.Number()
+});
+export type ReceiverListResponse = Static<typeof ReceiverListResponse>;
+
+export const ReceiverStateChange = Type.Object({
+  desired: Type.Enum(BridgeStatus)
+});
+export type ReceiverStateChange = Static<typeof ReceiverStateChange>;
+
+export const PatchTransmitter = Type.Object({
+  label: Type.Optional(Type.String()),
+  productionId: Type.Optional(Type.Number()),
+  lineId: Type.Optional(Type.Number())
+});
+export type PatchTransmitter = Static<typeof PatchTransmitter>;
+
+export const PatchReceiver = Type.Object({
+  label: Type.Optional(Type.String()),
+  productionId: Type.Optional(Type.Number()),
+  lineId: Type.Optional(Type.Number())
+});
+export type PatchReceiver = Static<typeof PatchReceiver>;
