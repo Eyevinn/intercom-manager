@@ -16,7 +16,8 @@ import { SmbProtocol } from './smb';
 const SESSION_INACTIVE_THRESHOLD = 60_000;
 const SESSION_EXPIRED_THRESHOLD = 100_000;
 
-// TODO: ADD comment here and also what happened with SESSION_PRUNE_THRESHOLD
+// Sessions are changed from active to inactive after a minute, and are marked as expired after ~100 s.
+// Long-term pruning now happens via the Mongo TTL index configured with SESSION_PRUNE_SECONDS in mongodb.ts.
 const WHIP_START_MS = parseInt(process.env.WHIP_WARMUP_MS ?? '15000', 10);
 const WHIP_INACTIVE_ALLOW_MS = parseInt(
   process.env.WHIP_INACTIVE_ALLOW_MS ?? '10000',
@@ -167,7 +168,8 @@ export class ProductionManager extends EventEmitter {
           continue;
         }
 
-        // TODO: Add comments here
+        // Pull the latest presence list for this conference and look up the WHIP endpoint's key
+        // (prefer the per-session smbPresenceKey, fallback to endpointId). Presence indicates the WHIP is connected.
         const set = conferenceUsers.get(whipSession.smbConferenceId.toString());
         const key = (
           (whipSession as any).smbPresenceKey ||

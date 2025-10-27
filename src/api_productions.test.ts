@@ -7,7 +7,7 @@ jest.mock('./log', () => ({
   })
 }));
 import api from './api';
-import { NewProduction, Production, UserSession } from './models';
+import { NewProduction, Production } from './models';
 
 // Mocking production objects
 const newProduction: NewProduction = {
