@@ -160,15 +160,6 @@ export default async (opts: ApiOptions) => {
     dbManager: opts.dbManager,
     whepGatewayUrl: opts.whepGatewayUrl
   });
-  api.register(apiWhep, {
-    prefix: 'api/v1',
-    smbServerApiKey: opts.smbServerApiKey,
-    endpointIdleTimeout: opts.endpointIdleTimeout,
-    smbServerBaseUrl: opts.smbServerBaseUrl,
-    coreFunctions: opts.coreFunctions,
-    productionManager: opts.productionManager,
-    dbManager: opts.dbManager
-  });
   api.register(apiShare, { publicHost: opts.publicHost, prefix: 'api/v1' });
   api.register(apiReAuth, { prefix: 'api/v1' });
 
