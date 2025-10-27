@@ -169,7 +169,6 @@ export class ProductionManager extends EventEmitter {
         }
 
         // Pull the latest presence list for this conference and look up the WHIP endpoint's key
-        // (prefer the per-session smbPresenceKey, fallback to endpointId). Presence indicates the WHIP is connected.
         const set = conferenceUsers.get(whipSession.smbConferenceId.toString());
         const key = (
           (whipSession as any).smbPresenceKey ||
