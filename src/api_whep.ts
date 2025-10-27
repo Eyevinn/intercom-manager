@@ -43,13 +43,21 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = async (
               rateLimitAllowList.push(ip);
             }
           }
-          Log().info(`WHEP rate limit allowList - resolved ${gatewayHost} to IPs: ${addresses.join(', ')}`);
+          Log().info(
+            `WHEP rate limit allowList - resolved ${gatewayHost} to IPs: ${addresses.join(
+              ', '
+            )}`
+          );
         } catch (resolveErr) {
-          Log().warn(`Failed to resolve WHEP gateway hostname ${gatewayHost}: ${resolveErr}`);
+          Log().warn(
+            `Failed to resolve WHEP gateway hostname ${gatewayHost}: ${resolveErr}`
+          );
         }
       }
     } catch (err) {
-      Log().warn(`Failed to parse WHEP gateway URL for rate limit allowList: ${err}`);
+      Log().warn(
+        `Failed to parse WHEP gateway URL for rate limit allowList: ${err}`
+      );
     }
   }
 
@@ -371,7 +379,6 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = async (
       }
     }
   );
-
 };
 
 export default apiWhep;

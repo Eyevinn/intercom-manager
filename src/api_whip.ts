@@ -44,13 +44,21 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = async (
               rateLimitAllowList.push(ip);
             }
           }
-          Log().info(`WHIP rate limit allowList - resolved ${gatewayHost} to IPs: ${addresses.join(', ')}`);
+          Log().info(
+            `WHIP rate limit allowList - resolved ${gatewayHost} to IPs: ${addresses.join(
+              ', '
+            )}`
+          );
         } catch (resolveErr) {
-          Log().warn(`Failed to resolve WHIP gateway hostname ${gatewayHost}: ${resolveErr}`);
+          Log().warn(
+            `Failed to resolve WHIP gateway hostname ${gatewayHost}: ${resolveErr}`
+          );
         }
       }
     } catch (err) {
-      Log().warn(`Failed to parse WHIP gateway URL for rate limit allowList: ${err}`);
+      Log().warn(
+        `Failed to parse WHIP gateway URL for rate limit allowList: ${err}`
+      );
     }
   }
 

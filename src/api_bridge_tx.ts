@@ -285,7 +285,8 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
     '/bridge/tx/:port',
     {
       schema: {
-        description: 'Update transmitter metadata (label, productionId, lineId)',
+        description:
+          'Update transmitter metadata (label, productionId, lineId)',
         params: ParamsPort,
         body: PatchTransmitter,
         response: {
@@ -314,7 +315,11 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
           request.body.lineId !== transmitter.lineId;
 
         // If only label is changing, simple update
-        if (!productionChanged && !lineChanged && request.body.label !== undefined) {
+        if (
+          !productionChanged &&
+          !lineChanged &&
+          request.body.label !== undefined
+        ) {
           transmitter.label = request.body.label;
           transmitter.updatedAt = new Date().toISOString();
           await dbManager.updateTransmitter(transmitter);
@@ -363,14 +368,20 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
                 desired: BridgeStatus.STOPPED
               });
             } catch (stopError) {
-              Log().warn('Failed to stop transmitter before deletion:', stopError);
+              Log().warn(
+                'Failed to stop transmitter before deletion:',
+                stopError
+              );
             }
 
             // Delete from gateway
             try {
               await callGateway('DELETE', `/api/v1/tx/${port}`);
             } catch (deleteError) {
-              Log().warn('Failed to delete transmitter from gateway:', deleteError);
+              Log().warn(
+                'Failed to delete transmitter from gateway:',
+                deleteError
+              );
             }
 
             // Create new gateway object with updated URL (gateway requires initial status)
@@ -386,7 +397,10 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
             });
 
             // Restore previous state if it was running
-            if (previousStatus === BridgeStatus.RUNNING || previousDesiredStatus === BridgeStatus.RUNNING) {
+            if (
+              previousStatus === BridgeStatus.RUNNING ||
+              previousDesiredStatus === BridgeStatus.RUNNING
+            ) {
               try {
                 await callGateway('PUT', `/api/v1/tx/${port}/state`, {
                   desired: BridgeStatus.RUNNING
@@ -404,7 +418,10 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
 
             await dbManager.updateTransmitter(transmitter);
           } catch (gatewayError) {
-            Log().error('Failed to recreate transmitter on gateway:', gatewayError);
+            Log().error(
+              'Failed to recreate transmitter on gateway:',
+              gatewayError
+            );
             transmitter.status = BridgeStatus.FAILED;
             await dbManager.updateTransmitter(transmitter);
           }

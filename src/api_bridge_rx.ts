@@ -309,7 +309,11 @@ const apiBridgeRx: FastifyPluginCallback<ApiBridgeRxOptions> = (
           request.body.lineId !== receiver.lineId;
 
         // If only label is changing, simple update
-        if (!productionChanged && !lineChanged && request.body.label !== undefined) {
+        if (
+          !productionChanged &&
+          !lineChanged &&
+          request.body.label !== undefined
+        ) {
           receiver.label = request.body.label;
           receiver.updatedAt = new Date().toISOString();
           await dbManager.updateReceiver(receiver);
@@ -354,9 +358,13 @@ const apiBridgeRx: FastifyPluginCallback<ApiBridgeRxOptions> = (
           try {
             // Stop the gateway first before deleting
             try {
-              await callGateway('PUT', `/api/v1/rx/${request.params.id}/state`, {
-                desired: BridgeStatus.STOPPED
-              });
+              await callGateway(
+                'PUT',
+                `/api/v1/rx/${request.params.id}/state`,
+                {
+                  desired: BridgeStatus.STOPPED
+                }
+              );
             } catch (stopError) {
               Log().warn('Failed to stop receiver before deletion:', stopError);
             }
@@ -365,7 +373,10 @@ const apiBridgeRx: FastifyPluginCallback<ApiBridgeRxOptions> = (
             try {
               await callGateway('DELETE', `/api/v1/rx/${request.params.id}`);
             } catch (deleteError) {
-              Log().warn('Failed to delete receiver from gateway:', deleteError);
+              Log().warn(
+                'Failed to delete receiver from gateway:',
+                deleteError
+              );
             }
 
             // Create new gateway object with updated URL (gateway requires initial status)
@@ -377,11 +388,18 @@ const apiBridgeRx: FastifyPluginCallback<ApiBridgeRxOptions> = (
             });
 
             // Restore previous state if it was running
-            if (previousStatus === BridgeStatus.RUNNING || previousDesiredStatus === BridgeStatus.RUNNING) {
+            if (
+              previousStatus === BridgeStatus.RUNNING ||
+              previousDesiredStatus === BridgeStatus.RUNNING
+            ) {
               try {
-                await callGateway('PUT', `/api/v1/rx/${request.params.id}/state`, {
-                  desired: BridgeStatus.RUNNING
-                });
+                await callGateway(
+                  'PUT',
+                  `/api/v1/rx/${request.params.id}/state`,
+                  {
+                    desired: BridgeStatus.RUNNING
+                  }
+                );
                 receiver.status = BridgeStatus.RUNNING;
                 receiver.desiredStatus = BridgeStatus.RUNNING;
               } catch (stateError) {
@@ -395,7 +413,10 @@ const apiBridgeRx: FastifyPluginCallback<ApiBridgeRxOptions> = (
 
             await dbManager.updateReceiver(receiver);
           } catch (gatewayError) {
-            Log().error('Failed to recreate receiver on gateway:', gatewayError);
+            Log().error(
+              'Failed to recreate receiver on gateway:',
+              gatewayError
+            );
             receiver.status = BridgeStatus.FAILED;
             await dbManager.updateReceiver(receiver);
           }
