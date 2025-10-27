@@ -11,6 +11,7 @@ import { ApiProductionsOptions, getApiProductions } from './api_productions';
 import apiReAuth from './api_re_auth';
 import apiShare from './api_share';
 import apiWhip, { ApiWhipOptions } from './api_whip';
+import apiWhep, { ApiWhepOptions } from './api_whep';
 import { DbManager } from './db/interface';
 import { IngestManager } from './ingest_manager';
 import { ProductionManager } from './production_manager';
@@ -58,7 +59,8 @@ export interface ApiGeneralOptions {
 
 export type ApiOptions = ApiGeneralOptions &
   ApiProductionsOptions &
-  ApiWhipOptions;
+  ApiWhipOptions &
+  ApiWhepOptions;
 
 export default async (opts: ApiOptions) => {
   const api = fastify({
@@ -111,8 +113,17 @@ export default async (opts: ApiOptions) => {
     smbServerBaseUrl: opts.smbServerBaseUrl,
     coreFunctions: opts.coreFunctions,
     productionManager: opts.productionManager,
-    publicHost: opts.publicHost,
+    dbManager: opts.dbManager,
     whipAuthKey: opts.whipAuthKey
+  });
+  api.register(apiWhep, {
+    prefix: 'api/v1',
+    smbServerApiKey: opts.smbServerApiKey,
+    endpointIdleTimeout: opts.endpointIdleTimeout,
+    smbServerBaseUrl: opts.smbServerBaseUrl,
+    coreFunctions: opts.coreFunctions,
+    productionManager: opts.productionManager,
+    dbManager: opts.dbManager
   });
   api.register(apiShare, { publicHost: opts.publicHost, prefix: 'api/v1' });
   api.register(apiReAuth, { prefix: 'api/v1' });
@@ -139,5 +150,6 @@ export default async (opts: ApiOptions) => {
     dbManager: opts.dbManager,
     ingestManager: opts.ingestManager
   });
+
   return api;
 };
