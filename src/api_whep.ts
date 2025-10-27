@@ -10,17 +10,16 @@ import { SmbProtocol } from './smb';
 import { getIceServers } from './utils';
 import { DbManager } from './db/interface';
 
-export interface ApiWhipOptions {
+export interface ApiWhepOptions {
   smbServerBaseUrl: string;
   endpointIdleTimeout: string;
   smbServerApiKey?: string;
   coreFunctions: CoreFunctions;
   productionManager: ProductionManager;
   dbManager: DbManager;
-  whipAuthKey?: string;
 }
 
-export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
+export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
   fastify,
   opts,
   next
@@ -51,41 +50,16 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
   const smb = new SmbProtocol();
   const smbServerApiKey = opts.smbServerApiKey || '';
   const coreFunctions = opts.coreFunctions;
-  const whipAuthKey = opts.whipAuthKey?.trim();
-
-  async function requireWhipAuth(request: any, reply: any): Promise<boolean> {
-    if (!whipAuthKey) {
-      return true; // auth disabled
-    }
-
-    const authHeader =
-      request.headers['authorization'] || request.headers['Authorization'];
-    const prefix = 'Bearer ';
-
-    if (
-      !authHeader ||
-      typeof authHeader !== 'string' ||
-      !authHeader.startsWith(prefix) ||
-      authHeader.slice(prefix.length).trim() !== whipAuthKey //checks if presented key is equal to actual key
-    ) {
-      reply
-        .header('WWW-Authenticate', 'Bearer realm="whip", charset="UTF-8"')
-        .code(401)
-        .send({ error: 'Unauthorized' });
-      return false;
-    }
-    return true;
-  }
 
   fastify.post<{
     Params: { productionId: string; lineId: string; username: string };
     Body: Static<typeof WhipWhepRequest>;
     Reply: Static<typeof WhipWhepResponse> | { error: string };
   }>(
-    '/whip/:productionId/:lineId/:username',
+    '/whep/:productionId/:lineId/:username',
     {
       schema: {
-        description: 'WHIP endpoint for ingesting WebRTC streams',
+        description: 'WHEP endpoint for Egress WebRTC streams',
         body: WhipWhepRequest,
         response: {
           201: WhipWhepResponse,
@@ -113,12 +87,11 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
       }
     },
     async (request, reply) => {
-      if (!(await requireWhipAuth(request, reply))) return;
       try {
         const { productionId, lineId, username } = request.params;
 
         Log().info(
-          `Received WHIP request - username: ${username}, production: ${productionId}, line: ${lineId}, IP: ${request.ip}`
+          `Received WHEP request - username: ${username}, production: ${productionId}, line: ${lineId}, IP: ${request.ip}`
         );
 
         if (request.headers['content-type'] !== 'application/sdp') {
@@ -127,7 +100,7 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
 
         const sdpOffer = parse(request.body);
 
-        // Create a unique session ID for this WHIP connection
+        // Create a unique session ID for this WHEP connection
         const sessionId = uuidv4();
         const endpointId = uuidv4();
 
@@ -148,7 +121,7 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
           smbConferenceId,
           endpointId,
           true, // audio
-          false, // no data channel needed for WHIP
+          false, // no data channel needed for WHEP
           true, // iceControlling
           'ssrc-rewrite', // relayType
           parseInt(opts.endpointIdleTimeout, 10)
@@ -197,7 +170,7 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
 
         // Create user session in production manager (await to guarantee DB state)
         Log().info(
-          `Creating WHIP user session - username: ${username}, sessionId: ${sessionId}, production: ${productionId}, line: ${lineId}`
+          `Creating WHEP user session - username: ${username}, sessionId: ${sessionId}, production: ${productionId}, line: ${lineId}`
         );
         await productionManager.createUserSession(
           smbConferenceId,
@@ -215,9 +188,9 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
           endpoint
         );
 
-        // Create the Location URL for the WHIP resource
+        // Create the Location URL for the WHEP resource
         // Location URL can be relative to Request URL, so this is OK.
-        const locationUrl = `/api/v1/whip/${productionId}/${lineId}/${sessionId}`;
+        const locationUrl = `/api/v1/whep/${productionId}/${lineId}/${sessionId}`;
 
         // Set response headers
         reply.headers({
@@ -237,7 +210,7 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
         Log().error(err);
         reply
           .code(500)
-          .send({ error: `Failed to process WHIP request: ${err}` });
+          .send({ error: `Failed to process WHEP request: ${err}` });
       }
     }
   );
@@ -245,10 +218,10 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
   fastify.delete<{
     Params: { productionId: string; lineId: string; sessionId: string };
   }>(
-    '/whip/:productionId/:lineId/:sessionId',
+    '/whep/:productionId/:lineId/:sessionId',
     {
       schema: {
-        description: 'Terminate a WHIP connection',
+        description: 'Terminate a WHEP connection',
         response: {
           200: Type.String({ description: 'OK' }),
           404: Type.Object({ error: Type.String() }),
@@ -257,20 +230,19 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
       }
     },
     async (request, reply) => {
-      if (!(await requireWhipAuth(request, reply))) return;
       try {
         const { sessionId } = request.params;
 
         Log().info(
-          `Received WHIP DELETE request - sessionId: ${sessionId}, IP: ${request.ip}`
+          `Received WHEP DELETE request - sessionId: ${sessionId}, IP: ${request.ip}`
         );
 
         const doc = await opts.dbManager.getSession(sessionId);
         if (!doc) {
           Log().warn(
-            `WHIP session not found for deletion - sessionId: ${sessionId}`
+            `WHEP session not found for deletion - sessionId: ${sessionId}`
           );
-          reply.code(404).send({ error: 'WHIP session not found' });
+          reply.code(404).send({ error: 'WHEP session not found' });
           return;
         }
 
@@ -279,7 +251,7 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
         productionManager.emit('users:change');
 
         Log().info(
-          `WHIP session deleted successfully - sessionId: ${sessionId}`
+          `WHEP session deleted successfully - sessionId: ${sessionId}`
         );
 
         // CORS & response
@@ -292,12 +264,12 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
         reply.code(200).send('OK');
       } catch (err) {
         Log().error(
-          `Failed to delete WHIP session - sessionId: ${request.params.sessionId}:`,
+          `Failed to delete WHEP session - sessionId: ${request.params.sessionId}:`,
           err
         );
         reply
           .code(500)
-          .send({ error: `Failed to terminate WHIP connection: ${err}` });
+          .send({ error: `Failed to terminate WHEP connection: ${err}` });
       }
     }
   );
@@ -305,17 +277,17 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
   fastify.patch<{
     Params: { productionId: string; lineId: string; sessionId: string };
     Body: string;
-  }>('/whip/:productionId/:lineId/:sessionId', {}, async (request, reply) => {
+  }>('/whep/:productionId/:lineId/:sessionId', {}, async (request, reply) => {
     reply.code(405).send('Method not allowed');
   });
 
   fastify.options<{
     Params: { productionId: string; lineId: string };
   }>(
-    '/whip/:productionId/:lineId',
+    '/whep/:productionId/:lineId',
     {
       schema: {
-        description: 'CORS preflight and WHIP discovery endpoint',
+        description: 'CORS preflight and WHEP discovery endpoint',
         response: {
           200: Type.String({ description: 'OK' })
         }
@@ -368,4 +340,4 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
   next();
 };
 
-export default apiWhip;
+export default apiWhep;

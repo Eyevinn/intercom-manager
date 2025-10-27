@@ -66,6 +66,7 @@ export interface ApiGeneralOptions {
 export type ApiOptions = ApiGeneralOptions &
   ApiProductionsOptions &
   ApiWhipOptions &
+  ApiWhepOptions &
   ApiBridgeTxOptions &
   ApiBridgeRxOptions;
 
@@ -146,6 +147,7 @@ export default async (opts: ApiOptions) => {
     coreFunctions: opts.coreFunctions,
     productionManager: opts.productionManager,
     dbManager: opts.dbManager,
+    whipAuthKey: opts.whipAuthKey,
     whipGatewayUrl: opts.whipGatewayUrl
   });
   api.register(apiWhep, {
@@ -157,6 +159,15 @@ export default async (opts: ApiOptions) => {
     productionManager: opts.productionManager,
     dbManager: opts.dbManager,
     whepGatewayUrl: opts.whepGatewayUrl
+  });
+  api.register(apiWhep, {
+    prefix: 'api/v1',
+    smbServerApiKey: opts.smbServerApiKey,
+    endpointIdleTimeout: opts.endpointIdleTimeout,
+    smbServerBaseUrl: opts.smbServerBaseUrl,
+    coreFunctions: opts.coreFunctions,
+    productionManager: opts.productionManager,
+    dbManager: opts.dbManager
   });
   api.register(apiShare, { publicHost: opts.publicHost, prefix: 'api/v1' });
   api.register(apiReAuth, { prefix: 'api/v1' });
