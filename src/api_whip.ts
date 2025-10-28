@@ -189,7 +189,7 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
           return reply.code(400).send({ error: 'Malformed SDP' });
         }
 
-        // Create user session in production manager (await to guarantee DB state)
+        // Create user session in production manager (await to guarantee db state)
         await productionManager.createUserSession(
           smbConferenceId,
           productionId,
