@@ -123,7 +123,8 @@ export default async (opts: ApiOptions) => {
     smbServerBaseUrl: opts.smbServerBaseUrl,
     coreFunctions: opts.coreFunctions,
     productionManager: opts.productionManager,
-    dbManager: opts.dbManager
+    dbManager: opts.dbManager,
+    whepAuthKey: opts.whepAuthKey
   });
   api.register(apiShare, { publicHost: opts.publicHost, prefix: 'api/v1' });
   api.register(apiReAuth, { prefix: 'api/v1' });

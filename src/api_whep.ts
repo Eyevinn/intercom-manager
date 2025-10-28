@@ -17,6 +17,7 @@ export interface ApiWhepOptions {
   coreFunctions: CoreFunctions;
   productionManager: ProductionManager;
   dbManager: DbManager;
+  whepAuthKey?: string;
 }
 
 export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
@@ -50,6 +51,31 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
   const smb = new SmbProtocol();
   const smbServerApiKey = opts.smbServerApiKey || '';
   const coreFunctions = opts.coreFunctions;
+  const whepAuthKey = opts.whepAuthKey?.trim();
+
+  async function requireWhepAuth(request: any, reply: any): Promise<boolean> {
+    if (!whepAuthKey) {
+      return true; // auth disabled
+    }
+
+    const authHeader =
+      request.headers['authorization'] || request.headers['Authorization'];
+    const prefix = 'Bearer ';
+
+    if (
+      !authHeader ||
+      typeof authHeader !== 'string' ||
+      !authHeader.startsWith(prefix) ||
+      authHeader.slice(prefix.length).trim() !== whepAuthKey //checks if presented key is equal to actual key
+    ) {
+      reply
+        .header('WWW-Authenticate', 'Bearer realm="whep", charset="UTF-8"')
+        .code(401)
+        .send({ error: 'Unauthorized' });
+      return false;
+    }
+    return true;
+  }
 
   fastify.post<{
     Params: { productionId: string; lineId: string; username: string };
@@ -87,6 +113,7 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
       }
     },
     async (request, reply) => {
+      if (!(await requireWhepAuth(request, reply))) return;
       try {
         const { productionId, lineId, username } = request.params;
 
@@ -181,7 +208,7 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
           true
         );
 
-        // Update user endpoint info and store a stable smbPresenceKey
+        // Update user endpoint information
         await productionManager.updateUserEndpoint(
           sessionId,
           endpointId,
@@ -230,6 +257,7 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
       }
     },
     async (request, reply) => {
+      if (!(await requireWhepAuth(request, reply))) return;
       try {
         const { sessionId } = request.params;
 
@@ -246,6 +274,7 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
           return;
         }
 
+        // Remove the user session
         await opts.dbManager.deleteUserSession(sessionId);
         productionManager.removeUserSession(sessionId);
         productionManager.emit('users:change');
@@ -253,8 +282,7 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
         Log().info(
           `WHEP session deleted successfully - sessionId: ${sessionId}`
         );
-
-        // CORS & response
+        // Add CORS headers for browser compatibility
         reply.headers({
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'POST, DELETE, OPTIONS',
