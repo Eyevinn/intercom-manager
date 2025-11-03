@@ -752,7 +752,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           return;
         }
 
-        // Update database session
+        // Update db session
         await dbManager.updateSession(sessionId, {
           isActive: true,
           lastSeen: Date.now()

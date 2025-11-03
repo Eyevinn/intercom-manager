@@ -27,12 +27,14 @@ You can deploy the complete Open Intercom solution (including database, media br
 #### Quick Setup
 
 1. **Clone the Terraform examples repository:**
+
    ```sh
    git clone https://github.com/EyevinnOSC/terraform-examples.git
    cd terraform-examples/examples/intercom
    ```
 
 2. **Set required environment variables:**
+
    ```sh
    export TF_VAR_osc_pat="your-personal-access-token"
    export TF_VAR_smb_api_key="your-smb-api-key"
