@@ -35,6 +35,18 @@ const mockDbManager = {
   getIngests: jest.fn().mockResolvedValue([]),
   updateIngest: jest.fn().mockResolvedValue(undefined),
   deleteIngest: jest.fn().mockResolvedValue(true),
+  addTransmitter: jest.fn().mockResolvedValue({}),
+  getTransmitter: jest.fn().mockResolvedValue(undefined),
+  getTransmitters: jest.fn().mockResolvedValue([]),
+  getTransmittersLength: jest.fn().mockResolvedValue(0),
+  updateTransmitter: jest.fn().mockResolvedValue(undefined),
+  deleteTransmitter: jest.fn().mockResolvedValue(true),
+  addReceiver: jest.fn().mockResolvedValue({}),
+  getReceiver: jest.fn().mockResolvedValue(undefined),
+  getReceivers: jest.fn().mockResolvedValue([]),
+  getReceiversLength: jest.fn().mockResolvedValue(0),
+  updateReceiver: jest.fn().mockResolvedValue(undefined),
+  deleteReceiver: jest.fn().mockResolvedValue(true),
   saveUserSession: jest.fn().mockResolvedValue(undefined),
   getSession: jest.fn().mockResolvedValue(null),
   deleteUserSession: jest.fn().mockResolvedValue(true),
@@ -87,7 +99,9 @@ describe('reAuth api', () => {
       coreFunctions: new CoreFunctions(
         mockProductionManager,
         new ConnectionQueue()
-      )
+      ),
+      whipGatewayUrl: '',
+      whepGatewayUrl: ''
     });
     const response = await server.inject({
       method: 'GET',
