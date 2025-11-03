@@ -199,7 +199,7 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
         Log().info(
           `Creating WHIP user session - username: ${username}, sessionId: ${sessionId}, production: ${productionId}, line: ${lineId}`
         );
-        
+
         await productionManager.createUserSession(
           smbConferenceId,
           productionId,
