@@ -18,7 +18,6 @@ export interface ApiWhipOptions {
   productionManager: ProductionManager;
   dbManager: DbManager;
   whipAuthKey?: string;
-  dbManager: DbManager;
 }
 
 export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
