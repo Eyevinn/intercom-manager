@@ -1,3 +1,4 @@
+import '../config/load-env';
 import { MongoClient } from 'mongodb';
 import {
   BridgeStatus,
@@ -13,8 +14,9 @@ import {
 } from '../models';
 import { assert } from '../utils';
 import { DbManager } from './interface';
-import { Ingest, Line, NewIngest, Production } from '../models';
-import { assert } from '../utils';
+import { Log } from '../log';
+
+const SESSION_PRUNE_SECONDS = 7_200;
 
 export class DbManagerMongoDb implements DbManager {
   private client: MongoClient;
@@ -25,6 +27,66 @@ export class DbManagerMongoDb implements DbManager {
 
   async connect(): Promise<void> {
     await this.client.connect();
+    const db = this.client.db();
+    const sessions = db.collection('sessions');
+
+    // Ensure a expire-after-index on lastSeenAt so old sessions are automatically removed by MongoDB after SESSION_PRUNE_SECONDS
+    const expireIndexName = 'lastSeenAt_1';
+    let expireIndexExists = false;
+    try {
+      expireIndexExists = await sessions.indexExists(expireIndexName);
+    } catch (error: any) {
+      const code = error?.code;
+      const message = error?.message.toString() || '';
+      const namespaceMissing =
+        code === 26 ||
+        /NamespaceNotFound/i.test(message) ||
+        /ns does not exist/i.test(message);
+      if (!namespaceMissing) {
+        throw error;
+      }
+    }
+    if (!expireIndexExists) {
+      await sessions.createIndex(
+        { lastSeenAt: 1 },
+        { expireAfterSeconds: SESSION_PRUNE_SECONDS }
+      );
+    } else {
+      // Update expireAfterSeconds on existing index if it already exists
+      try {
+        await db.command({
+          collMod: sessions.collectionName,
+          index: {
+            name: expireIndexName,
+            expireAfterSeconds: SESSION_PRUNE_SECONDS
+          }
+        });
+      } catch (e) {
+        Log().error(e);
+      }
+    }
+
+    // Helper to create indexes safely (ignore "already exists" errors)
+    const safeCreate = async (keys: Record<string, 1 | -1>, opts: any = {}) => {
+      try {
+        await sessions.createIndex(keys, opts);
+      } catch (err: any) {
+        const msg = String(err?.message || '');
+        if (!/already exists/i.test(msg)) throw err;
+      }
+    };
+
+    await safeCreate({
+      productionId: 1,
+      lineId: 1,
+      isExpired: 1,
+      lastSeenAt: -1
+    });
+
+    await safeCreate({ isExpired: 1, isActive: 1, lastSeenAt: 1 });
+    await safeCreate({ productionId: 1 });
+    await safeCreate({ endpointId: 1 });
+    await safeCreate({ productionId: 1, endpointId: 1 });
   }
 
   async disconnect(): Promise<void> {
@@ -40,7 +102,7 @@ export class DbManagerMongoDb implements DbManager {
       new: true,
       upsert: true
     });
-    return ret.value.seq;
+    return ret.value?.seq || 1;
   }
 
   /** Get all productions from the database in reverse natural order, limited by the limit parameter */

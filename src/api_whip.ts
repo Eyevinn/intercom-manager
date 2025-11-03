@@ -317,6 +317,7 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = async (
           return;
         }
 
+        // Remove the user session
         await opts.dbManager.deleteUserSession(sessionId);
         productionManager.removeUserSession(sessionId);
         productionManager.emit('users:change');
@@ -324,8 +325,8 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = async (
         Log().info(
           `WHIP session deleted successfully - sessionId: ${sessionId}`
         );
-
-        // CORS & response
+        
+        // Add CORS headers for browser compatibility
         reply.headers({
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'POST, DELETE, OPTIONS',

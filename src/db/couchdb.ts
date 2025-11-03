@@ -303,7 +303,7 @@ export class DbManagerCouchDb implements DbManager {
   }
 
   /** Get all productions from the database in reverse natural order, limited by the limit parameter */
-  async getProductions(): Promise<Production[]> {
+  async getProductions(limit: number, offset: number): Promise<Production[]> {
     await this.connect();
     if (!this.nanoDb) {
       throw new Error('Database not connected');
@@ -314,10 +314,16 @@ export class DbManagerCouchDb implements DbManager {
     });
     // eslint-disable-next-line
     response.rows.forEach((row: any) => {
-      if (row.doc._id.toLowerCase().indexOf('counter') === -1)
+      if (
+        row.doc._id.toLowerCase().indexOf('counter') === -1 &&
+        row.doc._id.toLowerCase().indexOf('session_') === -1
+      )
         productions.push(row.doc);
     });
-    return productions as any as Production[];
+
+    // Apply offset and limit
+    const result = productions.slice(offset, offset + limit);
+    return result as any as Production[];
   }
 
   async getProductionsLength(): Promise<number> {
@@ -326,7 +332,13 @@ export class DbManagerCouchDb implements DbManager {
       throw new Error('Database not connected');
     }
     const productions = await this.nanoDb.list({ include_docs: false });
-    return productions.rows.length;
+    // Filter out counter and session documents
+    const filteredRows = productions.rows.filter(
+      (row: any) =>
+        row.id.toLowerCase().indexOf('counter') === -1 &&
+        row.id.toLowerCase().indexOf('session_') === -1
+    );
+    return filteredRows.length;
   }
 
   async getProduction(id: number): Promise<Production | undefined> {
@@ -439,7 +451,7 @@ export class DbManagerCouchDb implements DbManager {
   }
 
   /** Get all ingests from the database in reverse natural order, limited by the limit parameter */
-  async getIngests(): Promise<Ingest[]> {
+  async getIngests(limit: number, offset: number): Promise<Ingest[]> {
     await this.connect();
     if (!this.nanoDb) {
       throw new Error('Database not connected');
@@ -451,10 +463,16 @@ export class DbManagerCouchDb implements DbManager {
     });
     // eslint-disable-next-line
     response.rows.forEach((row: any) => {
-      if (row.doc._id.toLowerCase().indexOf('counter') === -1)
+      if (
+        row.doc._id.toLowerCase().indexOf('counter') === -1 &&
+        row.doc._id.toLowerCase().indexOf('session_') === -1
+      )
         ingests.push(row.doc);
     });
-    return ingests as any as Ingest[];
+
+    // Apply offset and limit
+    const result = ingests.slice(offset, offset + limit);
+    return result as any as Ingest[];
   }
 
   async getIngestsLength(): Promise<number> {
@@ -464,7 +482,13 @@ export class DbManagerCouchDb implements DbManager {
     }
 
     const ingests = await this.nanoDb.list({ include_docs: false });
-    return ingests.rows.length;
+    // Filter out counter and session documents
+    const filteredRows = ingests.rows.filter(
+      (row: any) =>
+        row.id.toLowerCase().indexOf('counter') === -1 &&
+        row.id.toLowerCase().indexOf('session_') === -1
+    );
+    return filteredRows.length;
   }
 
   async getIngest(id: number): Promise<Ingest | undefined> {
@@ -503,5 +527,69 @@ export class DbManagerCouchDb implements DbManager {
     const ingest = await this.nanoDb.get(ingestId.toString());
     const response = await this.nanoDb.destroy(ingest._id, ingest._rev);
     return response.ok;
+  }
+
+  // Session management methods
+  async saveUserSession(
+    sessionId: string,
+    userSession: UserSession
+  ): Promise<void> {
+    await this.connect();
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
+
+    const sessionDocId = `session_${sessionId}`;
+    try {
+      // Try to get existing document to preserve _rev for updates
+      const existingDoc = await this.nanoDb.get(sessionDocId);
+      const updatedSession = {
+        ...existingDoc,
+        ...userSession,
+        _id: sessionDocId
+      };
+      await this.nanoDb.insert(updatedSession);
+    } catch (error) {
+      // Document doesn't exist, create new one
+      const newSession = {
+        ...userSession,
+        _id: sessionDocId
+      };
+      await this.nanoDb.insert(newSession as unknown as nano.MaybeDocument);
+    }
+  }
+
+  async deleteUserSession(sessionId: string): Promise<boolean> {
+    await this.connect();
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
+
+    const sessionDocId = `session_${sessionId}`;
+    try {
+      const session = await this.nanoDb.get(sessionDocId);
+      const response = await this.nanoDb.destroy(session._id, session._rev);
+      return response.ok;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  // @ts-expect-error: we use mongodb
+  getSession(sessionId: string): Promise<UserSession | null> {
+    // TODO
+  }
+
+  updateSession(
+    sessionId: string,
+    updates: Partial<UserSession>
+    // @ts-expect-error: we use mongodb
+  ): Promise<boolean> {
+    //TODO
+  }
+
+  // @ts-expect-error: we use mongodb
+  getSessionsByQuery(q: Partial<UserSession>): Promise<UserSession[]> {
+    // TODO
   }
 }

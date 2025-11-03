@@ -3,6 +3,7 @@ import Fastify from 'fastify';
 import { CoreFunctions } from './api_productions_core_functions';
 import apiWhip from './api_whip';
 import { ConnectionQueue } from './connection_queue';
+import { UserSession } from './models';
 
 jest.mock('uuid', () => ({
   v4: jest.fn(() => 'mock-session-id')
@@ -29,7 +30,8 @@ const mockProductionManager = {
   deleteProduction: jest.fn().mockResolvedValue(true),
   getUser: jest.fn().mockResolvedValue(undefined),
   requireLine: jest.fn().mockResolvedValue({}),
-  once: jest.fn()
+  once: jest.fn(),
+  emit: jest.fn()
 } as any;
 
 const mockDbManager = {
@@ -117,6 +119,10 @@ const createTestServer = async () => {
 
 const createAuthServer = async () => {
   const fastify = Fastify();
+
+  mockDbManager.getSession.mockResolvedValue({
+    _id: 'mock-session-id'
+  } as any);
 
   fastify.register(apiWhip, { ...defaultOptions, whipAuthKey: 'secret-123' });
   await fastify.ready();
@@ -292,6 +298,10 @@ describe('apiWhip', () => {
     it('should terminate a session and return 200 OK', async () => {
       const fastify = await createTestServer();
 
+      mockDbManager.getSession.mockResolvedValueOnce({
+        _id: 'mock-session-id'
+      } as any);
+
       const response = await fastify.inject({
         method: 'DELETE',
         url: '/whip/prod1/line1/mock-session-id'
@@ -302,9 +312,8 @@ describe('apiWhip', () => {
     });
 
     it('should return 404 if session not found', async () => {
-      mockProductionManager.removeUserSession.mockReturnValueOnce(undefined);
-
       const fastify = await createTestServer();
+      mockDbManager.getSession.mockResolvedValueOnce(null);
 
       const response = await fastify.inject({
         method: 'DELETE',
