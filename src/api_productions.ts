@@ -735,7 +735,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
 
         let userSession = await dbManager.getSession(sessionId);
 
-        // Retry up to 5×100ms in case sessionDescription has not been written to db yet
+        // Retry up to 5×100ms in case sessionDescription has not been written to DB yet
         for (
           let i = 0;
           i < 5 && (!userSession || !userSession.sessionDescription);

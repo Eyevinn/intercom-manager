@@ -339,13 +339,13 @@ export const ReAuthResponse = Type.Object({
 });
 export type ReAuthResponse = Static<typeof ReAuthResponse>;
 
-// WHIP endpoint request body schema
-export const WhipRequest = Type.String({
+// WHIP/WHEP endpoint request body schema
+export const WhipWhepRequest = Type.String({
   description: 'WebRTC SDP offer'
 });
 
-// WHIP endpoint response schema
-export const WhipResponse = Type.String({
+// WHIP/WHEP endpoint response schema
+export const WhipWhepResponse = Type.String({
   description: 'Created'
 });
 

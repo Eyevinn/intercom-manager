@@ -79,8 +79,10 @@ coreFunctions.createEndpoint = jest.fn().mockResolvedValue({
     }
   }
 }) as any;
-coreFunctions.configureEndpointForWhip = jest.fn().mockResolvedValue(undefined);
-coreFunctions.createAnswer = jest
+coreFunctions.configureEndpointForWhipWhep = jest
+  .fn()
+  .mockResolvedValue(undefined);
+coreFunctions.createWhipWhepAnswer = jest
   .fn()
   .mockResolvedValue(
     'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 96\r\na=mid:0\r\n'
@@ -92,7 +94,6 @@ const defaultOptions = {
   smbServerApiKey: 'dummy-key',
   coreFunctions: coreFunctions,
   endpointIdleTimeout: '60',
-  publicHost: 'https://example.com',
   dbManager: mockDbManager
 };
 
@@ -156,7 +157,7 @@ describe('apiWhip', () => {
     });
 
     it('should return 406 if SDP answer misses m= sections', async () => {
-      (coreFunctions.createAnswer as jest.Mock).mockResolvedValueOnce(
+      (coreFunctions.createWhipWhepAnswer as jest.Mock).mockResolvedValueOnce(
         'v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\nc=IN IP4 0.0.0.0\r\nt=0 0\r\n'
       );
 
