@@ -325,7 +325,7 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = async (
         Log().info(
           `WHIP session deleted successfully - sessionId: ${sessionId}`
         );
-        
+
         // Add CORS headers for browser compatibility
         reply.headers({
           'Access-Control-Allow-Origin': '*',
