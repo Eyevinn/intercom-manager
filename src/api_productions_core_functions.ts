@@ -674,19 +674,28 @@ export class CoreFunctions {
     return this.connectionQueue.queueAsync(createConf);
   }
 
-  getAllLinesResponse(production: Production): LineResponse[] {
-    const allLinesResponse: LineResponse[] = production.lines.map(
-      ({ name, id, smbConferenceId, programOutputLine }) => ({
-        name,
-        id,
-        smbConferenceId,
-        participants: this.productionManager.getUsersForLine(
-          production._id.toString(),
-          id
-        ),
-        programOutputLine
-      })
+  async getAllLinesResponse(production: Production): Promise<LineResponse[]> {
+    const stringifiedProdId = production._id.toString();
+
+    const allLinesResponse = await Promise.all(
+      production.lines.map(
+        async ({ name, id, smbConferenceId, programOutputLine }) => {
+          const participants = await this.productionManager.getUsersForLine(
+            stringifiedProdId,
+            id
+          );
+
+          return {
+            name,
+            id,
+            smbConferenceId,
+            participants,
+            programOutputLine: programOutputLine ?? false
+          } as LineResponse;
+        }
+      )
     );
+
     return allLinesResponse;
   }
 

@@ -112,7 +112,8 @@ export default async (opts: ApiOptions) => {
     coreFunctions: opts.coreFunctions,
     productionManager: opts.productionManager,
     publicHost: opts.publicHost,
-    whipAuthKey: opts.whipAuthKey
+    whipAuthKey: opts.whipAuthKey,
+    dbManager: opts.dbManager
   });
   api.register(apiShare, { publicHost: opts.publicHost, prefix: 'api/v1' });
   api.register(apiReAuth, { prefix: 'api/v1' });

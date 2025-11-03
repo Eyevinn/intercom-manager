@@ -14,87 +14,219 @@ import { DbManager } from './db/interface';
 import { SmbProtocol } from './smb';
 
 const SESSION_INACTIVE_THRESHOLD = 60_000;
-const SESSION_EXPIRED_THRESHOLD = 120_000;
-const SESSION_PRUNE_THRESHOLD = 7_200_000;
+const SESSION_EXPIRED_THRESHOLD = 100_000;
+
+// Sessions are changed from active to inactive after a minute, and are marked as expired after ~100 s.
+// Long-term pruning now happens via the Mongo TTL index configured with SESSION_PRUNE_SECONDS in mongodb.ts.
+const WHIP_START_MS = parseInt(process.env.WHIP_WARMUP_MS ?? '15000', 10);
+const WHIP_INACTIVE_ALLOW_MS = parseInt(
+  process.env.WHIP_INACTIVE_ALLOW_MS ?? '10000',
+  10
+);
+const WHIP_ABSENCE_ALLOW_MS = parseInt(
+  process.env.WHIP_ABSENCE_ALLOW_MS ?? '30000',
+  10
+);
+const WHIP_EXPIRE_RETRIES = parseInt(
+  process.env.WHIP_EXPIRE_RETRIES ?? '3',
+  10
+);
 
 export class ProductionManager extends EventEmitter {
   private userSessions: Record<string, UserSession>;
   private dbManager: DbManager;
-  private userSessionsInterval: NodeJS.Timeout | undefined;
+  private whipRetries: Record<string, number> = {};
+  private static readonly WHIP_EXPIRE_CONSECUTIVE_MISSES = parseInt(
+    process.env.WHIP_EXPIRE_CONSECUTIVE_MISSES ?? '3',
+    10
+  );
 
   constructor(dbManager: DbManager) {
     super();
     this.dbManager = dbManager;
     this.userSessions = {};
-    this.userSessionsInterval = undefined;
   }
 
   async load(): Promise<void> {
     // empty for now
   }
 
-  checkUserStatus(
+  async checkUserStatus(
     smb: SmbProtocol,
     smbServerUrl: string,
     smbServerApiKey: string
   ) {
     let hasChanged = false;
-    const userSessionsArray = Object.entries(this.userSessions);
-    const activeWhipSessions = userSessionsArray.filter(
-      ([, userSession]) => userSession.isWhip
-    );
+    const now = Date.now();
+    const inactiveCutoff = new Date(now - SESSION_INACTIVE_THRESHOLD);
+    const expiredCutoff = new Date(now - SESSION_EXPIRED_THRESHOLD);
 
-    if (activeWhipSessions.length !== 0 && !this.userSessionsInterval) {
-      this.userSessionsInterval = setInterval(async () => {
-        const conferences = await smb.getConferencesWithUsers(
-          smbServerUrl,
-          smbServerApiKey
-        );
-        // Needs to be redefined for scope
-        const innerUserSessionsArray = Object.entries(this.userSessions);
-        const innerActiveWhipSessions = innerUserSessionsArray.filter(
-          ([, userSession]) => userSession.isWhip
-        );
-        for (const [sessionId, userSession] of innerActiveWhipSessions) {
-          const conference = conferences.find(
-            (conference) => conference.id === userSession.smbConferenceId
-          );
-          if (
-            conference &&
-            userSession.endpointId &&
-            conference.users.includes(userSession.endpointId)
-          ) {
-            this.updateUserLastSeen(sessionId, true);
-          }
-        }
-      }, 60_000);
-    } else if (activeWhipSessions.length === 0 && this.userSessionsInterval) {
-      clearInterval(this.userSessionsInterval);
-      this.userSessionsInterval = undefined;
-    }
+    {
+      // Get sessions that should be inactive
+      const toInactivate = await this.dbManager.getSessionsByQuery({
+        isWhip: { $ne: true } as any,
+        isExpired: false,
+        isActive: true,
+        lastSeenAt: { $gte: expiredCutoff, $lt: inactiveCutoff } as any
+      });
 
-    for (const [sessionId, userSession] of userSessionsArray) {
-      if (userSession.lastSeen < Date.now() - SESSION_PRUNE_THRESHOLD) {
-        delete this.userSessions[sessionId];
-        hasChanged = true;
-      } else {
-        const isActive =
-          userSession.lastSeen > Date.now() - SESSION_INACTIVE_THRESHOLD;
-        const isExpired =
-          userSession.lastSeen < Date.now() - SESSION_EXPIRED_THRESHOLD;
-        if (
-          isActive !== userSession.isActive ||
-          isExpired !== userSession.isExpired
-        ) {
-          Object.assign(userSession, { isActive, isExpired });
-          hasChanged = true;
-        }
-        if (userSession.isWhip && isExpired) {
-          this.removeUserSession(sessionId);
-          hasChanged = true;
-        }
+      if (toInactivate.length) {
+        const results = await Promise.all(
+          (toInactivate as any[]).map((s) =>
+            this.dbManager.updateSession(String(s._id), { isActive: false })
+          )
+        );
+        if (results.some(Boolean)) hasChanged = true;
+      }
+
+      // Get sessions that should be active
+      const toReactivate = await this.dbManager.getSessionsByQuery({
+        isWhip: { $ne: true } as any,
+        isExpired: false,
+        isActive: false,
+        lastSeenAt: { $gte: inactiveCutoff } as any
+      });
+
+      if (toReactivate.length) {
+        const results = await Promise.all(
+          (toReactivate as any[]).map((s) =>
+            this.dbManager.updateSession(String(s._id), { isActive: true })
+          )
+        );
+        if (results.some(Boolean)) hasChanged = true;
+      }
+
+      // Get sessions that should be expired
+      const toExpire = await this.dbManager.getSessionsByQuery({
+        isWhip: { $ne: true } as any,
+        isExpired: false,
+        lastSeenAt: { $lt: expiredCutoff } as any
+      });
+
+      if (toExpire.length) {
+        const results = await Promise.all(
+          (toExpire as any[]).map((s) =>
+            this.dbManager.updateSession(String(s._id), {
+              isExpired: true,
+              isActive: false
+            })
+          )
+        );
+        if (results.some(Boolean)) hasChanged = true;
       }
     }
+
+    try {
+      const conferences = await smb.getConferencesWithUsers(
+        smbServerUrl,
+        smbServerApiKey
+      );
+
+      const conferenceUsers = new Map<string, Set<string>>();
+      for (const conference of conferences as any[]) {
+        const set = new Set<string>();
+        const users = (conference.users ?? []) as any[];
+        const endpoints = (conference.endpoints ?? []) as any[];
+        for (const user of users) set.add(user.toString().toLowerCase());
+        for (const endpoint of endpoints)
+          set.add(endpoint.toString().toLowerCase());
+        conferenceUsers.set(conference.id.toString(), set);
+      }
+
+      // Handling of WHIP sessions
+      const whipSessions = await this.dbManager.getSessionsByQuery({
+        isWhip: true,
+        isExpired: false
+      });
+
+      for (const whipSession of whipSessions as any[]) {
+        const wid = whipSession._id.toString();
+        const createdMs = whipSession.createdAt
+          ? new Date(whipSession.createdAt).getTime()
+          : now;
+        const lastSeenMs = whipSession.lastSeenAt
+          ? new Date(whipSession.lastSeenAt).getTime()
+          : typeof whipSession.lastSeen === 'number'
+          ? whipSession.lastSeen
+          : createdMs;
+
+        if (now - createdMs < WHIP_START_MS) {
+          const ok = await this.dbManager.updateSession(wid, {
+            lastSeen: now + 10_000,
+            isActive: true,
+            isExpired: false
+          });
+          if (ok) {
+            hasChanged = true;
+            if (this.userSessions[wid]) {
+              this.userSessions[wid].lastSeen = now + 10_000;
+              this.userSessions[wid].isActive = true;
+              this.userSessions[wid].isExpired = false;
+            }
+            this.whipRetries[wid] = 0;
+          }
+          continue;
+        }
+
+        // Pull the latest presence list for this conference and look up the WHIP endpoint's key
+        const set = conferenceUsers.get(whipSession.smbConferenceId.toString());
+        const key = (
+          (whipSession as any).smbPresenceKey ||
+          whipSession.endpointId ||
+          ''
+        )
+          .toString()
+          .toLowerCase();
+
+        const present = !!(set && key && set.has(key));
+
+        if (present) {
+          this.whipRetries[wid] = 0;
+          const ok = await this.dbManager.updateSession(wid, {
+            lastSeen: now + 10_000,
+            isActive: true,
+            isExpired: false
+          });
+          if (ok) {
+            hasChanged = true;
+            if (this.userSessions[wid]) {
+              this.userSessions[wid].lastSeen = now + 10_000;
+              this.userSessions[wid].isActive = true;
+              this.userSessions[wid].isExpired = false;
+            }
+          }
+        } else {
+          const retries = (this.whipRetries[wid] ?? 0) + 1;
+          this.whipRetries[wid] = retries;
+
+          if (
+            whipSession.isActive &&
+            now - lastSeenMs > WHIP_INACTIVE_ALLOW_MS
+          ) {
+            const ok = await this.dbManager.updateSession(wid, {
+              isActive: false
+            });
+            if (ok) {
+              hasChanged = true;
+            }
+          }
+
+          // If max retry attempts have failed, remove the WHIP session
+          if (
+            now - lastSeenMs > WHIP_ABSENCE_ALLOW_MS &&
+            retries >= WHIP_EXPIRE_RETRIES
+          ) {
+            const ok = await this.dbManager.updateSession(wid, {
+              isExpired: true
+            });
+            if (ok) hasChanged = true;
+          }
+        }
+      }
+    } catch (e) {
+      Log().warn('checkUserStatus (WHIP) failed', e);
+    }
+
     if (hasChanged) {
       this.emit('users:change');
     }
@@ -228,15 +360,16 @@ export class ProductionManager extends EventEmitter {
     return line;
   }
 
-  createUserSession(
+  async createUserSession(
     smbConferenceId: string,
     productionId: string,
     lineId: string,
     sessionId: string,
     name: string,
     isWhip = false
-  ): void {
-    this.userSessions[sessionId] = {
+  ): Promise<void> {
+    const userSession: UserSession = {
+      _id: sessionId,
       smbConferenceId,
       productionId,
       lineId,
@@ -246,8 +379,17 @@ export class ProductionManager extends EventEmitter {
       isExpired: false,
       isWhip
     };
+
+    this.userSessions[sessionId] = userSession;
+
+    await this.dbManager.saveUserSession(sessionId, userSession);
+
     Log().info(`Created user session: "${name}": ${sessionId}`);
     this.emit('users:change');
+  }
+
+  async getActiveUsers(productionId: string) {
+    return this.dbManager.getSessionsByQuery({ productionId, isActive: true });
   }
 
   getUser(sessionId: string): UserSession | undefined {
@@ -258,27 +400,52 @@ export class ProductionManager extends EventEmitter {
     return undefined;
   }
 
-  updateUserLastSeen(sessionId: string, includeBuffer = false): boolean {
-    const userSession = this.userSessions[sessionId];
-    if (userSession) {
-      this.userSessions[sessionId].lastSeen = includeBuffer
-        ? Date.now() + 10000
-        : Date.now();
-      return true;
+  async updateUserLastSeen(
+    sessionId: string,
+    includeBuffer = false
+  ): Promise<boolean> {
+    const lastSeen = includeBuffer ? Date.now() + 10_000 : Date.now();
+    const ok = await this.dbManager.updateSession(sessionId, {
+      lastSeen,
+      isActive: true,
+      isExpired: false
+    });
+    if (ok) {
+      if (this.userSessions[sessionId]) {
+        this.userSessions[sessionId].lastSeen = lastSeen;
+        this.userSessions[sessionId].isActive = true;
+        this.userSessions[sessionId].isExpired = false;
+      }
+      this.emit('users:change');
     }
-    return false;
+    return ok;
   }
 
-  updateUserEndpoint(
+  // Update user session in database
+  async updateUserEndpoint(
     sessionId: string,
     endpointId: string,
     sessionDescription: SmbEndpointDescription
-  ): boolean {
+  ): Promise<boolean> {
     const userSession = this.userSessions[sessionId];
     if (userSession) {
-      this.userSessions[sessionId].endpointId = endpointId;
-      this.userSessions[sessionId].sessionDescription = sessionDescription;
-      return true;
+      userSession.endpointId = endpointId;
+      userSession.sessionDescription = sessionDescription;
+      const smbPresenceKey = endpointId.toLowerCase();
+
+      (userSession as any).smbPresenceKey = smbPresenceKey;
+
+      const ok = await this.dbManager.updateSession(sessionId, {
+        endpointId,
+        sessionDescription,
+        isActive: true,
+        isExpired: false,
+        lastSeen: Date.now(),
+        ...({ smbPresenceKey } as any)
+      });
+
+      if (ok) this.emit('users:change');
+      return ok;
     }
     return false;
   }
@@ -292,24 +459,42 @@ export class ProductionManager extends EventEmitter {
     return undefined;
   }
 
-  getUsersForLine(productionId: string, lineId: string): UserResponse[] {
-    return Object.entries(this.userSessions).flatMap(
-      ([sessionId, userSession]) => {
-        if (
-          productionId === userSession.productionId &&
-          lineId === userSession.lineId &&
-          !userSession.isExpired
-        ) {
-          return {
-            sessionId,
-            endpointId: userSession.endpointId,
-            name: userSession.name,
-            isActive: userSession.isActive,
-            isWhip: userSession.isWhip
-          };
-        }
-        return [];
+  async getUsersForLine(
+    productionId: string,
+    lineId: string
+  ): Promise<UserResponse[]> {
+    const inactiveCutoff = new Date(Date.now() - SESSION_INACTIVE_THRESHOLD);
+
+    const dbSessions = await this.dbManager.getSessionsByQuery({
+      productionId,
+      lineId,
+      isExpired: false,
+      $or: [{ isWhip: true }, { lastSeenAt: { $gte: inactiveCutoff } as any }]
+    } as any);
+
+    const participants = (dbSessions as any[]).map((s) => {
+      const u: any = {
+        sessionId: s._id?.toString?.() ?? '',
+        name: s.name ?? '',
+        isActive: s.isWhip ? true : !!s.isActive,
+        isWhip: !!s.isWhip
+      };
+      if (typeof s.endpointId === 'string' && s.endpointId.length > 0)
+        u.endpointId = s.endpointId;
+      return u as UserResponse;
+    });
+
+    participants.sort((a, b) => {
+      const nameA = a.name?.toLocaleLowerCase?.() ?? '';
+      const nameB = b.name?.toLocaleLowerCase?.() ?? '';
+      if (nameA || nameB) {
+        const cmp =
+          nameA.localeCompare(nameB, undefined, { sensitivity: 'base' }) || 0;
+        if (cmp !== 0) return cmp;
       }
-    );
+      return (a.sessionId ?? '').localeCompare(b.sessionId ?? '');
+    });
+
+    return participants;
   }
 }

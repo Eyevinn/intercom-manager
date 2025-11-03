@@ -21,8 +21,7 @@ import {
   SdpAnswer,
   SessionResponse,
   SmbEndpointDescription,
-  UserResponse,
-  UserSession
+  UserResponse
 } from './models';
 import { ProductionManager } from './production_manager';
 import { SmbProtocol } from './smb';
@@ -35,6 +34,33 @@ export interface ApiProductionsOptions {
   dbManager: DbManager;
   productionManager: ProductionManager;
   coreFunctions: CoreFunctions;
+}
+
+function toUserResponse(doc: any) {
+  const out: any = {
+    sessionId: (doc?._id ?? '').toString(),
+    name: (doc?.name ?? '').toString(),
+    isActive: !!doc?.isActive,
+    isWhip: !!doc?.isWhip
+  };
+  if (typeof doc?.endpointId === 'string' && doc.endpointId.length > 0) {
+    out.endpointId = doc.endpointId;
+  }
+  return out;
+}
+
+// To keep participant list order from changing on each fetch of participants
+function sortParticipants(participants: UserResponse[]): UserResponse[] {
+  return [...participants].sort((a, b) => {
+    const nameA = a.name?.toLocaleLowerCase?.() ?? '';
+    const nameB = b.name?.toLocaleLowerCase?.() ?? '';
+    if (nameA || nameB) {
+      const cmp =
+        nameA.localeCompare(nameB, undefined, { sensitivity: 'base' }) || 0;
+      if (cmp !== 0) return cmp;
+    }
+    return (a.sessionId ?? '').localeCompare(b.sessionId ?? '');
+  });
 }
 
 const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
@@ -51,6 +77,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
 
   const productionManager = opts.productionManager;
   const coreFunctions = opts.coreFunctions;
+  const dbManager = opts.dbManager;
 
   setInterval(
     () => productionManager.checkUserStatus(smb, smbServerUrl, smbServerApiKey),
@@ -138,16 +165,26 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         } else {
           const extendedProductions = await Promise.all(
             productions.map(async (production) => {
-              const extendedProduction =
-                await productionManager.requireProduction(
-                  parseInt(production._id.toString(), 10)
-                );
-              const allLinesResponse: LineResponse[] =
-                coreFunctions.getAllLinesResponse(extendedProduction);
-              return {
-                ...production,
-                lines: allLinesResponse
-              };
+              const stringifiedProdId = production._id.toString();
+              const dbSessions = await dbManager.getSessionsByQuery({
+                productionId: stringifiedProdId,
+                isExpired: false
+              });
+
+              const lines: LineResponse[] = production.lines.map((line) => {
+                const participants: UserResponse[] = (dbSessions as any[])
+                  .filter((s) => s.lineId === line.id)
+                  .map(toUserResponse);
+
+                return {
+                  name: line.name,
+                  id: line.id,
+                  smbConferenceId: line.smbConferenceId,
+                  participants: sortParticipants(participants),
+                  programOutputLine: line.programOutputLine || false
+                };
+              });
+              return { _id: production._id, name: production.name, lines };
             })
           );
           responseProductions = extendedProductions.map(
@@ -228,7 +265,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           parseInt(request.params.productionId, 10)
         );
         const allLinesResponse: LineResponse[] =
-          coreFunctions.getAllLinesResponse(production);
+          await coreFunctions.getAllLinesResponse(production);
         const productionResponse: DetailedProductionResponse = {
           name: production.name,
           productionId: production._id.toString(),
@@ -323,8 +360,30 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         const production = await productionManager.requireProduction(
           parseInt(request.params.productionId, 10)
         );
-        const allLinesResponse: LineResponse[] =
-          coreFunctions.getAllLinesResponse(production);
+
+        const stringifiedProdId = production._id.toString();
+
+        const dbSessions = await dbManager.getSessionsByQuery({
+          productionId: stringifiedProdId,
+          isExpired: false
+        });
+
+        const allLinesResponse: LineResponse[] = production.lines.map(
+          (line) => {
+            const participants: UserResponse[] = (dbSessions as any[])
+              .filter((s) => s.lineId === line.id)
+              .map(toUserResponse);
+
+            return {
+              name: line.name,
+              id: line.id,
+              smbConferenceId: line.smbConferenceId,
+              participants: sortParticipants(participants),
+              programOutputLine: line.programOutputLine || false
+            };
+          }
+        );
+
         reply.code(200).send(allLinesResponse);
       } catch (err) {
         reply
@@ -367,7 +426,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
             request.body.programOutputLine || false
           );
           const allLinesResponse: LineResponse[] =
-            coreFunctions.getAllLinesResponse(production);
+            await coreFunctions.getAllLinesResponse(production);
           reply.code(200).send(allLinesResponse);
         }
       } catch (err) {
@@ -403,20 +462,31 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         const line = productionManager.getLine(production.lines, lineId);
         if (!line) {
           reply.code(404).send({ message: `Line with id ${lineId} not found` });
-        } else {
-          const participantlist = productionManager.getUsersForLine(
-            productionId,
-            line.id
-          );
-          const lineResponse: LineResponse = {
-            name: line.name,
-            id: line.id,
-            smbConferenceId: line.smbConferenceId,
-            participants: participantlist,
-            programOutputLine: line.programOutputLine || false
-          };
-          reply.code(200).send(lineResponse);
+          return;
         }
+
+        const dbSessions = await dbManager.getSessionsByQuery({
+          productionId,
+          lineId,
+          isExpired: false
+        });
+
+        const participants: UserResponse[] = (dbSessions as any[]).map((s) => ({
+          sessionId: (s._id ?? '').toString(),
+          endpointId: s.endpointId,
+          name: s.name,
+          isActive: s.isWhip ? true : s.isActive,
+          isWhip: s.isWhip
+        }));
+
+        const lineResponse: LineResponse = {
+          name: line.name,
+          id: line.id,
+          smbConferenceId: line.smbConferenceId,
+          participants: sortParticipants(participants),
+          programOutputLine: line.programOutputLine || false
+        };
+        reply.code(200).send(lineResponse);
       } catch (err) {
         Log().error(err);
         reply
@@ -523,11 +593,13 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         if (!line) {
           reply.code(404).send({ message: `Line with id ${lineId} not found` });
         } else {
-          const participantlist = productionManager.getUsersForLine(
-            productionId,
-            line.id
+          const activeUsers = await productionManager.getActiveUsers(
+            productionId
           );
-          if (participantlist.filter((p) => p.isActive).length > 0) {
+          const activeUsersOnLine = activeUsers.filter(
+            (s) => s.lineId === line.id && s.isActive
+          );
+          if (activeUsersOnLine.length > 0) {
             reply.code(400).send({
               message: 'Cannot remove a line with active participants'
             });
@@ -575,6 +647,15 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           lineId
         );
 
+        await productionManager.createUserSession(
+          smbConferenceId,
+          productionId,
+          lineId,
+          sessionId,
+          username,
+          false
+        );
+
         const endpointId: string = uuidv4();
         const endpoint = await coreFunctions.createEndpoint(
           smb,
@@ -595,6 +676,13 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           throw new Error('Missing ssrcs when creating sdp offer for endpoint');
         }
 
+        await dbManager.updateSession(sessionId, {
+          endpointId,
+          sessionDescription: endpoint, // SmbEndpointDescription
+          isActive: true,
+          lastSeen: Date.now()
+        });
+
         const sdpOffer = await coreFunctions.createConnection(
           smbConferenceId,
           productionId,
@@ -609,12 +697,13 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           reply
             .code(201)
             .type('application/json')
-            .send({ sessionId: sessionId, sdp: sdpOffer });
+            .send({ sessionId, sdp: sdpOffer });
         } else {
           reply.code(400).send({
             message: 'Could not establish a media connection',
             stackTrace: 'Failed to generate sdp offer for endpoint'
           });
+          return;
         }
       } catch (err) {
         Log().error(err);
@@ -644,13 +733,30 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       try {
         const { sessionId } = request.params;
 
-        const userSession: UserSession | undefined =
-          productionManager.getUser(sessionId);
-        if (!userSession) {
-          throw new Error(
-            'Could not get user session or session does not exist'
-          );
+        let userSession = await dbManager.getSession(sessionId);
+
+        // Retry up to 5×100ms in case sessionDescription has not been written to db yet
+        for (
+          let i = 0;
+          i < 5 && (!userSession || !userSession.sessionDescription);
+          i++
+        ) {
+          await new Promise((r) => setTimeout(r, 100));
+          userSession = await dbManager.getSession(sessionId);
         }
+
+        if (!userSession) {
+          reply
+            .code(410)
+            .send({ message: `User session id "${sessionId}" not found.` });
+          return;
+        }
+
+        // Update db session
+        await dbManager.updateSession(sessionId, {
+          isActive: true,
+          lastSeen: Date.now()
+        });
 
         const production = await productionManager.requireProduction(
           parseInt(userSession.productionId, 10)
@@ -741,7 +847,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     async (request, reply) => {
       const sessionId = request.params.sessionId;
       try {
-        const deletedSessionId = productionManager.removeUserSession(sessionId);
+        const deletedSessionId = await dbManager.deleteUserSession(sessionId);
         if (!deletedSessionId) {
           throw new Error(`Could not delete connection ${sessionId}`);
         }
@@ -772,18 +878,40 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       try {
-        const participants = productionManager.getUsersForLine(
-          request.params.productionId,
-          request.params.lineId
-        );
+        const timeoutMs = 25_000;
 
-        const waitForChange = new Promise<void>((resolve) => {
-          productionManager.once('users:change', () => {
+        // Wait until either users:change fires or timeout expires
+        await new Promise<void>((resolve) => {
+          const onChange = () => {
+            clearTimeout(timer);
             resolve();
-          });
+          };
+
+          const timer = setTimeout(() => {
+            productionManager.off('users:change', onChange);
+            resolve();
+          }, timeoutMs);
+
+          productionManager.once('users:change', onChange);
         });
-        await waitForChange;
-        reply.code(200).send(participants);
+
+        const { productionId, lineId } = request.params;
+
+        const dbSessions = await dbManager.getSessionsByQuery({
+          productionId,
+          lineId,
+          isExpired: false
+        });
+
+        const participants: UserResponse[] = (dbSessions as any[]).map((s) => ({
+          sessionId: s._id.toString(),
+          endpointId: s.endpointId,
+          name: s.name,
+          isActive: s.isWhip ? true : !!s.isActive,
+          isWhip: !!s.isWhip
+        }));
+
+        reply.code(200).send(sortParticipants(participants));
       } catch (err) {
         Log().error(err);
         reply
@@ -798,6 +926,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
 
   fastify.get<{
     Params: { sessionId: string };
+    Reply: string;
   }>(
     '/heartbeat/:sessionId',
     {
@@ -811,7 +940,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     },
     async (request, reply) => {
       const { sessionId } = request.params;
-      const status = productionManager.updateUserLastSeen(sessionId);
+      const status = await productionManager.updateUserLastSeen(sessionId);
       if (status) {
         reply.code(200).send('ok');
       } else {
