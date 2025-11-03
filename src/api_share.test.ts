@@ -1,6 +1,7 @@
 import api from './api';
 import { CoreFunctions } from './api_productions_core_functions';
 import { ConnectionQueue } from './connection_queue';
+import { UserSession } from './models';
 
 jest.mock('./db/interface', () => ({
   getIngests: jest.fn().mockResolvedValue([]),
@@ -33,7 +34,12 @@ const mockDbManager = {
   getIngestsLength: jest.fn().mockResolvedValue(0),
   getIngests: jest.fn().mockResolvedValue([]),
   updateIngest: jest.fn().mockResolvedValue(undefined),
-  deleteIngest: jest.fn().mockResolvedValue(true)
+  deleteIngest: jest.fn().mockResolvedValue(true),
+  saveUserSession: jest.fn().mockResolvedValue(undefined),
+  getSession: jest.fn().mockResolvedValue(null),
+  deleteUserSession: jest.fn().mockResolvedValue(true),
+  updateSession: jest.fn().mockResolvedValue(true),
+  getSessionsByQuery: jest.fn().mockResolvedValue([])
 };
 
 const mockProductionManager = {

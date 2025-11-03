@@ -3,6 +3,7 @@ import Fastify from 'fastify';
 import { CoreFunctions } from './api_productions_core_functions';
 import apiWhip from './api_whip';
 import { ConnectionQueue } from './connection_queue';
+import { UserSession } from './models';
 
 jest.mock('uuid', () => ({
   v4: jest.fn(() => 'mock-session-id')
@@ -29,8 +30,32 @@ const mockProductionManager = {
   deleteProduction: jest.fn().mockResolvedValue(true),
   getUser: jest.fn().mockResolvedValue(undefined),
   requireLine: jest.fn().mockResolvedValue({}),
-  once: jest.fn()
+  once: jest.fn(),
+  emit: jest.fn()
 } as any;
+
+const mockDbManager = {
+  connect: jest.fn().mockResolvedValue(undefined),
+  disconnect: jest.fn().mockResolvedValue(undefined),
+  getProduction: jest.fn().mockResolvedValue(undefined),
+  getProductions: jest.fn().mockResolvedValue([]),
+  getProductionsLength: jest.fn().mockResolvedValue(0),
+  updateProduction: jest.fn().mockResolvedValue(undefined),
+  addProduction: jest.fn().mockResolvedValue({}),
+  deleteProduction: jest.fn().mockResolvedValue(true),
+  setLineConferenceId: jest.fn().mockResolvedValue(undefined),
+  addIngest: jest.fn().mockResolvedValue({}),
+  getIngest: jest.fn().mockResolvedValue(undefined),
+  getIngestsLength: jest.fn().mockResolvedValue(0),
+  getIngests: jest.fn().mockResolvedValue([]),
+  updateIngest: jest.fn().mockResolvedValue(undefined),
+  deleteIngest: jest.fn().mockResolvedValue(true),
+  saveUserSession: jest.fn().mockResolvedValue(undefined),
+  getSession: jest.fn().mockResolvedValue(null),
+  deleteUserSession: jest.fn().mockResolvedValue(true),
+  updateSession: jest.fn().mockResolvedValue(true),
+  getSessionsByQuery: jest.fn().mockResolvedValue([])
+};
 
 const coreFunctions = new CoreFunctions(
   mockProductionManager,
@@ -54,8 +79,10 @@ coreFunctions.createEndpoint = jest.fn().mockResolvedValue({
     }
   }
 }) as any;
-coreFunctions.configureEndpointForWhip = jest.fn().mockResolvedValue(undefined);
-coreFunctions.createAnswer = jest
+coreFunctions.configureEndpointForWhipWhep = jest
+  .fn()
+  .mockResolvedValue(undefined);
+coreFunctions.createWhipWhepAnswer = jest
   .fn()
   .mockResolvedValue(
     'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 96\r\na=mid:0\r\n'
@@ -67,7 +94,7 @@ const defaultOptions = {
   smbServerApiKey: 'dummy-key',
   coreFunctions: coreFunctions,
   endpointIdleTimeout: '60',
-  publicHost: 'https://example.com'
+  dbManager: mockDbManager
 };
 
 const createTestServer = async () => {
@@ -92,6 +119,10 @@ const createTestServer = async () => {
 
 const createAuthServer = async () => {
   const fastify = Fastify();
+
+  mockDbManager.getSession.mockResolvedValue({
+    _id: 'mock-session-id'
+  } as any);
 
   fastify.register(apiWhip, { ...defaultOptions, whipAuthKey: 'secret-123' });
   await fastify.ready();
@@ -126,7 +157,7 @@ describe('apiWhip', () => {
     });
 
     it('should return 406 if SDP answer misses m= sections', async () => {
-      (coreFunctions.createAnswer as jest.Mock).mockResolvedValueOnce(
+      (coreFunctions.createWhipWhepAnswer as jest.Mock).mockResolvedValueOnce(
         'v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\nc=IN IP4 0.0.0.0\r\nt=0 0\r\n'
       );
 
@@ -267,6 +298,10 @@ describe('apiWhip', () => {
     it('should terminate a session and return 200 OK', async () => {
       const fastify = await createTestServer();
 
+      mockDbManager.getSession.mockResolvedValueOnce({
+        _id: 'mock-session-id'
+      } as any);
+
       const response = await fastify.inject({
         method: 'DELETE',
         url: '/whip/prod1/line1/mock-session-id'
@@ -277,9 +312,8 @@ describe('apiWhip', () => {
     });
 
     it('should return 404 if session not found', async () => {
-      mockProductionManager.removeUserSession.mockReturnValueOnce(undefined);
-
       const fastify = await createTestServer();
+      mockDbManager.getSession.mockResolvedValueOnce(null);
 
       const response = await fastify.inject({
         method: 'DELETE',

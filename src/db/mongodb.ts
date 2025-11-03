@@ -1,7 +1,11 @@
+import '../config/load-env';
 import { MongoClient } from 'mongodb';
-import { DbManager } from './interface';
-import { Ingest, Line, NewIngest, Production } from '../models';
+import { Ingest, Line, NewIngest, Production, UserSession } from '../models';
 import { assert } from '../utils';
+import { DbManager } from './interface';
+import { Log } from '../log';
+
+const SESSION_PRUNE_SECONDS = 7_200;
 
 export class DbManagerMongoDb implements DbManager {
   private client: MongoClient;
@@ -12,6 +16,66 @@ export class DbManagerMongoDb implements DbManager {
 
   async connect(): Promise<void> {
     await this.client.connect();
+    const db = this.client.db();
+    const sessions = db.collection('sessions');
+
+    // Ensure a expire-after-index on lastSeenAt so old sessions are automatically removed by MongoDB after SESSION_PRUNE_SECONDS
+    const expireIndexName = 'lastSeenAt_1';
+    let expireIndexExists = false;
+    try {
+      expireIndexExists = await sessions.indexExists(expireIndexName);
+    } catch (error: any) {
+      const code = error?.code;
+      const message = error?.message.toString() || '';
+      const namespaceMissing =
+        code === 26 ||
+        /NamespaceNotFound/i.test(message) ||
+        /ns does not exist/i.test(message);
+      if (!namespaceMissing) {
+        throw error;
+      }
+    }
+    if (!expireIndexExists) {
+      await sessions.createIndex(
+        { lastSeenAt: 1 },
+        { expireAfterSeconds: SESSION_PRUNE_SECONDS }
+      );
+    } else {
+      // Update expireAfterSeconds on existing index if it already exists
+      try {
+        await db.command({
+          collMod: sessions.collectionName,
+          index: {
+            name: expireIndexName,
+            expireAfterSeconds: SESSION_PRUNE_SECONDS
+          }
+        });
+      } catch (e) {
+        Log().error(e);
+      }
+    }
+
+    // Helper to create indexes safely (ignore "already exists" errors)
+    const safeCreate = async (keys: Record<string, 1 | -1>, opts: any = {}) => {
+      try {
+        await sessions.createIndex(keys, opts);
+      } catch (err: any) {
+        const msg = String(err?.message || '');
+        if (!/already exists/i.test(msg)) throw err;
+      }
+    };
+
+    await safeCreate({
+      productionId: 1,
+      lineId: 1,
+      isExpired: 1,
+      lastSeenAt: -1
+    });
+
+    await safeCreate({ isExpired: 1, isActive: 1, lastSeenAt: 1 });
+    await safeCreate({ productionId: 1 });
+    await safeCreate({ endpointId: 1 });
+    await safeCreate({ productionId: 1, endpointId: 1 });
   }
 
   async disconnect(): Promise<void> {
@@ -27,7 +91,7 @@ export class DbManagerMongoDb implements DbManager {
       new: true,
       upsert: true
     });
-    return ret.value.seq;
+    return ret.value?.seq || 1;
   }
 
   /** Get all productions from the database in reverse natural order, limited by the limit parameter */
@@ -154,5 +218,75 @@ export class DbManagerMongoDb implements DbManager {
       .collection<Ingest>('ingests')
       .deleteOne({ _id: ingestId as any });
     return result.deletedCount === 1;
+  }
+
+  async saveUserSession(
+    sessionId: string,
+    userSession: Omit<UserSession, '_id' | 'createdAt' | 'lastSeenAt'>
+  ): Promise<void> {
+    const db = this.client.db();
+    const sessions = db.collection('sessions');
+    const now = new Date();
+    await sessions.updateOne(
+      { _id: sessionId as any },
+      {
+        $setOnInsert: { createdAt: now },
+        $set: {
+          ...userSession,
+          lastSeenAt: new Date(userSession.lastSeen ?? Date.now())
+        }
+      },
+      { upsert: true }
+    );
+  }
+
+  // Retreive session from db based on sessionId
+  async getSession(sessionId: string): Promise<UserSession | null> {
+    const db = this.client.db();
+    return db.collection('sessions').findOne({ _id: sessionId as any }) as any;
+  }
+
+  // Delete session in db
+  async deleteUserSession(sessionId: string): Promise<boolean> {
+    const db = this.client.db();
+    const result = await db
+      .collection('sessions')
+      .deleteOne({ _id: sessionId as any });
+    return result.deletedCount === 1;
+  }
+
+  // Update db session
+  async updateSession(
+    sessionId: string,
+    updates: Partial<UserSession>
+  ): Promise<boolean> {
+    const db = this.client.db();
+    const $set: Record<string, unknown> = { ...updates };
+
+    if ('lastSeen' in updates && typeof updates.lastSeen === 'number') {
+      $set.lastSeenAt = new Date(updates.lastSeen);
+    }
+
+    if ('lastSeenAt' in updates && updates.lastSeenAt !== undefined) {
+      const v = updates.lastSeenAt as any;
+      $set.lastSeenAt = v instanceof Date ? v : new Date(v);
+    }
+
+    const res = await db
+      .collection('sessions')
+      .updateOne({ _id: sessionId } as any, { $set });
+
+    return res.matchedCount === 1;
+  }
+
+  // Get database sessions matching query
+  async getSessionsByQuery(q: Partial<UserSession>): Promise<UserSession[]> {
+    const db = this.client.db();
+    const sessions = db.collection<UserSession>('sessions');
+    const mongoQuery: Record<string, unknown> = { ...q };
+
+    delete (mongoQuery as any).lastSeen;
+
+    return sessions.find(mongoQuery).toArray();
   }
 }

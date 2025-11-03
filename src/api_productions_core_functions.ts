@@ -96,7 +96,7 @@ export class CoreFunctions {
     audio: boolean,
     data: boolean,
     iceControlling: boolean,
-    relayType: 'ssrc-rewrite' | 'forwarder',
+    relayType: 'ssrc-rewrite' | 'forwarder' | 'mixed',
     endpointIdleTimeout: number
   ): Promise<SmbEndpointDescription> {
     const endpoint: SmbEndpointDescription = await smb.allocateEndpoint(
@@ -114,7 +114,7 @@ export class CoreFunctions {
     return endpoint;
   }
 
-  async configureEndpointForWhip(
+  async configureEndpointForWhipWhep(
     sdpOffer: SessionDescription,
     endpointDescription: SmbEndpointDescription,
     smb: SmbProtocol,
@@ -155,6 +155,24 @@ export class CoreFunctions {
     if (!transport.ice.candidates || transport.ice.candidates.length === 0) {
       throw new Error('ICE candidates missing in transport');
     }
+
+    transport.ice.candidates = !audioMedia.candidates
+      ? []
+      : audioMedia.candidates.flatMap((element) => {
+          return {
+            generation: element.generation ? element.generation : 0,
+            component: element.component,
+            protocol: element.transport.toLowerCase(),
+            port: element.port,
+            ip: element.ip,
+            relPort: element.rport,
+            relAddr: element.raddr,
+            foundation: element.foundation.toString(),
+            priority: parseInt(element.priority.toString(), 10),
+            type: element.type,
+            network: element['network-id']
+          };
+        });
 
     const videoStreams: any[] = [];
     const streamsMap = new Map();
@@ -302,6 +320,8 @@ export class CoreFunctions {
       }
     }
 
+    endpoint.data = undefined; //this is important! do not remove.
+
     await smb.configureEndpoint(
       smbServerUrl,
       smbConferenceId,
@@ -311,7 +331,7 @@ export class CoreFunctions {
     );
   }
 
-  async createAnswer(
+  async createWhipWhepAnswer(
     offer: SessionDescription,
     endpoint: SmbEndpointDescription
   ): Promise<string> {
@@ -409,7 +429,8 @@ export class CoreFunctions {
               'http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time'
         );
 
-        media.direction = 'recvonly';
+        media.direction =
+          media.direction === 'recvonly' ? 'sendonly' : 'recvonly';
         media.rtcpFb = undefined;
 
         const defaultAudioExts = [
@@ -479,14 +500,16 @@ export class CoreFunctions {
           );
 
           media.setup = 'active';
-          media.direction = 'recvonly';
+          media.direction =
+            media.direction === 'recvonly' ? 'sendonly' : 'recvonly';
           media.ssrcGroups = undefined;
         } else {
           console.warn(
             'No VP8 codec found in offer video media. Skipping VP8-specific filtering.'
           );
           media.setup = 'active';
-          media.direction = 'recvonly';
+          media.direction =
+            media.direction === 'recvonly' ? 'sendonly' : 'recvonly';
         }
       }
     }
@@ -674,19 +697,28 @@ export class CoreFunctions {
     return this.connectionQueue.queueAsync(createConf);
   }
 
-  getAllLinesResponse(production: Production): LineResponse[] {
-    const allLinesResponse: LineResponse[] = production.lines.map(
-      ({ name, id, smbConferenceId, programOutputLine }) => ({
-        name,
-        id,
-        smbConferenceId,
-        participants: this.productionManager.getUsersForLine(
-          production._id.toString(),
-          id
-        ),
-        programOutputLine
-      })
+  async getAllLinesResponse(production: Production): Promise<LineResponse[]> {
+    const stringifiedProdId = production._id.toString();
+
+    const allLinesResponse = await Promise.all(
+      production.lines.map(
+        async ({ name, id, smbConferenceId, programOutputLine }) => {
+          const participants = await this.productionManager.getUsersForLine(
+            stringifiedProdId,
+            id
+          );
+
+          return {
+            name,
+            id,
+            smbConferenceId,
+            participants,
+            programOutputLine: programOutputLine ?? false
+          } as LineResponse;
+        }
+      )
     );
+
     return allLinesResponse;
   }
 

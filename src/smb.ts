@@ -62,7 +62,7 @@ export class SmbProtocol {
     audio: boolean,
     data: boolean,
     iceControlling: boolean,
-    relayType: 'ssrc-rewrite' | 'forwarder',
+    relayType: 'ssrc-rewrite' | 'forwarder' | 'mixed',
     idleTimeout: number,
     smbKey: string
   ): Promise<SmbEndpointDescription> {

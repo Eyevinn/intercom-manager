@@ -118,8 +118,21 @@ jest.mock('./db/interface', () => ({
   addProduction: jest.fn(),
   getProduction: jest.fn(),
   getProductions: jest.fn(),
+  getProductionsLength: jest.fn(),
   updateProduction: jest.fn(),
-  deleteProduction: jest.fn()
+  deleteProduction: jest.fn(),
+  setLineConferenceId: jest.fn().mockResolvedValue(undefined),
+  addIngest: jest.fn(),
+  getIngest: jest.fn(),
+  getIngestsLength: jest.fn(),
+  getIngests: jest.fn(),
+  updateIngest: jest.fn(),
+  deleteIngest: jest.fn(),
+  saveUserSession: jest.fn().mockResolvedValue(undefined),
+  getSession: jest.fn().mockResolvedValue(null),
+  deleteUserSession: jest.fn().mockResolvedValue(true),
+  updateSession: jest.fn().mockResolvedValue(true),
+  getSessionsByQuery: jest.fn().mockResolvedValue([])
 }));
 
 beforeEach(() => {

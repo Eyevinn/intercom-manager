@@ -231,11 +231,19 @@ export const UserResponse = Type.Object({
 });
 
 export const UserSession = Type.Object({
+  _id: Type.String({ description: 'Unique session ID (MongoDB document ID' }),
   name: Type.String(),
   smbConferenceId: Type.String(),
   productionId: Type.String(),
   lineId: Type.String(),
   lastSeen: Type.Number(),
+  lastSeenAt: Type.Optional(
+    Type.String({
+      format: 'date-time',
+      description: 'ISO date for Mongo TTL index'
+    })
+  ),
+  createdAt: Type.Optional(Type.String({ format: 'date-time' })),
   isActive: Type.Boolean(),
   isExpired: Type.Boolean(),
   endpointId: Type.Optional(Type.String()),
@@ -331,13 +339,13 @@ export const ReAuthResponse = Type.Object({
 });
 export type ReAuthResponse = Static<typeof ReAuthResponse>;
 
-// WHIP endpoint request body schema
-export const WhipRequest = Type.String({
+// WHIP/WHEP endpoint request body schema
+export const WhipWhepRequest = Type.String({
   description: 'WebRTC SDP offer'
 });
 
-// WHIP endpoint response schema
-export const WhipResponse = Type.String({
+// WHIP/WHEP endpoint response schema
+export const WhipWhepResponse = Type.String({
   description: 'Created'
 });
 

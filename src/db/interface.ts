@@ -1,4 +1,4 @@
-import { Ingest, Line, NewIngest, Production } from '../models';
+import { Ingest, Line, NewIngest, Production, UserSession } from '../models';
 
 export interface DbManager {
   connect(): Promise<void>;
@@ -20,4 +20,12 @@ export interface DbManager {
   getIngests(limit: number, offset: number): Promise<Ingest[]>;
   updateIngest(ingest: Ingest): Promise<Ingest | undefined>;
   deleteIngest(ingestId: number): Promise<boolean>;
+  saveUserSession(sessionId: string, userSession: UserSession): Promise<void>;
+  getSession(sessionId: string): Promise<UserSession | null>;
+  deleteUserSession(sessionId: string): Promise<boolean>;
+  updateSession(
+    sessionId: string,
+    updates: Partial<UserSession>
+  ): Promise<boolean>;
+  getSessionsByQuery(q: Partial<UserSession>): Promise<UserSession[]>;
 }
