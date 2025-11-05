@@ -331,9 +331,14 @@ export class DbManagerCouchDb implements DbManager {
     }
   }
 
-  // @ts-expect-error: we use mongodb
-  getSession(sessionId: string): Promise<UserSession | null> {
-    // TODO
+  async getSession(sessionId: string): Promise<UserSession | null> {
+    await this.connect();
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
+    const sessionDocId = `session_${sessionId}`;
+    const session = await this.nanoDb.get(sessionDocId);
+    return session as any as UserSession;
   }
 
   updateSession(
