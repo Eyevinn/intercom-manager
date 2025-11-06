@@ -299,6 +299,8 @@ export class DbManagerCouchDb implements DbManager {
 
     try {
       let existingDoc: any;
+
+      // Check if document exists, if not set id
       try {
         existingDoc = await this.nanoDb.get(sessionDocId);
       } catch (err: any) {
@@ -308,16 +310,13 @@ export class DbManagerCouchDb implements DbManager {
           throw err;
         }
       }
-
       const updatedSession = {
         ...existingDoc,
         ...userSession,
         _id: sessionDocId
       };
       
-      
       await this.nanoDb.insert(updatedSession);
-      return;
     } catch (error) {
       return;
     }
@@ -359,11 +358,11 @@ export class DbManagerCouchDb implements DbManager {
       try {        
         const doc = await this.nanoDb.get(id);
 
-        const updated = { ...doc, ...updates };
+        const updated = {...doc, ...updates};
         
         await this.nanoDb.insert(updated);
         return true;
-      } catch (err) {
+      } catch (error) {
         return false;
       }
   }
@@ -376,6 +375,6 @@ export class DbManagerCouchDb implements DbManager {
 
     const selector: any = { ...q };
     const response = await this.nanoDb.find({ selector });
-    return response.docs as unknown as UserSession[]; // coul dalso expand type UserSession to avoid unknown
+    return response.docs as unknown as UserSession[]; // could also expand type UserSession to avoid unknown
   }
 }
