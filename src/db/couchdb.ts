@@ -296,22 +296,30 @@ export class DbManagerCouchDb implements DbManager {
     }
 
     const sessionDocId = `session_${sessionId}`;
+
     try {
-      // Try to get existing document to preserve _rev for updates
-      const existingDoc = await this.nanoDb.get(sessionDocId);
+      let existingDoc: any;
+      try {
+        existingDoc = await this.nanoDb.get(sessionDocId);
+      } catch (err: any) {
+        if (err.statusCode === 404) {
+          existingDoc = { _id: sessionDocId };
+        } else {
+          throw err;
+        }
+      }
+
       const updatedSession = {
         ...existingDoc,
         ...userSession,
         _id: sessionDocId
       };
+      
+      
       await this.nanoDb.insert(updatedSession);
+      return;
     } catch (error) {
-      // Document doesn't exist, create new one
-      const newSession = {
-        ...userSession,
-        _id: sessionDocId
-      };
-      await this.nanoDb.insert(newSession as unknown as nano.MaybeDocument);
+      return;
     }
   }
 
@@ -341,16 +349,33 @@ export class DbManagerCouchDb implements DbManager {
     return session as any as UserSession;
   }
 
-  updateSession(
-    sessionId: string,
-    updates: Partial<UserSession>
-    // @ts-expect-error: we use mongodb
-  ): Promise<boolean> {
-    //TODO
+  async updateSession(sessionId: string, updates: Partial<UserSession>): Promise<boolean> {
+      await this.connect();
+      if (!this.nanoDb) {
+        throw new Error('Database not connected');
+      }
+
+      const id = `session_${sessionId}`;
+      try {        
+        const doc = await this.nanoDb.get(id);
+
+        const updated = { ...doc, ...updates };
+        
+        await this.nanoDb.insert(updated);
+        return true;
+      } catch (err) {
+        return false;
+      }
   }
 
-  // @ts-expect-error: we use mongodb
-  getSessionsByQuery(q: Partial<UserSession>): Promise<UserSession[]> {
-    // TODO
+  async getSessionsByQuery(q: Partial<UserSession>): Promise<UserSession[]> {
+    await this.connect();
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
+
+    const selector: any = { ...q };
+    const response = await this.nanoDb.find({ selector });
+    return response.docs as unknown as UserSession[]; // coul dalso expand type UserSession to avoid unknown
   }
 }
