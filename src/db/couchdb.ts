@@ -315,7 +315,7 @@ export class DbManagerCouchDb implements DbManager {
         ...userSession,
         _id: sessionDocId
       };
-      
+
       await this.nanoDb.insert(updatedSession);
     } catch (error) {
       return;
@@ -348,23 +348,26 @@ export class DbManagerCouchDb implements DbManager {
     return session as any as UserSession;
   }
 
-  async updateSession(sessionId: string, updates: Partial<UserSession>): Promise<boolean> {
-      await this.connect();
-      if (!this.nanoDb) {
-        throw new Error('Database not connected');
-      }
+  async updateSession(
+    sessionId: string,
+    updates: Partial<UserSession>
+  ): Promise<boolean> {
+    await this.connect();
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
 
-      const id = `session_${sessionId}`;
-      try {        
-        const doc = await this.nanoDb.get(id);
+    const id = `session_${sessionId}`;
+    try {
+      const doc = await this.nanoDb.get(id);
 
-        const updated = {...doc, ...updates};
-        
-        await this.nanoDb.insert(updated);
-        return true;
-      } catch (error) {
-        return false;
-      }
+      const updated = { ...doc, ...updates };
+
+      await this.nanoDb.insert(updated);
+      return true;
+    } catch (error) {
+      return false;
+    }
   }
 
   async getSessionsByQuery(q: Partial<UserSession>): Promise<UserSession[]> {
