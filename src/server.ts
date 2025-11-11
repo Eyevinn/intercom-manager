@@ -1,5 +1,6 @@
 import api from './api';
 import { CoreFunctions } from './api_productions_core_functions';
+import { BridgeManager } from './bridge_manager';
 import { ConnectionQueue } from './connection_queue';
 import { DbManagerCouchDb } from './db/couchdb';
 import { DbManagerMongoDb } from './db/mongodb';
@@ -9,6 +10,8 @@ import { ProductionManager } from './production_manager';
 
 const SMB_ADDRESS: string = process.env.SMB_ADDRESS ?? 'http://localhost:8080';
 const PUBLIC_HOST: string = process.env.PUBLIC_HOST ?? 'http://localhost:8000';
+const WHIP_GATEWAY_URL: string | undefined = process.env.WHIP_GATEWAY_URL;
+const WHEP_GATEWAY_URL: string | undefined = process.env.WHEP_GATEWAY_URL;
 
 if (!process.env.SMB_ADDRESS) {
   console.warn('SMB_ADDRESS environment variable not set, using defaults');
@@ -42,6 +45,22 @@ if (dbUrl.protocol === 'mongodb:' || dbUrl.protocol === 'mongodb+srv:') {
   const ingestManager = new IngestManager(dbManager);
   await ingestManager.load();
 
+  // Initialize bridge manager for gateway sync (only if gateways are configured)
+  let bridgeManager: BridgeManager | null = null;
+  if (WHIP_GATEWAY_URL || WHEP_GATEWAY_URL) {
+    bridgeManager = new BridgeManager(
+      dbManager,
+      WHIP_GATEWAY_URL || '',
+      process.env.WHIP_GATEWAY_API_KEY,
+      WHEP_GATEWAY_URL || '',
+      process.env.WHEP_GATEWAY_API_KEY
+    );
+    bridgeManager.start();
+    Log().info('Bridge manager started');
+  } else {
+    Log().info('Bridge manager disabled (no gateway URLs configured)');
+  }
+
   const server = await api({
     title: 'intercom-manager',
     smbServerBaseUrl: SMB_ADDRESS,
@@ -52,7 +71,11 @@ if (dbUrl.protocol === 'mongodb:' || dbUrl.protocol === 'mongodb+srv:') {
     dbManager: dbManager,
     productionManager: productionManager,
     ingestManager: ingestManager,
-    coreFunctions: new CoreFunctions(productionManager, connectionQueue)
+    coreFunctions: new CoreFunctions(productionManager, connectionQueue),
+    whipGatewayUrl: WHIP_GATEWAY_URL || '',
+    whipGatewayApiKey: process.env.WHIP_GATEWAY_API_KEY,
+    whepGatewayUrl: WHEP_GATEWAY_URL || '',
+    whepGatewayApiKey: process.env.WHEP_GATEWAY_API_KEY
   });
 
   server.listen({ port: PORT, host: '0.0.0.0' }, (err, address) => {
@@ -63,5 +86,23 @@ if (dbUrl.protocol === 'mongodb:' || dbUrl.protocol === 'mongodb+srv:') {
     Log().info(
       `Media Bridge at ${SMB_ADDRESS} (${ENDPOINT_IDLE_TIMEOUT_S}s idle timeout)`
     );
+    if (WHIP_GATEWAY_URL) {
+      Log().info(`WHIP Gateway at ${WHIP_GATEWAY_URL}`);
+    }
+    if (WHEP_GATEWAY_URL) {
+      Log().info(`WHEP Gateway at ${WHEP_GATEWAY_URL}`);
+    }
+  });
+
+  // Handle graceful shutdown
+  process.on('SIGTERM', () => {
+    Log().info('SIGTERM signal received: closing HTTP server');
+    if (bridgeManager) {
+      bridgeManager.stop();
+    }
+    server.close(() => {
+      Log().info('HTTP server closed');
+      dbManager.disconnect();
+    });
   });
 })();
