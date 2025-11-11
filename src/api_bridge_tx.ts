@@ -191,7 +191,10 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
         let destPort = transmitter.port;
         let destSrtUrl = transmitter.srtUrl;
         if (transmitter.mode === 'caller' && transmitter.srtUrl) {
-          const urlWithoutProtocol = transmitter.srtUrl.replace(/^srt:\/\//, '');
+          const urlWithoutProtocol = transmitter.srtUrl.replace(
+            /^srt:\/\//,
+            ''
+          );
           const portMatch = urlWithoutProtocol.match(/:(\d+)$/);
           if (portMatch) {
             destPort = parseInt(portMatch[1], 10);
@@ -379,9 +382,13 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
           try {
             // Stop the gateway first before deleting
             try {
-              await callGateway('PUT', `/api/v1/tx/id/${transmitter._id}/state`, {
-                desired: BridgeStatus.STOPPED
-              });
+              await callGateway(
+                'PUT',
+                `/api/v1/tx/id/${transmitter._id}/state`,
+                {
+                  desired: BridgeStatus.STOPPED
+                }
+              );
             } catch (stopError) {
               Log().warn(
                 'Failed to stop transmitter before deletion:',
@@ -403,7 +410,10 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
             let destPort = transmitter.port;
             let destSrtUrl = transmitter.srtUrl;
             if (transmitter.mode === 'caller' && transmitter.srtUrl) {
-              const urlWithoutProtocol = transmitter.srtUrl.replace(/^srt:\/\//, '');
+              const urlWithoutProtocol = transmitter.srtUrl.replace(
+                /^srt:\/\//,
+                ''
+              );
               const portMatch = urlWithoutProtocol.match(/:(\d+)$/);
               if (portMatch) {
                 destPort = parseInt(portMatch[1], 10);
@@ -431,9 +441,13 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
               previousDesiredStatus === BridgeStatus.RUNNING
             ) {
               try {
-                await callGateway('PUT', `/api/v1/tx/id/${transmitter._id}/state`, {
-                  desired: BridgeStatus.RUNNING
-                });
+                await callGateway(
+                  'PUT',
+                  `/api/v1/tx/id/${transmitter._id}/state`,
+                  {
+                    desired: BridgeStatus.RUNNING
+                  }
+                );
                 transmitter.status = BridgeStatus.RUNNING;
                 transmitter.desiredStatus = BridgeStatus.RUNNING;
               } catch (stateError) {

@@ -127,7 +127,10 @@ export class DbManagerCouchDb implements DbManager {
 
     try {
       const transmitter = await this.nanoDb.get(id);
-      const response = await this.nanoDb.destroy(transmitter._id, transmitter._rev);
+      const response = await this.nanoDb.destroy(
+        transmitter._id,
+        transmitter._rev
+      );
       return response.ok;
     } catch (error) {
       return false;

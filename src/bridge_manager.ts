@@ -229,7 +229,10 @@ export class BridgeManager {
                 let destPort = dbTx.port;
                 let destSrtUrl = dbTx.srtUrl;
                 if (dbTx.mode === 'caller' && dbTx.srtUrl) {
-                  const urlWithoutProtocol = dbTx.srtUrl.replace(/^srt:\/\//, '');
+                  const urlWithoutProtocol = dbTx.srtUrl.replace(
+                    /^srt:\/\//,
+                    ''
+                  );
                   const portMatch = urlWithoutProtocol.match(/:(\d+)$/);
                   if (portMatch) {
                     destPort = parseInt(portMatch[1], 10);
