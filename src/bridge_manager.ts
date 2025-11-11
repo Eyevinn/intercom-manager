@@ -151,13 +151,14 @@ export class BridgeManager {
         return;
       }
 
-      const gatewayPortSet = new Set(
-        gatewayTransmitters.map((t: any) => t.port)
+      // Create a map of gateway transmitters by their ID for quick lookup
+      const gatewayTxMap = new Map(
+        gatewayTransmitters.map((t: any) => [t.id, t])
       );
 
       // Sync each database transmitter
       for (const dbTx of dbTransmitters) {
-        const existsOnGateway = gatewayPortSet.has(dbTx.port);
+        const existsOnGateway = gatewayTxMap.has(dbTx._id);
 
         if (!existsOnGateway) {
           // Transmitter missing from gateway - recreate it
@@ -165,16 +166,30 @@ export class BridgeManager {
             // Use desiredStatus if set, otherwise use current status
             const statusToUse = dbTx.desiredStatus || dbTx.status;
 
+            // For caller mode, parse port from srtUrl and extract hostname for gateway
+            let destPort = dbTx.port;
+            let destSrtUrl = dbTx.srtUrl;
+            if (dbTx.mode === 'caller' && dbTx.srtUrl) {
+              const urlWithoutProtocol = dbTx.srtUrl.replace(/^srt:\/\//, '');
+              const portMatch = urlWithoutProtocol.match(/:(\d+)$/);
+              if (portMatch) {
+                destPort = parseInt(portMatch[1], 10);
+                // Extract hostname without port (gateway expects just hostname/IP)
+                destSrtUrl = urlWithoutProtocol.replace(/:(\d+)$/, '');
+              }
+            }
+
             await this.callGateway(
               this.whipGatewayUrl,
               this.whipGatewayApiKey,
               'POST',
-              '/api/v1/tx',
+              '/api/v1/tx/id',
               {
+                id: dbTx._id,
                 label: dbTx.label,
-                port: dbTx.port,
+                port: destPort,
                 mode: dbTx.mode === 'caller' ? 1 : 2,
-                srtUrl: dbTx.srtUrl,
+                srtUrl: destSrtUrl,
                 whipUrl: dbTx.whipUrl,
                 passThroughUrl: dbTx.passThroughUrl,
                 noVideo: true,
@@ -191,20 +206,88 @@ export class BridgeManager {
               await this.dbManager.updateTransmitter(dbTx);
             }
           } catch (error) {
-            Log().error(
-              `Failed to recreate transmitter on gateway: port ${dbTx.port}`,
-              error
-            );
-            if (dbTx.status !== BridgeStatus.FAILED) {
-              dbTx.status = BridgeStatus.FAILED;
-              await this.dbManager.updateTransmitter(dbTx);
+            const errorMessage = (error as Error).message || String(error);
+
+            // If transmitter already exists, try to delete and recreate
+            if (errorMessage.includes('already exists')) {
+              Log().warn(
+                `Transmitter ${dbTx._id} already exists on gateway from previous run, removing and recreating`
+              );
+              try {
+                // Delete the stale transmitter
+                await this.callGateway(
+                  this.whipGatewayUrl,
+                  this.whipGatewayApiKey,
+                  'DELETE',
+                  `/api/v1/tx/id/${dbTx._id}`
+                );
+
+                // Retry creation
+                const statusToUse = dbTx.desiredStatus || dbTx.status;
+
+                // For caller mode, parse port from srtUrl and extract hostname for gateway
+                let destPort = dbTx.port;
+                let destSrtUrl = dbTx.srtUrl;
+                if (dbTx.mode === 'caller' && dbTx.srtUrl) {
+                  const urlWithoutProtocol = dbTx.srtUrl.replace(/^srt:\/\//, '');
+                  const portMatch = urlWithoutProtocol.match(/:(\d+)$/);
+                  if (portMatch) {
+                    destPort = parseInt(portMatch[1], 10);
+                    // Extract hostname without port (gateway expects just hostname/IP)
+                    destSrtUrl = urlWithoutProtocol.replace(/:(\d+)$/, '');
+                  }
+                }
+
+                await this.callGateway(
+                  this.whipGatewayUrl,
+                  this.whipGatewayApiKey,
+                  'POST',
+                  '/api/v1/tx/id',
+                  {
+                    id: dbTx._id,
+                    label: dbTx.label,
+                    port: destPort,
+                    mode: dbTx.mode === 'caller' ? 1 : 2,
+                    srtUrl: destSrtUrl,
+                    whipUrl: dbTx.whipUrl,
+                    passThroughUrl: dbTx.passThroughUrl,
+                    noVideo: true,
+                    status: statusToUse
+                  }
+                );
+                Log().info(
+                  `Successfully recreated transmitter after cleanup: port ${dbTx.port}`
+                );
+
+                // Update status
+                if (dbTx.status !== statusToUse) {
+                  dbTx.status = statusToUse;
+                  await this.dbManager.updateTransmitter(dbTx);
+                }
+              } catch (retryError) {
+                Log().error(
+                  `Failed to recreate transmitter after cleanup: port ${dbTx.port}`,
+                  retryError
+                );
+                if (dbTx.status !== BridgeStatus.FAILED) {
+                  dbTx.status = BridgeStatus.FAILED;
+                  await this.dbManager.updateTransmitter(dbTx);
+                }
+              }
+            } else {
+              Log().error(
+                `Failed to recreate transmitter on gateway: port ${dbTx.port}`,
+                error
+              );
+              if (dbTx.status !== BridgeStatus.FAILED) {
+                dbTx.status = BridgeStatus.FAILED;
+                await this.dbManager.updateTransmitter(dbTx);
+              }
             }
           }
         } else {
           // Transmitter exists - check if desired state differs from actual
-          const gatewayTx = gatewayTransmitters.find(
-            (t: any) => t.port === dbTx.port
-          );
+          const gatewayTx = gatewayTxMap.get(dbTx._id);
 
           if (gatewayTx) {
             // If desiredStatus is set and differs from gateway state, enforce it
@@ -217,7 +300,7 @@ export class BridgeManager {
                   this.whipGatewayUrl,
                   this.whipGatewayApiKey,
                   'PUT',
-                  `/api/v1/tx/${dbTx.port}/state`,
+                  `/api/v1/tx/id/${dbTx._id}/state`,
                   {
                     desired: dbTx.desiredStatus
                   }
@@ -248,9 +331,9 @@ export class BridgeManager {
       }
 
       // Remove orphaned transmitters from gateway (not in database)
-      const dbPortSet = new Set(dbTransmitters.map((t) => t.port));
+      const dbIdSet = new Set(dbTransmitters.map((t) => t._id));
       for (const gatewayTx of gatewayTransmitters) {
-        if (!dbPortSet.has(gatewayTx.port)) {
+        if (!dbIdSet.has(gatewayTx.id)) {
           try {
             // Stop transmitter first before deleting
             try {
@@ -258,12 +341,12 @@ export class BridgeManager {
                 this.whipGatewayUrl,
                 this.whipGatewayApiKey,
                 'PUT',
-                `/api/v1/tx/${gatewayTx.port}/state`,
+                `/api/v1/tx/id/${gatewayTx.id}/state`,
                 { desired: BridgeStatus.STOPPED }
               );
             } catch (stopError) {
               Log().warn(
-                `Failed to stop orphaned transmitter before deletion: port ${gatewayTx.port}`,
+                `Failed to stop orphaned transmitter before deletion: id ${gatewayTx.id}`,
                 stopError
               );
             }
@@ -273,14 +356,14 @@ export class BridgeManager {
               this.whipGatewayUrl,
               this.whipGatewayApiKey,
               'DELETE',
-              `/api/v1/tx/${gatewayTx.port}`
+              `/api/v1/tx/id/${gatewayTx.id}`
             );
             Log().info(
-              `Removed orphaned transmitter from gateway: port ${gatewayTx.port}`
+              `Removed orphaned transmitter from gateway: id ${gatewayTx.id}`
             );
           } catch (error) {
             Log().warn(
-              `Failed to remove orphaned transmitter from gateway: port ${gatewayTx.port}`,
+              `Failed to remove orphaned transmitter from gateway: id ${gatewayTx.id}`,
               error
             );
           }

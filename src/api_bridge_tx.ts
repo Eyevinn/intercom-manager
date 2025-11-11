@@ -17,9 +17,9 @@ export interface ApiBridgeTxOptions {
   whipGatewayApiKey?: string;
 }
 
-const ParamsPort = Type.Object({
-  port: Type.String({
-    description: 'SRT port'
+const ParamsId = Type.Object({
+  id: Type.String({
+    description: 'Transmitter ID'
   })
 });
 
@@ -129,14 +129,14 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
 
   // Get a specific transmitter
   fastify.get<{
-    Params: { port: string };
+    Params: { id: string };
     Reply: Transmitter | { error: string };
   }>(
-    '/bridge/tx/:port',
+    '/bridge/tx/:id',
     {
       schema: {
-        description: 'Get a transmitter by port',
-        params: ParamsPort,
+        description: 'Get a transmitter by id',
+        params: ParamsId,
         response: {
           200: Transmitter,
           404: Type.Object({ error: Type.String() }),
@@ -146,8 +146,8 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
     },
     async (request, reply) => {
       try {
-        const port = parseInt(request.params.port, 10);
-        const transmitter = await dbManager.getTransmitter(port);
+        const id = request.params.id;
+        const transmitter = await dbManager.getTransmitter(id);
 
         if (!transmitter) {
           reply.code(404).send({ error: 'Transmitter not found' });
@@ -177,6 +177,7 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
         response: {
           201: Transmitter,
           400: Type.Object({ error: Type.String() }),
+          409: Type.Object({ error: Type.String() }),
           500: Type.Object({ error: Type.String() })
         }
       }
@@ -186,13 +187,27 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
         // Save to database first
         const transmitter = await dbManager.addTransmitter(request.body);
 
+        // For caller mode, parse port from srtUrl and extract hostname for gateway
+        let destPort = transmitter.port;
+        let destSrtUrl = transmitter.srtUrl;
+        if (transmitter.mode === 'caller' && transmitter.srtUrl) {
+          const urlWithoutProtocol = transmitter.srtUrl.replace(/^srt:\/\//, '');
+          const portMatch = urlWithoutProtocol.match(/:(\d+)$/);
+          if (portMatch) {
+            destPort = parseInt(portMatch[1], 10);
+            // Extract hostname without port (gateway expects just hostname/IP)
+            destSrtUrl = urlWithoutProtocol.replace(/:(\d+)$/, '');
+          }
+        }
+
         // Try to create on gateway
         try {
-          await callGateway('POST', '/api/v1/tx', {
+          await callGateway('POST', '/api/v1/tx/id', {
+            id: transmitter._id,
             label: transmitter.label,
-            port: transmitter.port,
+            port: destPort,
             mode: transmitter.mode === 'caller' ? 1 : 2,
-            srtUrl: transmitter.srtUrl,
+            srtUrl: destSrtUrl,
             whipUrl: transmitter.whipUrl,
             passThroughUrl: transmitter.passThroughUrl,
             noVideo: true,
@@ -219,15 +234,15 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
 
   // Update transmitter state
   fastify.put<{
-    Params: { port: string };
+    Params: { id: string };
     Body: TransmitterStateChange;
     Reply: Transmitter | { error: string };
   }>(
-    '/bridge/tx/:port/state',
+    '/bridge/tx/:id/state',
     {
       schema: {
         description: 'Update transmitter state',
-        params: ParamsPort,
+        params: ParamsId,
         body: TransmitterStateChange,
         response: {
           200: Transmitter,
@@ -238,8 +253,8 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
     },
     async (request, reply) => {
       try {
-        const port = parseInt(request.params.port, 10);
-        const transmitter = await dbManager.getTransmitter(port);
+        const id = request.params.id;
+        const transmitter = await dbManager.getTransmitter(id);
 
         if (!transmitter) {
           reply.code(404).send({ error: 'Transmitter not found' });
@@ -252,7 +267,7 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
 
         // Update gateway state
         try {
-          await callGateway('PUT', `/api/v1/tx/${port}/state`, {
+          await callGateway('PUT', `/api/v1/tx/id/${transmitter._id}/state`, {
             desired: request.body.desired
           });
 
@@ -278,16 +293,16 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
 
   // Update transmitter metadata
   fastify.patch<{
-    Params: { port: string };
+    Params: { id: string };
     Body: PatchTransmitter;
     Reply: Transmitter | { error: string };
   }>(
-    '/bridge/tx/:port',
+    '/bridge/tx/:id',
     {
       schema: {
         description:
           'Update transmitter metadata (label, productionId, lineId)',
-        params: ParamsPort,
+        params: ParamsId,
         body: PatchTransmitter,
         response: {
           200: Transmitter,
@@ -298,8 +313,8 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
     },
     async (request, reply) => {
       try {
-        const port = parseInt(request.params.port, 10);
-        const transmitter = await dbManager.getTransmitter(port);
+        const id = request.params.id;
+        const transmitter = await dbManager.getTransmitter(id);
 
         if (!transmitter) {
           reply.code(404).send({ error: 'Transmitter not found' });
@@ -364,7 +379,7 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
           try {
             // Stop the gateway first before deleting
             try {
-              await callGateway('PUT', `/api/v1/tx/${port}/state`, {
+              await callGateway('PUT', `/api/v1/tx/id/${transmitter._id}/state`, {
                 desired: BridgeStatus.STOPPED
               });
             } catch (stopError) {
@@ -376,7 +391,7 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
 
             // Delete from gateway
             try {
-              await callGateway('DELETE', `/api/v1/tx/${port}`);
+              await callGateway('DELETE', `/api/v1/tx/id/${transmitter._id}`);
             } catch (deleteError) {
               Log().warn(
                 'Failed to delete transmitter from gateway:',
@@ -384,12 +399,26 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
               );
             }
 
+            // For caller mode, parse port from srtUrl and extract hostname for gateway
+            let destPort = transmitter.port;
+            let destSrtUrl = transmitter.srtUrl;
+            if (transmitter.mode === 'caller' && transmitter.srtUrl) {
+              const urlWithoutProtocol = transmitter.srtUrl.replace(/^srt:\/\//, '');
+              const portMatch = urlWithoutProtocol.match(/:(\d+)$/);
+              if (portMatch) {
+                destPort = parseInt(portMatch[1], 10);
+                // Extract hostname without port (gateway expects just hostname/IP)
+                destSrtUrl = urlWithoutProtocol.replace(/:(\d+)$/, '');
+              }
+            }
+
             // Create new gateway object with updated URL (gateway requires initial status)
-            await callGateway('POST', '/api/v1/tx', {
+            await callGateway('POST', '/api/v1/tx/id', {
+              id: transmitter._id,
               label: transmitter.label,
-              port: transmitter.port,
+              port: destPort,
               mode: transmitter.mode === 'caller' ? 1 : 2,
-              srtUrl: transmitter.srtUrl,
+              srtUrl: destSrtUrl,
               whipUrl: transmitter.whipUrl,
               passThroughUrl: transmitter.passThroughUrl,
               noVideo: true,
@@ -402,7 +431,7 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
               previousDesiredStatus === BridgeStatus.RUNNING
             ) {
               try {
-                await callGateway('PUT', `/api/v1/tx/${port}/state`, {
+                await callGateway('PUT', `/api/v1/tx/id/${transmitter._id}/state`, {
                   desired: BridgeStatus.RUNNING
                 });
                 transmitter.status = BridgeStatus.RUNNING;
@@ -439,14 +468,14 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
 
   // Delete a transmitter
   fastify.delete<{
-    Params: { port: string };
+    Params: { id: string };
     Reply: { success: boolean } | { error: string };
   }>(
-    '/bridge/tx/:port',
+    '/bridge/tx/:id',
     {
       schema: {
         description: 'Delete a transmitter',
-        params: ParamsPort,
+        params: ParamsId,
         response: {
           200: Type.Object({ success: Type.Boolean() }),
           404: Type.Object({ error: Type.String() }),
@@ -456,8 +485,8 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
     },
     async (request, reply) => {
       try {
-        const port = parseInt(request.params.port, 10);
-        const transmitter = await dbManager.getTransmitter(port);
+        const id = request.params.id;
+        const transmitter = await dbManager.getTransmitter(id);
 
         if (!transmitter) {
           reply.code(404).send({ error: 'Transmitter not found' });
@@ -466,7 +495,7 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
 
         // Delete from gateway first
         try {
-          await callGateway('DELETE', `/api/v1/tx/${port}`);
+          await callGateway('DELETE', `/api/v1/tx/id/${transmitter._id}`);
         } catch (gatewayError) {
           Log().warn(
             'Failed to delete transmitter from gateway:',
@@ -476,7 +505,7 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
         }
 
         // Delete from database
-        await dbManager.deleteTransmitter(port);
+        await dbManager.deleteTransmitter(id);
 
         reply.code(200).send({ success: true });
       } catch (error) {

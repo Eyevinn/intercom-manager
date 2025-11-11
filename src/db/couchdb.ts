@@ -32,8 +32,11 @@ export class DbManagerCouchDb implements DbManager {
     }
 
     const now = new Date().toISOString();
+    // Generate a unique ID for the transmitter using sequential index
+    const index = await this.getNextSequence('transmitters');
+    const id = `tx-${index}`;
     const transmitter: Transmitter = {
-      _id: String(newTransmitter.port),
+      _id: id,
       ...newTransmitter,
       status: BridgeStatus.IDLE,
       createdAt: now,
@@ -46,14 +49,14 @@ export class DbManagerCouchDb implements DbManager {
     return transmitter;
   }
 
-  async getTransmitter(port: number): Promise<Transmitter | undefined> {
+  async getTransmitter(id: string): Promise<Transmitter | undefined> {
     await this.connect();
     if (!this.nanoDb) {
       throw new Error('Database not connected');
     }
 
     try {
-      const transmitter = await this.nanoDb.get(String(port));
+      const transmitter = await this.nanoDb.get(id);
       return transmitter as any | undefined;
     } catch (error) {
       return undefined;
@@ -71,12 +74,7 @@ export class DbManagerCouchDb implements DbManager {
       include_docs: true
     });
     response.rows.forEach((row: any) => {
-      if (
-        row.doc._id.toLowerCase().indexOf('counter') === -1 &&
-        row.doc._id.toLowerCase().indexOf('session_') === -1 &&
-        row.doc._id.toLowerCase().indexOf('rx-') === -1 &&
-        !isNaN(Number(row.doc._id))
-      ) {
+      if (row.doc._id.toLowerCase().startsWith('tx-')) {
         transmitters.push(row.doc);
       }
     });
@@ -92,12 +90,8 @@ export class DbManagerCouchDb implements DbManager {
     }
 
     const response = await this.nanoDb.list({ include_docs: false });
-    const filteredRows = response.rows.filter(
-      (row: any) =>
-        row.id.toLowerCase().indexOf('counter') === -1 &&
-        row.id.toLowerCase().indexOf('session_') === -1 &&
-        row.id.toLowerCase().indexOf('rx-') === -1 &&
-        !isNaN(Number(row.id))
+    const filteredRows = response.rows.filter((row: any) =>
+      row.id.toLowerCase().startsWith('tx-')
     );
     return filteredRows.length;
   }
@@ -112,34 +106,28 @@ export class DbManagerCouchDb implements DbManager {
 
     const now = new Date().toISOString();
     try {
-      const existingTransmitter = await this.nanoDb.get(
-        String(transmitter.port)
-      );
+      const existingTransmitter = await this.nanoDb.get(transmitter._id);
       const updatedTransmitter = {
         ...existingTransmitter,
         ...transmitter,
-        _id: String(transmitter.port),
         updatedAt: now
       };
       const response = await this.nanoDb.insert(updatedTransmitter);
-      return response.ok ? transmitter : undefined;
+      return response.ok ? { ...transmitter, updatedAt: now } : undefined;
     } catch (error) {
       return undefined;
     }
   }
 
-  async deleteTransmitter(port: number): Promise<boolean> {
+  async deleteTransmitter(id: string): Promise<boolean> {
     await this.connect();
     if (!this.nanoDb) {
       throw new Error('Database not connected');
     }
 
     try {
-      const transmitter = await this.nanoDb.get(String(port));
-      const response = await this.nanoDb.destroy(
-        transmitter._id,
-        transmitter._rev
-      );
+      const transmitter = await this.nanoDb.get(id);
+      const response = await this.nanoDb.destroy(transmitter._id, transmitter._rev);
       return response.ok;
     } catch (error) {
       return false;

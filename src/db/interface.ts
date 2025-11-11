@@ -41,11 +41,11 @@ export interface DbManager {
 
   // Transmitter operations
   addTransmitter(transmitter: NewTransmitter): Promise<Transmitter>;
-  getTransmitter(port: number): Promise<Transmitter | undefined>;
+  getTransmitter(id: string): Promise<Transmitter | undefined>;
   getTransmitters(limit: number, offset: number): Promise<Transmitter[]>;
   getTransmittersLength(): Promise<number>;
   updateTransmitter(transmitter: Transmitter): Promise<Transmitter | undefined>;
-  deleteTransmitter(port: number): Promise<boolean>;
+  deleteTransmitter(id: string): Promise<boolean>;
 
   // Receiver operations
   addReceiver(receiver: NewReceiver): Promise<Receiver>;

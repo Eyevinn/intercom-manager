@@ -305,8 +305,11 @@ export class DbManagerMongoDb implements DbManager {
   async addTransmitter(newTransmitter: NewTransmitter): Promise<Transmitter> {
     const db = this.client.db();
     const now = new Date().toISOString();
+    // Generate a unique ID for the transmitter using sequential index
+    const index = await this.getNextSequence('transmitters');
+    const id = `tx-${index}`;
     const transmitter: Transmitter = {
-      _id: String(newTransmitter.port),
+      _id: id,
       ...newTransmitter,
       status: BridgeStatus.IDLE,
       createdAt: now,
@@ -318,11 +321,11 @@ export class DbManagerMongoDb implements DbManager {
     return transmitter;
   }
 
-  async getTransmitter(port: number): Promise<Transmitter | undefined> {
+  async getTransmitter(id: string): Promise<Transmitter | undefined> {
     const db = this.client.db();
     return db
       .collection<Transmitter>('transmitters')
-      .findOne({ _id: String(port) } as any) as any | undefined;
+      .findOne({ _id: id } as any) as any | undefined;
   }
 
   async getTransmitters(limit: number, offset: number): Promise<Transmitter[]> {
@@ -357,11 +360,11 @@ export class DbManagerMongoDb implements DbManager {
       : undefined;
   }
 
-  async deleteTransmitter(port: number): Promise<boolean> {
+  async deleteTransmitter(id: string): Promise<boolean> {
     const db = this.client.db();
     const result = await db
       .collection<Transmitter>('transmitters')
-      .deleteOne({ _id: String(port) } as any);
+      .deleteOne({ _id: id } as any);
     return result.deletedCount === 1;
   }
 
