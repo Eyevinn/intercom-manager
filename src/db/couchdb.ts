@@ -375,8 +375,6 @@ export class DbManagerCouchDb implements DbManager {
         updateData.lastSeenAt = new Date(updates.lastSeen);
       }
 
-      console.log("UpdateSession");
-
       // to ensure lastSeenAt is a Date object
       if ("lastSeenAt" in updates && typeof updates.lastSeenAt !== undefined) {
         const v = updates.lastSeenAt as any;
@@ -396,8 +394,6 @@ export class DbManagerCouchDb implements DbManager {
     if (!this.nanoDb) {
       throw new Error('Database not connected');
     }
-    console.log("getSessionsByQuery called with:", JSON.stringify(q));
-    console.trace(); // This will show you the call stack
     const selector: any = { ...q };
     delete selector.lastSeen;
     const response = await this.nanoDb.find({ selector });
