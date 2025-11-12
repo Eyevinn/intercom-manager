@@ -344,8 +344,16 @@ export class DbManagerCouchDb implements DbManager {
       throw new Error('Database not connected');
     }
     const sessionDocId = `session_${sessionId}`;
-    const session = await this.nanoDb.get(sessionDocId);
-    return session as any as UserSession;
+    
+    // wrap inside try-block to be consistent with mongodb implementation
+    try {
+      const session = await this.nanoDb.get(sessionDocId);
+      return session as any as UserSession;
+    } catch (err: any) {
+      if (err.statusCode === 404) { 
+        return null; 
+      } else { throw err }
+    }
   }
 
   async updateSession(
@@ -356,13 +364,26 @@ export class DbManagerCouchDb implements DbManager {
     if (!this.nanoDb) {
       throw new Error('Database not connected');
     }
-
     const id = `session_${sessionId}`;
     try {
       const doc = await this.nanoDb.get(id);
 
-      const updated = { ...doc, ...updates };
+      const updateData: any = { ...updates };
 
+      // converts lastSeen to a timestamp
+      if ("lastSeen" in updates && typeof updates.lastSeen === "number") {
+        updateData.lastSeenAt = new Date(updates.lastSeen);
+      }
+
+      console.log("UpdateSession");
+
+      // to ensure lastSeenAt is a Date object
+      if ("lastSeenAt" in updates && typeof updates.lastSeenAt !== undefined) {
+        const v = updates.lastSeenAt as any;
+        updateData.lastSeenAt = v instanceof Date ? v : new Date(v);
+      }
+
+      const updated = { ...doc, ...updates }
       await this.nanoDb.insert(updated);
       return true;
     } catch (error) {
@@ -375,8 +396,10 @@ export class DbManagerCouchDb implements DbManager {
     if (!this.nanoDb) {
       throw new Error('Database not connected');
     }
-
+    console.log("getSessionsByQuery called with:", JSON.stringify(q));
+    console.trace(); // This will show you the call stack
     const selector: any = { ...q };
+    delete selector.lastSeen;
     const response = await this.nanoDb.find({ selector });
     return response.docs as unknown as UserSession[]; // could also expand type UserSession to avoid unknown
   }
