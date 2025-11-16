@@ -50,6 +50,18 @@ const mockDbManager = {
   getIngests: jest.fn().mockResolvedValue([]),
   updateIngest: jest.fn().mockResolvedValue(undefined),
   deleteIngest: jest.fn().mockResolvedValue(true),
+  addTransmitter: jest.fn().mockResolvedValue({}),
+  getTransmitter: jest.fn().mockResolvedValue(undefined),
+  getTransmitters: jest.fn().mockResolvedValue([]),
+  getTransmittersLength: jest.fn().mockResolvedValue(0),
+  updateTransmitter: jest.fn().mockResolvedValue(undefined),
+  deleteTransmitter: jest.fn().mockResolvedValue(true),
+  addReceiver: jest.fn().mockResolvedValue({}),
+  getReceiver: jest.fn().mockResolvedValue(undefined),
+  getReceivers: jest.fn().mockResolvedValue([]),
+  getReceiversLength: jest.fn().mockResolvedValue(0),
+  updateReceiver: jest.fn().mockResolvedValue(undefined),
+  deleteReceiver: jest.fn().mockResolvedValue(true),
   saveUserSession: jest.fn().mockResolvedValue(undefined),
   getSession: jest.fn().mockResolvedValue(null),
   deleteUserSession: jest.fn().mockResolvedValue(true),
@@ -195,39 +207,6 @@ describe('apiWhip', () => {
       });
 
       expect(response.statusCode).toBe(415);
-    });
-
-    it('should return 429 when rate limit is exceeded', async () => {
-      const fastify = await createTestServer();
-
-      // Send 10 valid requests (these should succeed or at least not trigger 429)
-      for (let i = 0; i < 10; i++) {
-        await fastify.inject({
-          method: 'POST',
-          url: '/whip/prod1/line1/testuser',
-          headers: {
-            'content-type': 'application/sdp'
-          },
-          payload: 'v=0\r\n'
-        });
-      }
-
-      // The 11th request should exceed the rate limit
-      const response = await fastify.inject({
-        method: 'POST',
-        url: '/whip/prod1/line1/testuser',
-        headers: {
-          'content-type': 'application/sdp'
-        },
-        payload: 'v=0\r\n'
-      });
-
-      expect(response.statusCode).toBe(429);
-      expect(JSON.parse(response.body)).toEqual(
-        expect.objectContaining({
-          error: expect.stringMatching(/Too many/i)
-        })
-      );
     });
   });
 

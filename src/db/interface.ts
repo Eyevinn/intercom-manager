@@ -1,4 +1,14 @@
-import { Ingest, Line, NewIngest, Production, UserSession } from '../models';
+import {
+  Ingest,
+  Line,
+  NewIngest,
+  NewReceiver,
+  NewTransmitter,
+  Production,
+  Receiver,
+  Transmitter,
+  UserSession
+} from '../models';
 
 export interface DbManager {
   connect(): Promise<void>;
@@ -28,4 +38,20 @@ export interface DbManager {
     updates: Partial<UserSession>
   ): Promise<boolean>;
   getSessionsByQuery(q: Partial<UserSession>): Promise<UserSession[]>;
+
+  // Transmitter operations
+  addTransmitter(transmitter: NewTransmitter): Promise<Transmitter>;
+  getTransmitter(id: string): Promise<Transmitter | undefined>;
+  getTransmitters(limit: number, offset: number): Promise<Transmitter[]>;
+  getTransmittersLength(): Promise<number>;
+  updateTransmitter(transmitter: Transmitter): Promise<Transmitter | undefined>;
+  deleteTransmitter(id: string): Promise<boolean>;
+
+  // Receiver operations
+  addReceiver(receiver: NewReceiver): Promise<Receiver>;
+  getReceiver(id: string): Promise<Receiver | undefined>;
+  getReceivers(limit: number, offset: number): Promise<Receiver[]>;
+  getReceiversLength(): Promise<number>;
+  updateReceiver(receiver: Receiver): Promise<Receiver | undefined>;
+  deleteReceiver(id: string): Promise<boolean>;
 }
