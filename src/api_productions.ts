@@ -21,7 +21,8 @@ import {
   SdpAnswer,
   SessionResponse,
   SmbEndpointDescription,
-  UserResponse
+  UserResponse,
+  UserSession
 } from './models';
 import { ProductionManager } from './production_manager';
 import { SmbProtocol } from './smb';
@@ -81,7 +82,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
 
   setInterval(
     () => productionManager.checkUserStatus(smb, smbServerUrl, smbServerApiKey),
-    2_000
+    20_000
   );
 
   fastify.post<{
@@ -163,14 +164,30 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
             productionId: _id.toString()
           }));
         } else {
-          const extendedProductions = await Promise.all(
-            productions.map(async (production) => {
-              const stringifiedProdId = production._id.toString();
-              const dbSessions = await dbManager.getSessionsByQuery({
-                productionId: stringifiedProdId,
-                isExpired: false
-              });
+          const p0 = performance.now();
 
+          const productionIds = productions.map(
+            production => production._id.toString()
+          );
+          // Fetching all sessions in one query
+          const sessions = await dbManager.getSessionsByQuery({
+            productionId: { $in: productionIds } as any, 
+            isExpired: false
+          });
+
+          const sessionsByProductions = new Map<string, UserSession[]>();
+          sessions.forEach(session => {
+            const productionId = session.productionId;
+            if (!sessionsByProductions.has(productionId)) {
+              sessionsByProductions.set(productionId, []);
+            }
+            sessionsByProductions.get(productionId)!.push(session);
+          });
+
+          const extendedProductions = productions.map((production) => {
+              const stringifiedProdId = production._id.toString();
+              const dbSessions = sessionsByProductions.get(stringifiedProdId) || [];
+              
               const lines: LineResponse[] = production.lines.map((line) => {
                 const participants: UserResponse[] = (dbSessions as any[])
                   .filter((s) => s.lineId === line.id)
@@ -185,8 +202,9 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
                 };
               });
               return { _id: production._id, name: production.name, lines };
-            })
-          );
+            });
+          const p1 = performance.now(); 
+          console.log(`Time to execute: ${p1-p0}`);
           responseProductions = extendedProductions.map(
             ({ _id, name, lines }) => ({
               name,
