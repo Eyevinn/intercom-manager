@@ -377,8 +377,6 @@ export class DbManagerCouchDb implements DbManager {
         updateData.lastSeenAt = new Date(updates.lastSeen);
       }
 
-      console.log('UpdateSession');
-
       // to ensure lastSeenAt is a Date object
       if ('lastSeenAt' in updates && typeof updates.lastSeenAt !== undefined) {
         const v = updates.lastSeenAt as any;
