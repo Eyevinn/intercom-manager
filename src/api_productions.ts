@@ -82,7 +82,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
 
   setInterval(
     () => productionManager.checkUserStatus(smb, smbServerUrl, smbServerApiKey),
-    20_000
+    2_000
   );
 
   fastify.post<{
