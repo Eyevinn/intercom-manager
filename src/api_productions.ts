@@ -164,28 +164,34 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
             productionId: _id.toString()
           }));
         } else {
-          const productionIds = productions.map(
-            production => production._id.toString()
+          const productionIds = productions.map((production) =>
+            production._id.toString()
           );
           // fetching all sessions by querying with array of prod ids
           const sessions = await dbManager.getSessionsByQuery({
-            productionId: { $in: productionIds } as any, 
+            productionId: { $in: productionIds } as any,
             isExpired: false
           });
 
+          // re-constructing a Map containing session for each production id
           const sessionsByProductions = new Map<string, UserSession[]>();
-          sessions.forEach(session => {
+          sessions.forEach((session) => {
             const productionId = session.productionId;
-            const existingSessions = sessionsByProductions.get(productionId) || [];
-            sessionsByProductions.set(productionId, [...existingSessions, session]);
+            const existingSessions =
+              sessionsByProductions.get(productionId) || [];
+            sessionsByProductions.set(productionId, [
+              ...existingSessions,
+              session
+            ]);
           });
 
           const extendedProductions = productions
-            .filter(production => production.lines)
+            .filter((production) => production.lines)
             .map((production) => {
               const stringifiedProdId = production._id.toString();
-              const dbSessions = sessionsByProductions.get(stringifiedProdId) || [];
-              
+              const dbSessions =
+                sessionsByProductions.get(stringifiedProdId) || [];
+
               const lines: LineResponse[] = production.lines.map((line) => {
                 const participants: UserResponse[] = (dbSessions as any[])
                   .filter((s) => s.lineId === line.id)
