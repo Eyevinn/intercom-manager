@@ -164,12 +164,10 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
             productionId: _id.toString()
           }));
         } else {
-          const p0 = performance.now();
-
           const productionIds = productions.map(
             production => production._id.toString()
           );
-          // Fetching all sessions in one query
+          // fetching all sessions by querying with array of prod ids
           const sessions = await dbManager.getSessionsByQuery({
             productionId: { $in: productionIds } as any, 
             isExpired: false
@@ -178,10 +176,8 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           const sessionsByProductions = new Map<string, UserSession[]>();
           sessions.forEach(session => {
             const productionId = session.productionId;
-            if (!sessionsByProductions.has(productionId)) {
-              sessionsByProductions.set(productionId, []);
-            }
-            sessionsByProductions.get(productionId)!.push(session);
+            const existingSessions = sessionsByProductions.get(productionId) || [];
+            sessionsByProductions.set(productionId, [...existingSessions, session]);
           });
 
           const extendedProductions = productions.map((production) => {
@@ -203,8 +199,6 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
               });
               return { _id: production._id, name: production.name, lines };
             });
-          const p1 = performance.now(); 
-          console.log(`Time to execute: ${p1-p0}`);
           responseProductions = extendedProductions.map(
             ({ _id, name, lines }) => ({
               name,
