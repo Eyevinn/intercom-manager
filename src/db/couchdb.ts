@@ -398,7 +398,7 @@ export class DbManagerCouchDb implements DbManager {
     }
     const selector: any = { ...q };
     delete selector.lastSeen;
-    const response = await this.nanoDb.find({ selector });
+    const response = await this.nanoDb.find({ selector, limit: 10000 });
     return response.docs as unknown as UserSession[]; // could also expand type UserSession to avoid unknown
   }
 }

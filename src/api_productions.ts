@@ -180,7 +180,9 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
             sessionsByProductions.set(productionId, [...existingSessions, session]);
           });
 
-          const extendedProductions = productions.map((production) => {
+          const extendedProductions = productions
+            .filter(production => production.lines)
+            .map((production) => {
               const stringifiedProdId = production._id.toString();
               const dbSessions = sessionsByProductions.get(stringifiedProdId) || [];
               
