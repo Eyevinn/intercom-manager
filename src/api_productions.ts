@@ -21,7 +21,8 @@ import {
   SdpAnswer,
   SessionResponse,
   SmbEndpointDescription,
-  UserResponse
+  UserResponse,
+  UserSession
 } from './models';
 import { ProductionManager } from './production_manager';
 import { SmbProtocol } from './smb';
@@ -163,13 +164,33 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
             productionId: _id.toString()
           }));
         } else {
-          const extendedProductions = await Promise.all(
-            productions.map(async (production) => {
+          const productionIds = productions.map((production) =>
+            production._id.toString()
+          );
+          // fetching all sessions by querying with array of prod ids
+          const sessions = await dbManager.getSessionsByQuery({
+            productionId: { $in: productionIds } as any,
+            isExpired: false
+          });
+
+          // re-constructing a Map containing session for each production id
+          const sessionsByProductions = new Map<string, UserSession[]>();
+          sessions.forEach((session) => {
+            const productionId = session.productionId;
+            const existingSessions =
+              sessionsByProductions.get(productionId) || [];
+            sessionsByProductions.set(productionId, [
+              ...existingSessions,
+              session
+            ]);
+          });
+
+          const extendedProductions = productions
+            .filter((production) => production.lines)
+            .map((production) => {
               const stringifiedProdId = production._id.toString();
-              const dbSessions = await dbManager.getSessionsByQuery({
-                productionId: stringifiedProdId,
-                isExpired: false
-              });
+              const dbSessions =
+                sessionsByProductions.get(stringifiedProdId) || [];
 
               const lines: LineResponse[] = production.lines.map((line) => {
                 const participants: UserResponse[] = (dbSessions as any[])
@@ -185,8 +206,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
                 };
               });
               return { _id: production._id, name: production.name, lines };
-            })
-          );
+            });
           responseProductions = extendedProductions.map(
             ({ _id, name, lines }) => ({
               name,
