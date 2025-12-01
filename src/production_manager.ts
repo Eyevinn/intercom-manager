@@ -58,8 +58,8 @@ export class ProductionManager extends EventEmitter {
   ) {
     let hasChanged = false;
     const now = Date.now();
-    const inactiveCutoff = new Date(now - SESSION_INACTIVE_THRESHOLD);
-    const expiredCutoff = new Date(now - SESSION_EXPIRED_THRESHOLD);
+    const inactiveCutoff = Date.now() - SESSION_INACTIVE_THRESHOLD;
+    const expiredCutoff = Date.now() - SESSION_EXPIRED_THRESHOLD;
 
     {
       // Get sessions that should be inactive
