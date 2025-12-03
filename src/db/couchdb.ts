@@ -4,6 +4,8 @@ import { assert } from '../utils';
 import { DbManager } from './interface';
 import nano from 'nano';
 
+const SESSION_PRUNE_SECONDS = 60;
+
 export class DbManagerCouchDb implements DbManager {
   private client;
   private nanoDb: nano.DocumentScope<unknown> | undefined;
@@ -28,7 +30,30 @@ export class DbManagerCouchDb implements DbManager {
       this.nanoDb = this.client.db.use(
         this.dbConnectionUrl.pathname.replace(/^\//, '')
       );
+      this.sessionPruneInterval();
     }
+  }
+
+  // Couchdb doesn't support collections and cannot create TTL indexes that are automatically handled like in mongodb.
+  // Thereof a seperate interval to track and remove sessions.
+  private sessionPruneInterval() {
+    setInterval(async () => {
+      try {
+        const cutoff = new Date(
+          Date.now() - SESSION_PRUNE_SECONDS * 1000
+        ).toISOString();
+        const sessions = await this.getSessionsByQuery({
+          lastSeenAt: { $lt: cutoff } as any
+        });
+        for (const session of sessions) {
+          const sessionId = session._id;
+          const res = await this.deleteUserSession(sessionId);
+          Log().info(`Terminated session ${sessionId}`);
+        }
+      } catch (error: any) {
+        Log().error(error);
+      }
+    }, 60_000); // runs every minute
   }
 
   async disconnect(): Promise<void> {
@@ -295,17 +320,19 @@ export class DbManagerCouchDb implements DbManager {
       throw new Error('Database not connected');
     }
 
-    const sessionDocId = `session_${sessionId}`;
+    if (!sessionId.startsWith('session')) {
+      sessionId = `session_${sessionId}`;
+    }
 
     try {
       let existingDoc: any;
 
       // Check if document exists, if not set id
       try {
-        existingDoc = await this.nanoDb.get(sessionDocId);
+        existingDoc = await this.nanoDb.get(sessionId);
       } catch (err: any) {
         if (err.statusCode === 404) {
-          existingDoc = { _id: sessionDocId };
+          existingDoc = { _id: sessionId };
         } else {
           throw err;
         }
@@ -313,12 +340,13 @@ export class DbManagerCouchDb implements DbManager {
       const updatedSession = {
         ...existingDoc,
         ...userSession,
-        _id: sessionDocId
+        lastSeenAt: new Date(userSession.lastSeen ?? Date.now()).toISOString(),
+        _id: sessionId
       };
 
       await this.nanoDb.insert(updatedSession);
     } catch (error) {
-      return;
+      Log().error(error);
     }
   }
 
@@ -327,13 +355,16 @@ export class DbManagerCouchDb implements DbManager {
     if (!this.nanoDb) {
       throw new Error('Database not connected');
     }
+    if (!sessionId.startsWith('session')) {
+      sessionId = `session_${sessionId}`;
+    }
 
-    const sessionDocId = `session_${sessionId}`;
     try {
-      const session = await this.nanoDb.get(sessionDocId);
+      const session = await this.nanoDb.get(sessionId);
       const response = await this.nanoDb.destroy(session._id, session._rev);
       return response.ok;
     } catch (error) {
+      Log().error('Error when deleting user session...', error);
       return false;
     }
   }
@@ -343,11 +374,13 @@ export class DbManagerCouchDb implements DbManager {
     if (!this.nanoDb) {
       throw new Error('Database not connected');
     }
-    const sessionDocId = `session_${sessionId}`;
 
-    // wrap inside try-block to be consistent with mongodb implementation
+    if (!sessionId.startsWith('session')) {
+      sessionId = `session_${sessionId}`;
+    }
+
     try {
-      const session = await this.nanoDb.get(sessionDocId);
+      const session = await this.nanoDb.get(sessionId);
       return session as any as UserSession;
     } catch (err: any) {
       if (err.statusCode === 404) {
@@ -363,28 +396,33 @@ export class DbManagerCouchDb implements DbManager {
     updates: Partial<UserSession>
   ): Promise<boolean> {
     await this.connect();
+
     if (!this.nanoDb) {
       throw new Error('Database not connected');
     }
-    const id = `session_${sessionId}`;
+    if (!sessionId.startsWith('session')) {
+      sessionId = `session_${sessionId}`;
+    }
     try {
-      const doc = await this.nanoDb.get(id);
+      const doc = await this.nanoDb.get(sessionId);
 
       const updateData: any = { ...updates };
 
       // converts lastSeen to a timestamp
       if ('lastSeen' in updates && typeof updates.lastSeen === 'number') {
-        updateData.lastSeenAt = new Date(updates.lastSeen);
+        updateData.lastSeenAt = new Date(updates.lastSeen).toISOString();
       }
 
       // to ensure lastSeenAt is a Date object
       if ('lastSeenAt' in updates && typeof updates.lastSeenAt !== undefined) {
         const v = updates.lastSeenAt as any;
-        updateData.lastSeenAt = v instanceof Date ? v : new Date(v);
+        updateData.lastSeenAt =
+          v instanceof Date ? v.toISOString() : new Date(v).toISOString();
       }
 
-      const updated = { ...doc, ...updates };
+      const updated = { ...doc, ...updateData };
       await this.nanoDb.insert(updated);
+
       return true;
     } catch (error) {
       return false;
