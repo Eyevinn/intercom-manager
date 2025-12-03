@@ -4,7 +4,7 @@ import { assert } from '../utils';
 import { DbManager } from './interface';
 import nano from 'nano';
 
-const SESSION_PRUNE_SECONDS = 7_200;
+const SESSION_PRUNE_SECONDS = 60;
 
 export class DbManagerCouchDb implements DbManager {
   private client;
