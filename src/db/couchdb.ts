@@ -334,7 +334,7 @@ export class DbManagerCouchDb implements DbManager {
       }
     }
   }
-  
+
   async saveUserSession(
     sessionId: string,
     userSession: UserSession
