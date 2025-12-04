@@ -311,6 +311,27 @@ export class DbManagerCouchDb implements DbManager {
   }
 
   // Session management methods
+
+  // Helper method, to avoid condlicting _revs on simultaneous update requests
+  private async insertWithRetry(doc: any, maxRetries = 3): Promise<any> {
+    // retries 3 times to fetch the latets doc and _rev, if all fail then throw error
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        return await this.nanoDb!.insert(doc);
+      } catch (error: any) {
+        if (error.statusCode === 409 && attempt < maxRetries - 1) {
+          const latestDoc = await this.nanoDb!.get(doc._id);
+          doc._rev = latestDoc._rev;
+          await new Promise((resolve) =>
+            setTimeout(resolve, 100 * Math.pow(2, attempt))
+          );
+        } else {
+          throw error;
+        }
+      }
+    }
+  }
+
   async saveUserSession(
     sessionId: string,
     userSession: UserSession
@@ -344,7 +365,7 @@ export class DbManagerCouchDb implements DbManager {
         _id: sessionId
       };
 
-      await this.nanoDb.insert(updatedSession);
+      await this.insertWithRetry(updatedSession);
     } catch (error) {
       Log().error(error);
     }
@@ -414,14 +435,17 @@ export class DbManagerCouchDb implements DbManager {
       }
 
       // to ensure lastSeenAt is a Date object
-      if ('lastSeenAt' in updates && typeof updates.lastSeenAt !== undefined) {
+      if (
+        'lastSeenAt' in updates &&
+        typeof updates.lastSeenAt !== 'undefined'
+      ) {
         const v = updates.lastSeenAt as any;
         updateData.lastSeenAt =
           v instanceof Date ? v.toISOString() : new Date(v).toISOString();
       }
 
       const updated = { ...doc, ...updateData };
-      await this.nanoDb.insert(updated);
+      await this.insertWithRetry(updated);
 
       return true;
     } catch (error) {
