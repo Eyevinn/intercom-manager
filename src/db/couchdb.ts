@@ -313,10 +313,7 @@ export class DbManagerCouchDb implements DbManager {
   // Session management methods
 
   // Helper method, to avoid condlicting _revs on simultaneous update requests
-  private async insertWithRetry(
-    doc: any,
-    maxRetries: number = 3
-  ): Promise<any> {
+  private async insertWithRetry(doc: any, maxRetries = 3): Promise<any> {
     // retries 3 times to fetch the latets doc and _rev, if all fail then throw error
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
