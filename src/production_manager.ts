@@ -13,8 +13,8 @@ import { Log } from './log';
 import { DbManager } from './db/interface';
 import { SmbProtocol } from './smb';
 
-const SESSION_INACTIVE_THRESHOLD = 60_000;
-const SESSION_EXPIRED_THRESHOLD = 100_000;
+const SESSION_INACTIVE_THRESHOLD = 10_000; // used to mark as active speaker in session
+const SESSION_EXPIRED_THRESHOLD = 100_000; // used to exclude sessions from being returned to client
 
 // Sessions are changed from active to inactive after a minute, and are marked as expired after ~100 s.
 // Long-term pruning now happens via the Mongo TTL index configured with SESSION_PRUNE_SECONDS in mongodb.ts.
@@ -57,9 +57,14 @@ export class ProductionManager extends EventEmitter {
     smbServerApiKey: string
   ) {
     let hasChanged = false;
+
+    console.log("Checking user status...");
+    
+    // Dates are stored as ISO string in couchDB and BSON object in mongoDB. 
+    // Querying on Date string will auto-convert to BSON in mongoDB query.
     const now = Date.now();
-    const inactiveCutoff = Date.now() - SESSION_INACTIVE_THRESHOLD;
-    const expiredCutoff = Date.now() - SESSION_EXPIRED_THRESHOLD;
+    const inactiveCutoff = new Date(Date.now() - SESSION_INACTIVE_THRESHOLD);
+    const expiredCutoff = new Date(Date.now() - SESSION_EXPIRED_THRESHOLD);
 
     {
       // Get sessions that should be inactive
@@ -67,8 +72,10 @@ export class ProductionManager extends EventEmitter {
         isWhip: { $ne: true } as any,
         isExpired: false,
         isActive: true,
-        lastSeenAt: { $gte: expiredCutoff, $lt: inactiveCutoff } as any
+        lastSeenAt: { $lt: inactiveCutoff } as any
       });
+
+      console.log("To inactivate: ", toInactivate);
 
       if (toInactivate.length) {
         const results = await Promise.all(
@@ -465,6 +472,7 @@ export class ProductionManager extends EventEmitter {
   ): Promise<UserResponse[]> {
     const inactiveCutoff = new Date(Date.now() - SESSION_INACTIVE_THRESHOLD);
 
+    // Retrievs sessions that has not expired
     const dbSessions = await this.dbManager.getSessionsByQuery({
       productionId,
       lineId,
