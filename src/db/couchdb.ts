@@ -39,7 +39,7 @@ export class DbManagerCouchDb implements DbManager {
   private sessionPruneInterval() {
     setInterval(async () => {
       try {
-        const cutoff = new Date(Date.now() - SESSION_PRUNE_SECONDS * 1000).toISOString();
+        const cutoff = new Date(Date.now() - (SESSION_PRUNE_SECONDS * 1000)).toISOString();
         const sessions = await this.getSessionsByQuery({
           lastSeenAt: { $lt: cutoff } as any
         });
@@ -63,6 +63,7 @@ export class DbManagerCouchDb implements DbManager {
     if (!this.nanoDb) {
       throw new Error('Database not connected');
     }
+
     const counterDocId = `counter_${collectionName}`;
     interface CounterDoc {
       _id: string;
@@ -312,15 +313,16 @@ export class DbManagerCouchDb implements DbManager {
 
   // Helper method, to avoid condlicting _revs on simultaneous update requests
   private async insertWithRetry(doc: any, maxRetries = 3): Promise<any> {
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
     // retries 3 times to fetch the latets doc and _rev, if all fail then throw error
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        console.log("Doc: ", doc);
-        return await this.nanoDb!.insert(doc);
+        return await this.nanoDb.insert(doc);
       } catch (error: any) {
-        console.log("Retry..");
         if (error.statusCode === 409 && attempt < maxRetries - 1) {
-          const latestDoc = await this.nanoDb!.get(doc._id);
+          const latestDoc = await this.nanoDb.get(doc._id);
           doc = { ...latestDoc, ...doc, _rev: latestDoc._rev };
           await new Promise((resolve) =>
             setTimeout(resolve, 100 * Math.pow(2, attempt))
@@ -360,7 +362,6 @@ export class DbManagerCouchDb implements DbManager {
       lastSeenAt: new Date(Date.now()).toISOString(),
       _id: sessionId
     };
-
     await this.insertWithRetry(updatedSession);
   }
 
@@ -402,7 +403,6 @@ export class DbManagerCouchDb implements DbManager {
     const doc = await this.nanoDb.get(sessionId);
 
     const updateData: any = { ...updates };
-    console.log("Updating session with data: ", updateData);
 
     // converts lastSeen to a timestamp
     if ('lastSeen' in updates && typeof updates.lastSeen === 'number') {
@@ -417,7 +417,6 @@ export class DbManagerCouchDb implements DbManager {
     }
     const updated = { ...doc, ...updateData };
     const res = await this.insertWithRetry(updated);
-    console.log("Inserted successful! Response: ", res);
     return true;
   }
 
