@@ -29,6 +29,7 @@ export class DbManagerCouchDb implements DbManager {
       this.nanoDb = this.client.db.use(
         this.dbConnectionUrl.pathname.replace(/^\//, '')
       );
+      await this.ensureSessionIndexes();
       this.sessionPruneInterval();
     }
   }
@@ -436,5 +437,50 @@ export class DbManagerCouchDb implements DbManager {
     const selector: any = { ...q };
     const response = await this.nanoDb.find({ selector, limit: 10000 }); // limit to 10000 sessions being queried
     return response.docs as unknown as UserSession[]; // could also expand type UserSession to avoid unknown
+  }
+
+  async ensureSessionIndexes(): Promise<void> {
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
+    // index for toInactivate, toReactivate, toExpire
+    await (this.nanoDb as any).createIndex({
+      index: {
+        fields: ['isExpired', 'isActive']
+      },
+      name: 'idx_isExpired_isActive',
+      ddoc: 'idx_isExpired_isActive',
+      type: 'json'
+    });
+
+    // index for getUsersForLine()
+    await (this.nanoDb as any).createIndex({
+      index: {
+        fields: ['isWhip', 'isExpired']
+      },
+      name: 'idx_isWhip_isExpired',
+      ddoc: 'idx_isWhip_isExpired',
+      type: 'json'
+    });
+
+    // index for getUsersForLine()
+    await (this.nanoDb as any).createIndex({
+      index: {
+        fields: ['productionId', 'lineId', 'isExpired']
+      },
+      name: 'idx_prod_line_isExpired',
+      ddoc: 'idx_prod_line_isExpired',
+      type: 'json'
+    });
+
+    // index for getActiveUsers()
+    await (this.nanoDb as any).createIndex({
+      index: {
+        fields: ['productionId', 'isActive']
+      },
+      name: 'idx_prod_isActive',
+      ddoc: 'idx_prod_isActive',
+      type: 'json'
+    });
   }
 }
