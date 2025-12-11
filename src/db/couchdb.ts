@@ -4,8 +4,7 @@ import { assert } from '../utils';
 import { DbManager } from './interface';
 import nano from 'nano';
 
-const SESSION_PRUNE_SECONDS = 60;
-
+const SESSION_PRUNE_SECONDS = 7_200;
 export class DbManagerCouchDb implements DbManager {
   private client;
   private nanoDb: nano.DocumentScope<unknown> | undefined;
@@ -34,8 +33,8 @@ export class DbManagerCouchDb implements DbManager {
     }
   }
 
-  // Couchdb doesn't support collections and cannot create TTL indexes that are automatically handled like in mongodb.
-  // Thereof a seperate interval to track and remove sessions.
+  // This interval is used to track and remove sessions based on 'isExpired' flag, set in production_manager.
+  // Deviates from mongoDB, which handles session pruning based on internal TTL index. This isn't supported by CouchDB.
   private sessionPruneInterval() {
     setInterval(async () => {
       try {
@@ -47,13 +46,13 @@ export class DbManagerCouchDb implements DbManager {
         });
         for (const session of sessions) {
           const sessionId = session._id;
-          const res = await this.deleteUserSession(sessionId);
+          await this.deleteUserSession(sessionId);
           Log().info(`Terminated session ${sessionId}`);
         }
       } catch (error: any) {
         Log().error(error);
       }
-    }, 60_000); // runs every minute
+    }, 300_000); // runs every 5th minute
   }
 
   async disconnect(): Promise<void> {
@@ -65,6 +64,7 @@ export class DbManagerCouchDb implements DbManager {
     if (!this.nanoDb) {
       throw new Error('Database not connected');
     }
+
     const counterDocId = `counter_${collectionName}`;
     interface CounterDoc {
       _id: string;
@@ -314,14 +314,17 @@ export class DbManagerCouchDb implements DbManager {
 
   // Helper method, to avoid condlicting _revs on simultaneous update requests
   private async insertWithRetry(doc: any, maxRetries = 3): Promise<any> {
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
     // retries 3 times to fetch the latets doc and _rev, if all fail then throw error
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        return await this.nanoDb!.insert(doc);
+        return await this.nanoDb.insert(doc);
       } catch (error: any) {
         if (error.statusCode === 409 && attempt < maxRetries - 1) {
-          const latestDoc = await this.nanoDb!.get(doc._id);
-          doc._rev = latestDoc._rev;
+          const latestDoc = await this.nanoDb.get(doc._id);
+          doc = { ...latestDoc, ...doc, _rev: latestDoc._rev };
           await new Promise((resolve) =>
             setTimeout(resolve, 100 * Math.pow(2, attempt))
           );
@@ -345,30 +348,25 @@ export class DbManagerCouchDb implements DbManager {
       sessionId = `session_${sessionId}`;
     }
 
+    let existingDoc: any;
+
+    // Check if document exists, if not creates new session
     try {
-      let existingDoc: any;
-
-      // Check if document exists, if not set id
-      try {
-        existingDoc = await this.nanoDb.get(sessionId);
-      } catch (err: any) {
-        if (err.statusCode === 404) {
-          existingDoc = { _id: sessionId };
-        } else {
-          throw err;
-        }
+      existingDoc = await this.nanoDb.get(sessionId);
+    } catch (error: any) {
+      if (error.statusCode === 404) {
+        existingDoc = { _id: sessionId };
+      } else {
+        throw error;
       }
-      const updatedSession = {
-        ...existingDoc,
-        ...userSession,
-        lastSeenAt: new Date(userSession.lastSeen ?? Date.now()).toISOString(),
-        _id: sessionId
-      };
-
-      await this.insertWithRetry(updatedSession);
-    } catch (error) {
-      Log().error(error);
     }
+    const updatedSession = {
+      ...existingDoc,
+      ...userSession,
+      lastSeenAt: new Date(Date.now()).toISOString(),
+      _id: sessionId
+    };
+    await this.insertWithRetry(updatedSession);
   }
 
   async deleteUserSession(sessionId: string): Promise<boolean> {
@@ -379,15 +377,9 @@ export class DbManagerCouchDb implements DbManager {
     if (!sessionId.startsWith('session')) {
       sessionId = `session_${sessionId}`;
     }
-
-    try {
-      const session = await this.nanoDb.get(sessionId);
-      const response = await this.nanoDb.destroy(session._id, session._rev);
-      return response.ok;
-    } catch (error) {
-      Log().error('Error when deleting user session...', error);
-      return false;
-    }
+    const session = await this.nanoDb.get(sessionId);
+    const response = await this.nanoDb.destroy(session._id, session._rev);
+    return response.ok;
   }
 
   async getSession(sessionId: string): Promise<UserSession | null> {
@@ -399,17 +391,8 @@ export class DbManagerCouchDb implements DbManager {
     if (!sessionId.startsWith('session')) {
       sessionId = `session_${sessionId}`;
     }
-
-    try {
-      const session = await this.nanoDb.get(sessionId);
-      return session as any as UserSession;
-    } catch (err: any) {
-      if (err.statusCode === 404) {
-        return null;
-      } else {
-        throw err;
-      }
-    }
+    const session = await this.nanoDb.get(sessionId);
+    return session as any as UserSession;
   }
 
   async updateSession(
@@ -424,33 +407,24 @@ export class DbManagerCouchDb implements DbManager {
     if (!sessionId.startsWith('session')) {
       sessionId = `session_${sessionId}`;
     }
-    try {
-      const doc = await this.nanoDb.get(sessionId);
+    const doc = await this.nanoDb.get(sessionId);
 
-      const updateData: any = { ...updates };
+    const updateData: any = { ...updates };
 
-      // converts lastSeen to a timestamp
-      if ('lastSeen' in updates && typeof updates.lastSeen === 'number') {
-        updateData.lastSeenAt = new Date(updates.lastSeen).toISOString();
-      }
-
-      // to ensure lastSeenAt is a Date object
-      if (
-        'lastSeenAt' in updates &&
-        typeof updates.lastSeenAt !== 'undefined'
-      ) {
-        const v = updates.lastSeenAt as any;
-        updateData.lastSeenAt =
-          v instanceof Date ? v.toISOString() : new Date(v).toISOString();
-      }
-
-      const updated = { ...doc, ...updateData };
-      await this.insertWithRetry(updated);
-
-      return true;
-    } catch (error) {
-      return false;
+    // converts lastSeen to a timestamp
+    if ('lastSeen' in updates && typeof updates.lastSeen === 'number') {
+      updateData.lastSeenAt = new Date(updates.lastSeen).toISOString();
     }
+
+    // to ensure lastSeenAt is an ISO string Date object.
+    if ('lastSeenAt' in updates && updates.lastSeenAt !== 'undefined') {
+      const v = updates.lastSeenAt as any;
+      updateData.lastSeenAt =
+        v instanceof Date ? v.toISOString() : new Date(v).toISOString();
+    }
+    const updated = { ...doc, ...updateData };
+    const res = await this.insertWithRetry(updated);
+    return res.ok;
   }
 
   async getSessionsByQuery(q: Partial<UserSession>): Promise<UserSession[]> {
@@ -458,9 +432,9 @@ export class DbManagerCouchDb implements DbManager {
     if (!this.nanoDb) {
       throw new Error('Database not connected');
     }
+
     const selector: any = { ...q };
-    delete selector.lastSeen;
-    const response = await this.nanoDb.find({ selector, limit: 10000 });
+    const response = await this.nanoDb.find({ selector, limit: 10000 }); // limit to 10000 sessions being queried
     return response.docs as unknown as UserSession[]; // could also expand type UserSession to avoid unknown
   }
 }

@@ -6,7 +6,6 @@ import { DbManager } from './interface';
 import { Log } from '../log';
 
 const SESSION_PRUNE_SECONDS = 7_200;
-
 export class DbManagerMongoDb implements DbManager {
   private client: MongoClient;
 
@@ -233,7 +232,9 @@ export class DbManagerMongoDb implements DbManager {
         $setOnInsert: { createdAt: now },
         $set: {
           ...userSession,
-          lastSeenAt: new Date(userSession.lastSeen ?? Date.now())
+          lastSeenAt: new Date(
+            userSession.lastSeen ?? Date.now()
+          ).toDateString()
         }
       },
       { upsert: true }
