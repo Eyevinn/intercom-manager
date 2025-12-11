@@ -76,7 +76,10 @@ export class ProductionManager extends EventEmitter {
       if (toInactivate.length) {
         const results = await Promise.all(
           (toInactivate as any[]).map((s) =>
-            this.dbManager.updateSession(String(s._id), { isActive: false, isExpired: false})
+            this.dbManager.updateSession(String(s._id), {
+              isActive: false,
+              isExpired: false
+            })
           )
         );
         if (results.some(Boolean)) hasChanged = true;

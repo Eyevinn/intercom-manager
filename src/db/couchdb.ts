@@ -4,12 +4,7 @@ import { assert } from '../utils';
 import { DbManager } from './interface';
 import nano from 'nano';
 
-// Used to tag CouchDB writes so we can see which process/instance performed them.
-const INSTANCE_ID =
-  process.env.INSTANCE_ID || process.env.HOSTNAME || `${process.pid}`;
-
 const SESSION_PRUNE_SECONDS = 7_200;
-
 export class DbManagerCouchDb implements DbManager {
   private client;
   private nanoDb: nano.DocumentScope<unknown> | undefined;
@@ -437,15 +432,6 @@ export class DbManagerCouchDb implements DbManager {
     if (!this.nanoDb) {
       throw new Error('Database not connected');
     }
-
-    /*
-    // to ensure lastSeenAt is an ISO string Date object.
-    if ('lastSeenAt' in q && q.lastSeenAt !== 'undefined') {
-      const v = q.lastSeenAt as any;
-      q.lastSeenAt = 
-        v instanceof Date ? v.toISOString() : new Date(v).toISOString();
-    }
-        */
 
     const selector: any = { ...q };
     const response = await this.nanoDb.find({ selector, limit: 10000 }); // limit to 10000 sessions being queried
