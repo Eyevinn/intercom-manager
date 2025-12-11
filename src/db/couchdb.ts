@@ -4,6 +4,9 @@ import { assert } from '../utils';
 import { DbManager } from './interface';
 import nano from 'nano';
 
+// Used to tag CouchDB writes so we can see which process/instance performed them.
+const INSTANCE_ID = process.env.INSTANCE_ID || process.env.HOSTNAME || `${process.pid}`;
+
 const SESSION_PRUNE_SECONDS = 7_200;
 
 export class DbManagerCouchDb implements DbManager {
@@ -39,7 +42,7 @@ export class DbManagerCouchDb implements DbManager {
   private sessionPruneInterval() {
     setInterval(async () => {
       try {
-        const cutoff = new Date(Date.now() - SESSION_PRUNE_SECONDS * 1000).toISOString();
+        const cutoff = new Date(Date.now() - (SESSION_PRUNE_SECONDS * 1000)).toISOString();
         const sessions = await this.getSessionsByQuery({
           lastSeenAt: { $lt: cutoff } as any
         });
@@ -315,10 +318,9 @@ export class DbManagerCouchDb implements DbManager {
     // retries 3 times to fetch the latets doc and _rev, if all fail then throw error
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        console.log("Doc: ", doc);
-        return await this.nanoDb!.insert(doc);
+        const res = await this.nanoDb!.insert(doc);
+        return res;
       } catch (error: any) {
-        console.log("Retry..");
         if (error.statusCode === 409 && attempt < maxRetries - 1) {
           const latestDoc = await this.nanoDb!.get(doc._id);
           doc = { ...latestDoc, ...doc, _rev: latestDoc._rev };
@@ -402,7 +404,6 @@ export class DbManagerCouchDb implements DbManager {
     const doc = await this.nanoDb.get(sessionId);
 
     const updateData: any = { ...updates };
-    console.log("Updating session with data: ", updateData);
 
     // converts lastSeen to a timestamp
     if ('lastSeen' in updates && typeof updates.lastSeen === 'number') {
@@ -417,8 +418,7 @@ export class DbManagerCouchDb implements DbManager {
     }
     const updated = { ...doc, ...updateData };
     const res = await this.insertWithRetry(updated);
-    console.log("Inserted successful! Response: ", res);
-    return true;
+    return res.ok;
   }
 
   async getSessionsByQuery(q: Partial<UserSession>): Promise<UserSession[]> {

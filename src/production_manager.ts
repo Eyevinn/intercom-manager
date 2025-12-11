@@ -57,8 +57,6 @@ export class ProductionManager extends EventEmitter {
     smbServerApiKey: string
   ) {
     let hasChanged = false;
-
-    console.log("Checking user status...");
     
     // Dates are stored as ISO string in couchDB and BSON object in mongoDB. 
     // Querying on Date string will auto-convert to BSON in mongoDB query.
@@ -74,8 +72,6 @@ export class ProductionManager extends EventEmitter {
         isActive: true,
         lastSeenAt: { $lt: inactiveCutoff } as any
       });
-
-      console.log("To inactivate: ", toInactivate);
 
       if (toInactivate.length) {
         const results = await Promise.all(
