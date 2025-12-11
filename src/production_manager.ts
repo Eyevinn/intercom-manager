@@ -57,8 +57,8 @@ export class ProductionManager extends EventEmitter {
     smbServerApiKey: string
   ) {
     let hasChanged = false;
-    
-    // Dates are stored as ISO string in couchDB and BSON object in mongoDB. 
+
+    // Dates are stored as ISO string in couchDB and BSON object in mongoDB.
     // Querying on Date string will auto-convert to BSON in mongoDB query.
     const now = Date.now();
     const inactiveCutoff = new Date(Date.now() - SESSION_INACTIVE_THRESHOLD);

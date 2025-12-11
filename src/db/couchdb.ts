@@ -5,7 +5,8 @@ import { DbManager } from './interface';
 import nano from 'nano';
 
 // Used to tag CouchDB writes so we can see which process/instance performed them.
-const INSTANCE_ID = process.env.INSTANCE_ID || process.env.HOSTNAME || `${process.pid}`;
+const INSTANCE_ID =
+  process.env.INSTANCE_ID || process.env.HOSTNAME || `${process.pid}`;
 
 const SESSION_PRUNE_SECONDS = 7_200;
 
@@ -42,7 +43,9 @@ export class DbManagerCouchDb implements DbManager {
   private sessionPruneInterval() {
     setInterval(async () => {
       try {
-        const cutoff = new Date(Date.now() - (SESSION_PRUNE_SECONDS * 1000)).toISOString();
+        const cutoff = new Date(
+          Date.now() - SESSION_PRUNE_SECONDS * 1000
+        ).toISOString();
         const sessions = await this.getSessionsByQuery({
           lastSeenAt: { $lt: cutoff } as any
         });
@@ -334,7 +337,10 @@ export class DbManagerCouchDb implements DbManager {
     }
   }
 
-  async saveUserSession(sessionId: string, userSession: UserSession): Promise<void> {
+  async saveUserSession(
+    sessionId: string,
+    userSession: UserSession
+  ): Promise<void> {
     await this.connect();
     if (!this.nanoDb) {
       throw new Error('Database not connected');
@@ -392,7 +398,10 @@ export class DbManagerCouchDb implements DbManager {
     return session as any as UserSession;
   }
 
-  async updateSession(sessionId: string, updates: Partial<UserSession>): Promise<boolean> {
+  async updateSession(
+    sessionId: string,
+    updates: Partial<UserSession>
+  ): Promise<boolean> {
     await this.connect();
 
     if (!this.nanoDb) {
@@ -413,7 +422,7 @@ export class DbManagerCouchDb implements DbManager {
     // to ensure lastSeenAt is an ISO string Date object.
     if ('lastSeenAt' in updates && updates.lastSeenAt !== 'undefined') {
       const v = updates.lastSeenAt as any;
-      updateData.lastSeenAt = 
+      updateData.lastSeenAt =
         v instanceof Date ? v.toISOString() : new Date(v).toISOString();
     }
     const updated = { ...doc, ...updateData };
