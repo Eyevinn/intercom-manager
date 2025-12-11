@@ -13,8 +13,8 @@ import { Log } from './log';
 import { DbManager } from './db/interface';
 import { SmbProtocol } from './smb';
 
-const SESSION_INACTIVE_THRESHOLD = 10_000; // used to mark as active speaker in session
-const SESSION_EXPIRED_THRESHOLD = 60_000; // used to exclude sessions from being returned to client
+const SESSION_INACTIVE_THRESHOLD = 60_000;
+const SESSION_EXPIRED_THRESHOLD = 100_000; // used to exclude sessions from being returned to client
 
 // Sessions are changed from active to inactive after a minute, and are marked as expired after ~100 s.
 // Long-term pruning now happens via the Mongo TTL index configured with SESSION_PRUNE_SECONDS in mongodb.ts.
@@ -77,8 +77,7 @@ export class ProductionManager extends EventEmitter {
         const results = await Promise.all(
           (toInactivate as any[]).map((s) =>
             this.dbManager.updateSession(String(s._id), {
-              isActive: false,
-              isExpired: false
+              isActive: false
             })
           )
         );
