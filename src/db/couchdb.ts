@@ -69,6 +69,7 @@ export class DbManagerCouchDb implements DbManager {
     if (!this.nanoDb) {
       throw new Error('Database not connected');
     }
+
     const counterDocId = `counter_${collectionName}`;
     interface CounterDoc {
       _id: string;
@@ -318,14 +319,16 @@ export class DbManagerCouchDb implements DbManager {
 
   // Helper method, to avoid condlicting _revs on simultaneous update requests
   private async insertWithRetry(doc: any, maxRetries = 3): Promise<any> {
+    if (!this.nanoDb) {
+      throw new Error('Database not connected');
+    }
     // retries 3 times to fetch the latets doc and _rev, if all fail then throw error
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        const res = await this.nanoDb!.insert(doc);
-        return res;
+        return await this.nanoDb.insert(doc);
       } catch (error: any) {
         if (error.statusCode === 409 && attempt < maxRetries - 1) {
-          const latestDoc = await this.nanoDb!.get(doc._id);
+          const latestDoc = await this.nanoDb.get(doc._id);
           doc = { ...latestDoc, ...doc, _rev: latestDoc._rev };
           await new Promise((resolve) =>
             setTimeout(resolve, 100 * Math.pow(2, attempt))
@@ -368,7 +371,6 @@ export class DbManagerCouchDb implements DbManager {
       lastSeenAt: new Date(Date.now()).toISOString(),
       _id: sessionId
     };
-
     await this.insertWithRetry(updatedSession);
   }
 
