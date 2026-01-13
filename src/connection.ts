@@ -176,8 +176,30 @@ export class Connection {
     }
 
     const audio = this.endpointDescription.audio;
-    const audioPayloadType = audio['payload-type'];
 
+    // Compatibility fix for later versions of Symphony Media Bridge --
+    // there's no longer just one payload-type, there is now an array of payload-types.
+    // We pick the one that's opus, if present, or the first, and otherwise
+    // proceed as before:
+    
+    // Old code:
+    // const audioPayloadType = audio['payload-type'];
+
+    // New code:
+    let audioPayloadType = audio['payload-type'];
+
+    if (!audioPayloadType?.id) {
+        const audioPayloadTypes = audio["payload-types"];
+        if (!Array.isArray(audioPayloadTypes) || audioPayloadTypes.length === 0) {
+            throw new Error(`endpointDescription.audio.payload-types missing/empty: ${JSON.stringify(audio)}`);
+        }
+
+        // Prefer opus if present, else first
+        audioPayloadType =
+            audioPayloadTypes.find((pt: any) => pt?.name?.toLowerCase() === "opus") ?? audioPayloadTypes[0];
+    }
+    // End of new code.
+    
     for (const element of this.mediaStreams.audio.ssrcs) {
       const audioDescription = this.makeMediaDescription('audio');
       audioDescription.payloads = audioPayloadType.id.toString();
