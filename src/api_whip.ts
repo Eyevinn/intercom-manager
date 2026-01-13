@@ -2,6 +2,7 @@ import { Static, Type } from '@sinclair/typebox';
 import { FastifyPluginCallback } from 'fastify';
 import sdpTransform, { parse } from 'sdp-transform';
 import { v4 as uuidv4 } from 'uuid';
+import { promises as dns } from 'dns';
 import { CoreFunctions } from './api_productions_core_functions';
 import { Log } from './log';
 import { Line, WhipWhepRequest, WhipWhepResponse } from './models';
@@ -18,14 +19,50 @@ export interface ApiWhipOptions {
   productionManager: ProductionManager;
   dbManager: DbManager;
   whipAuthKey?: string;
+  whipGatewayUrl?: string;
 }
 
-export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
+export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = async (
   fastify,
-  opts,
-  next
+  opts
 ) => {
   const productionManager = opts.productionManager;
+
+  // Build allowList for rate limiting
+  const rateLimitAllowList = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
+  if (opts.whipGatewayUrl) {
+    try {
+      const gatewayHost = new URL(opts.whipGatewayUrl).hostname;
+      if (gatewayHost && !rateLimitAllowList.includes(gatewayHost)) {
+        rateLimitAllowList.push(gatewayHost);
+
+        // Resolve hostname to IP addresses
+        try {
+          const addresses = await dns.resolve(gatewayHost);
+          for (const ip of addresses) {
+            if (!rateLimitAllowList.includes(ip)) {
+              rateLimitAllowList.push(ip);
+            }
+          }
+          Log().info(
+            `WHIP rate limit allowList - resolved ${gatewayHost} to IPs: ${addresses.join(
+              ', '
+            )}`
+          );
+        } catch (resolveErr) {
+          Log().warn(
+            `Failed to resolve WHIP gateway hostname ${gatewayHost}: ${resolveErr}`
+          );
+        }
+      }
+    } catch (err) {
+      Log().warn(
+        `Failed to parse WHIP gateway URL for rate limit allowList: ${err}`
+      );
+    }
+  }
+
+  Log().info(`WHIP rate limit allowList: ${rateLimitAllowList.join(', ')}`);
 
   fastify.addContentTypeParser(
     'application/sdp',
@@ -98,9 +135,15 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
       },
       config: {
         rateLimit: {
-          max: 10,
+          max: 100,
           timeWindow: '1 minute',
           hook: 'onRequest',
+          allowList: rateLimitAllowList,
+          onExceeded: (req) => {
+            Log().warn(
+              `Rate limit exceeded for WHIP endpoint - IP: ${req.ip}, URL: ${req.url}`
+            );
+          },
           errorResponseBuilder: (_req, context) => {
             return {
               statusCode: 429,
@@ -199,7 +242,6 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
         Log().info(
           `Creating WHIP user session - username: ${username}, sessionId: ${sessionId}, production: ${productionId}, line: ${lineId}`
         );
-
         await productionManager.createUserSession(
           smbConferenceId,
           productionId,
@@ -209,7 +251,7 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
           true
         );
 
-        // Update user endpoint information
+        // Update user endpoint info and store a stable smbPresenceKey
         await productionManager.updateUserEndpoint(
           sessionId,
           endpointId,
@@ -283,6 +325,7 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
         Log().info(
           `WHIP session deleted successfully - sessionId: ${sessionId}`
         );
+
         // Add CORS headers for browser compatibility
         reply.headers({
           'Access-Control-Allow-Origin': '*',
@@ -365,8 +408,6 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
       }
     }
   );
-
-  next();
 };
 
 export default apiWhip;

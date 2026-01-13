@@ -1,6 +1,17 @@
 import '../config/load-env';
 import { MongoClient } from 'mongodb';
-import { Ingest, Line, NewIngest, Production, UserSession } from '../models';
+import {
+  BridgeStatus,
+  Ingest,
+  Line,
+  NewIngest,
+  NewReceiver,
+  NewTransmitter,
+  Production,
+  Receiver,
+  Transmitter,
+  UserSession
+} from '../models';
 import { assert } from '../utils';
 import { DbManager } from './interface';
 import { Log } from '../log';
@@ -241,13 +252,13 @@ export class DbManagerMongoDb implements DbManager {
     );
   }
 
-  // Retreive session from db based on sessionId
+  // Retreive session from database based on sessionId
   async getSession(sessionId: string): Promise<UserSession | null> {
     const db = this.client.db();
     return db.collection('sessions').findOne({ _id: sessionId as any }) as any;
   }
 
-  // Delete session in db
+  // Delete session in database
   async deleteUserSession(sessionId: string): Promise<boolean> {
     const db = this.client.db();
     const result = await db
@@ -256,7 +267,7 @@ export class DbManagerMongoDb implements DbManager {
     return result.deletedCount === 1;
   }
 
-  // Update db session
+  // Update database session
   async updateSession(
     sessionId: string,
     updates: Partial<UserSession>
@@ -289,5 +300,135 @@ export class DbManagerMongoDb implements DbManager {
     delete (mongoQuery as any).lastSeen;
 
     return sessions.find(mongoQuery).toArray();
+  }
+
+  // Transmitter operations
+  async addTransmitter(newTransmitter: NewTransmitter): Promise<Transmitter> {
+    const db = this.client.db();
+    const now = new Date().toISOString();
+    // Generate a unique ID for the transmitter using sequential index
+    const index = await this.getNextSequence('transmitters');
+    const id = `tx-${index}`;
+    const transmitter: Transmitter = {
+      _id: id,
+      ...newTransmitter,
+      status: BridgeStatus.IDLE,
+      createdAt: now,
+      updatedAt: now
+    };
+    await db
+      .collection<Transmitter>('transmitters')
+      .insertOne(transmitter as any);
+    return transmitter;
+  }
+
+  async getTransmitter(id: string): Promise<Transmitter | undefined> {
+    const db = this.client.db();
+    return db
+      .collection<Transmitter>('transmitters')
+      .findOne({ _id: id } as any) as any | undefined;
+  }
+
+  async getTransmitters(limit: number, offset: number): Promise<Transmitter[]> {
+    const db = this.client.db();
+    const transmitters = await db
+      .collection<Transmitter>('transmitters')
+      .find()
+      .sort({ label: 1, createdAt: -1 })
+      .skip(offset)
+      .limit(limit)
+      .toArray();
+    return transmitters as Transmitter[];
+  }
+
+  async getTransmittersLength(): Promise<number> {
+    const db = this.client.db();
+    return await db.collection<Transmitter>('transmitters').countDocuments();
+  }
+
+  async updateTransmitter(
+    transmitter: Transmitter
+  ): Promise<Transmitter | undefined> {
+    const db = this.client.db();
+    const now = new Date().toISOString();
+    const result = await db
+      .collection<Transmitter>('transmitters')
+      .updateOne({ _id: transmitter._id } as any, {
+        $set: { ...transmitter, updatedAt: now }
+      });
+    return result.modifiedCount === 1
+      ? { ...transmitter, updatedAt: now }
+      : undefined;
+  }
+
+  async deleteTransmitter(id: string): Promise<boolean> {
+    const db = this.client.db();
+    const result = await db
+      .collection<Transmitter>('transmitters')
+      .deleteOne({ _id: id } as any);
+    return result.deletedCount === 1;
+  }
+
+  // Receiver operations
+  async addReceiver(newReceiver: NewReceiver): Promise<Receiver> {
+    const db = this.client.db();
+    const now = new Date().toISOString();
+    // Generate a unique ID for the receiver using sequential index
+    const index = await this.getNextSequence('receivers');
+    const id = `rx-${index}`;
+    const receiver: Receiver = {
+      _id: id,
+      ...newReceiver,
+      status: BridgeStatus.IDLE,
+      createdAt: now,
+      updatedAt: now
+    };
+    await db.collection<Receiver>('receivers').insertOne(receiver as any);
+    return receiver;
+  }
+
+  async getReceiver(id: string): Promise<Receiver | undefined> {
+    const db = this.client.db();
+    return db.collection<Receiver>('receivers').findOne({ _id: id } as any) as
+      | any
+      | undefined;
+  }
+
+  async getReceivers(limit: number, offset: number): Promise<Receiver[]> {
+    const db = this.client.db();
+    const receivers = await db
+      .collection<Receiver>('receivers')
+      .find()
+      .sort({ label: 1, createdAt: -1 })
+      .skip(offset)
+      .limit(limit)
+      .toArray();
+    return receivers as Receiver[];
+  }
+
+  async getReceiversLength(): Promise<number> {
+    const db = this.client.db();
+    return await db.collection<Receiver>('receivers').countDocuments();
+  }
+
+  async updateReceiver(receiver: Receiver): Promise<Receiver | undefined> {
+    const db = this.client.db();
+    const now = new Date().toISOString();
+    const result = await db
+      .collection<Receiver>('receivers')
+      .updateOne({ _id: receiver._id } as any, {
+        $set: { ...receiver, updatedAt: now }
+      });
+    return result.modifiedCount === 1
+      ? { ...receiver, updatedAt: now }
+      : undefined;
+  }
+
+  async deleteReceiver(id: string): Promise<boolean> {
+    const db = this.client.db();
+    const result = await db
+      .collection<Receiver>('receivers')
+      .deleteOne({ _id: id } as any);
+    return result.deletedCount === 1;
   }
 }

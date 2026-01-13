@@ -2,6 +2,7 @@ import { Static, Type } from '@sinclair/typebox';
 import { FastifyPluginCallback } from 'fastify';
 import sdpTransform, { parse } from 'sdp-transform';
 import { v4 as uuidv4 } from 'uuid';
+import { promises as dns } from 'dns';
 import { CoreFunctions } from './api_productions_core_functions';
 import { Log } from './log';
 import { Line, WhipWhepRequest, WhipWhepResponse } from './models';
@@ -17,14 +18,50 @@ export interface ApiWhepOptions {
   coreFunctions: CoreFunctions;
   productionManager: ProductionManager;
   dbManager: DbManager;
+  whepGatewayUrl?: string;
 }
 
-export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
+export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = async (
   fastify,
-  opts,
-  next
+  opts
 ) => {
   const productionManager = opts.productionManager;
+
+  // Build allowList for rate limiting
+  const rateLimitAllowList = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
+  if (opts.whepGatewayUrl) {
+    try {
+      const gatewayHost = new URL(opts.whepGatewayUrl).hostname;
+      if (gatewayHost && !rateLimitAllowList.includes(gatewayHost)) {
+        rateLimitAllowList.push(gatewayHost);
+
+        // Resolve hostname to IP addresses
+        try {
+          const addresses = await dns.resolve(gatewayHost);
+          for (const ip of addresses) {
+            if (!rateLimitAllowList.includes(ip)) {
+              rateLimitAllowList.push(ip);
+            }
+          }
+          Log().info(
+            `WHEP rate limit allowList - resolved ${gatewayHost} to IPs: ${addresses.join(
+              ', '
+            )}`
+          );
+        } catch (resolveErr) {
+          Log().warn(
+            `Failed to resolve WHEP gateway hostname ${gatewayHost}: ${resolveErr}`
+          );
+        }
+      }
+    } catch (err) {
+      Log().warn(
+        `Failed to parse WHEP gateway URL for rate limit allowList: ${err}`
+      );
+    }
+  }
+
+  Log().info(`WHEP rate limit allowList: ${rateLimitAllowList.join(', ')}`);
 
   fastify.addContentTypeParser(
     'application/sdp',
@@ -72,9 +109,15 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
       },
       config: {
         rateLimit: {
-          max: 10,
+          max: 100,
           timeWindow: '1 minute',
           hook: 'onRequest',
+          allowList: rateLimitAllowList,
+          onExceeded: (req) => {
+            Log().warn(
+              `Rate limit exceeded for WHEP endpoint - IP: ${req.ip}, URL: ${req.url}`
+            );
+          },
           errorResponseBuilder: (_req, context) => {
             return {
               statusCode: 429,
@@ -336,8 +379,6 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
       }
     }
   );
-
-  next();
 };
 
 export default apiWhep;
