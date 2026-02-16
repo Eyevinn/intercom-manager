@@ -1,5 +1,7 @@
 import { Log } from '../log';
 import { Ingest, Line, NewIngest, Production, UserSession } from '../models';
+import { CallDocument } from '../models/call';
+import { ClientDocument } from '../models/client';
 import { assert } from '../utils';
 import { DbManager } from './interface';
 import nano from 'nano';
@@ -482,5 +484,163 @@ export class DbManagerCouchDb implements DbManager {
       ddoc: 'idx_prod_isActive',
       type: 'json'
     });
+
+    // index for client registry queries
+    await (this.nanoDb as any).createIndex({
+      index: {
+        fields: ['docType', 'isOnline']
+      },
+      name: 'idx_client_online',
+      ddoc: 'idx_client_online',
+      type: 'json'
+    });
+
+    // index for call queries by caller (M2)
+    await (this.nanoDb as any).createIndex({
+      index: { fields: ['docType', 'state', 'callerId'] },
+      name: 'idx_call_state_caller',
+      ddoc: 'idx_call_state_caller',
+      type: 'json'
+    });
+
+    // index for call queries by callee (M2)
+    await (this.nanoDb as any).createIndex({
+      index: { fields: ['docType', 'state', 'calleeId'] },
+      name: 'idx_call_state_callee',
+      ddoc: 'idx_call_state_callee',
+      type: 'json'
+    });
+  }
+
+  // ── Client Registry Methods (M1) ──
+
+  async saveClient(client: ClientDocument): Promise<void> {
+    await this.connect();
+    if (!this.nanoDb) throw new Error('Database not connected');
+    await this.nanoDb.insert(client as any);
+    Log().info(`Client saved: ${client._id} (${client.name})`);
+  }
+
+  async getClient(clientId: string): Promise<ClientDocument | null> {
+    await this.connect();
+    if (!this.nanoDb) throw new Error('Database not connected');
+    try {
+      const doc = await this.nanoDb.get(clientId);
+      if ((doc as any).docType !== 'client') return null;
+      return doc as unknown as ClientDocument;
+    } catch (err: any) {
+      if (err.statusCode === 404) return null;
+      throw err;
+    }
+  }
+
+  async updateClient(
+    clientId: string,
+    updates: Partial<ClientDocument>
+  ): Promise<ClientDocument | null> {
+    await this.connect();
+    if (!this.nanoDb) throw new Error('Database not connected');
+    try {
+      const existing = await this.nanoDb.get(clientId);
+      if ((existing as any).docType !== 'client') return null;
+      const updated = { ...existing, ...updates, _id: clientId, _rev: existing._rev };
+      await this.nanoDb.insert(updated as any);
+      return updated as unknown as ClientDocument;
+    } catch (err: any) {
+      if (err.statusCode === 404) return null;
+      throw err;
+    }
+  }
+
+  async getOnlineClients(): Promise<ClientDocument[]> {
+    await this.connect();
+    if (!this.nanoDb) throw new Error('Database not connected');
+    const result = await (this.nanoDb as any).find({
+      selector: {
+        docType: 'client',
+        isOnline: true
+      },
+      limit: 1000
+    });
+    return (result.docs || []) as ClientDocument[];
+  }
+
+  async getAllClients(): Promise<ClientDocument[]> {
+    await this.connect();
+    if (!this.nanoDb) throw new Error('Database not connected');
+    const result = await (this.nanoDb as any).find({
+      selector: {
+        docType: 'client'
+      },
+      limit: 2000
+    });
+    return (result.docs || []) as ClientDocument[];
+  }
+
+  // ── Call Management Methods (M2) ──
+
+  async saveCall(call: CallDocument): Promise<void> {
+    await this.connect();
+    if (!this.nanoDb) throw new Error('Database not connected');
+    await this.nanoDb.insert(call as any);
+    Log().info(`Call saved: ${call._id} (${call.callerName} -> ${call.calleeName})`);
+  }
+
+  async getCall(callId: string): Promise<CallDocument | null> {
+    await this.connect();
+    if (!this.nanoDb) throw new Error('Database not connected');
+    try {
+      const doc = await this.nanoDb.get(callId);
+      if ((doc as any).docType !== 'call') return null;
+      return doc as unknown as CallDocument;
+    } catch (err: any) {
+      if (err.statusCode === 404) return null;
+      throw err;
+    }
+  }
+
+  async updateCall(
+    callId: string,
+    updates: Partial<CallDocument>
+  ): Promise<CallDocument | null> {
+    await this.connect();
+    if (!this.nanoDb) throw new Error('Database not connected');
+    try {
+      const existing = await this.nanoDb.get(callId);
+      if ((existing as any).docType !== 'call') return null;
+      const updated = { ...existing, ...updates, _id: callId, _rev: existing._rev };
+      await this.insertWithRetry(updated);
+      return updated as unknown as CallDocument;
+    } catch (err: any) {
+      if (err.statusCode === 404) return null;
+      throw err;
+    }
+  }
+
+  async getActiveCallsForClient(clientId: string): Promise<CallDocument[]> {
+    await this.connect();
+    if (!this.nanoDb) throw new Error('Database not connected');
+    const result = await (this.nanoDb as any).find({
+      selector: {
+        docType: 'call',
+        state: { $in: ['offering', 'active'] },
+        $or: [{ callerId: clientId }, { calleeId: clientId }]
+      },
+      limit: 1000
+    });
+    return (result.docs || []) as CallDocument[];
+  }
+
+  async getActiveCalls(): Promise<CallDocument[]> {
+    await this.connect();
+    if (!this.nanoDb) throw new Error('Database not connected');
+    const result = await (this.nanoDb as any).find({
+      selector: {
+        docType: 'call',
+        state: { $in: ['offering', 'active'] }
+      },
+      limit: 5000
+    });
+    return (result.docs || []) as CallDocument[];
   }
 }

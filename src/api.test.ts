@@ -38,7 +38,17 @@ const mockDbManager = {
   getSession: jest.fn().mockResolvedValue(null),
   deleteUserSession: jest.fn().mockResolvedValue(true),
   updateSession: jest.fn().mockResolvedValue(true),
-  getSessionsByQuery: jest.fn().mockResolvedValue([])
+  getSessionsByQuery: jest.fn().mockResolvedValue([]),
+  saveClient: jest.fn().mockResolvedValue(undefined),
+  getClient: jest.fn().mockResolvedValue(null),
+  updateClient: jest.fn().mockResolvedValue(null),
+  getOnlineClients: jest.fn().mockResolvedValue([]),
+  getAllClients: jest.fn().mockResolvedValue([]),
+  saveCall: jest.fn().mockResolvedValue(undefined),
+  getCall: jest.fn().mockResolvedValue(null),
+  updateCall: jest.fn().mockResolvedValue(null),
+  getActiveCallsForClient: jest.fn().mockResolvedValue([]),
+  getActiveCalls: jest.fn().mockResolvedValue([])
 };
 
 const mockProductionManager = {

@@ -1,6 +1,8 @@
 import '../config/load-env';
 import { MongoClient } from 'mongodb';
 import { Ingest, Line, NewIngest, Production, UserSession } from '../models';
+import { CallDocument } from '../models/call';
+import { ClientDocument } from '../models/client';
 import { assert } from '../utils';
 import { DbManager } from './interface';
 import { Log } from '../log';
@@ -289,5 +291,83 @@ export class DbManagerMongoDb implements DbManager {
     delete (mongoQuery as any).lastSeen;
 
     return sessions.find(mongoQuery).toArray();
+  }
+
+  // ── Client Registry Methods (M1) — MongoDB stubs ──
+  // SR POC uses CouchDB. These are placeholder implementations for interface compliance.
+
+  async saveClient(client: ClientDocument): Promise<void> {
+    const db = this.client.db();
+    await db.collection('clients').insertOne(client as any);
+  }
+
+  async getClient(clientId: string): Promise<ClientDocument | null> {
+    const db = this.client.db();
+    return db.collection<ClientDocument>('clients').findOne({ _id: clientId as any });
+  }
+
+  async updateClient(clientId: string, updates: Partial<ClientDocument>): Promise<ClientDocument | null> {
+    const db = this.client.db();
+    const result = await db.collection<ClientDocument>('clients').findOneAndUpdate(
+      { _id: clientId as any },
+      { $set: updates },
+      { returnDocument: 'after' }
+    );
+    return result ?? null;
+  }
+
+  async getOnlineClients(): Promise<ClientDocument[]> {
+    const db = this.client.db();
+    return db.collection<ClientDocument>('clients').find({ isOnline: true }).toArray();
+  }
+
+  async getAllClients(): Promise<ClientDocument[]> {
+    const db = this.client.db();
+    return db.collection<ClientDocument>('clients').find({}).toArray();
+  }
+
+  // ── Call Management Methods (M2) — MongoDB stubs ──
+  // SR POC uses CouchDB. These are placeholder implementations for interface compliance.
+
+  async saveCall(call: CallDocument): Promise<void> {
+    const db = this.client.db();
+    await db.collection('calls').insertOne(call as any);
+  }
+
+  async getCall(callId: string): Promise<CallDocument | null> {
+    const db = this.client.db();
+    return db.collection<CallDocument>('calls').findOne({ _id: callId as any });
+  }
+
+  async updateCall(
+    callId: string,
+    updates: Partial<CallDocument>
+  ): Promise<CallDocument | null> {
+    const db = this.client.db();
+    const result = await db.collection<CallDocument>('calls').findOneAndUpdate(
+      { _id: callId as any },
+      { $set: updates },
+      { returnDocument: 'after' }
+    );
+    return result ?? null;
+  }
+
+  async getActiveCallsForClient(clientId: string): Promise<CallDocument[]> {
+    const db = this.client.db();
+    return db
+      .collection<CallDocument>('calls')
+      .find({
+        state: { $in: ['offering', 'active'] },
+        $or: [{ callerId: clientId }, { calleeId: clientId }]
+      })
+      .toArray();
+  }
+
+  async getActiveCalls(): Promise<CallDocument[]> {
+    const db = this.client.db();
+    return db
+      .collection<CallDocument>('calls')
+      .find({ state: { $in: ['offering', 'active'] } })
+      .toArray();
   }
 }

@@ -1,4 +1,6 @@
 import { Ingest, Line, NewIngest, Production, UserSession } from '../models';
+import { ClientDocument } from '../models/client';
+import { CallDocument } from '../models/call';
 
 export interface DbManager {
   connect(): Promise<void>;
@@ -28,4 +30,24 @@ export interface DbManager {
     updates: Partial<UserSession>
   ): Promise<boolean>;
   getSessionsByQuery(q: Partial<UserSession>): Promise<UserSession[]>;
+
+  // Client registry methods (M1)
+  saveClient(client: ClientDocument): Promise<void>;
+  getClient(clientId: string): Promise<ClientDocument | null>;
+  updateClient(
+    clientId: string,
+    updates: Partial<ClientDocument>
+  ): Promise<ClientDocument | null>;
+  getOnlineClients(): Promise<ClientDocument[]>;
+  getAllClients(): Promise<ClientDocument[]>;
+
+  // Call management methods (M2)
+  saveCall(call: CallDocument): Promise<void>;
+  getCall(callId: string): Promise<CallDocument | null>;
+  updateCall(
+    callId: string,
+    updates: Partial<CallDocument>
+  ): Promise<CallDocument | null>;
+  getActiveCallsForClient(clientId: string): Promise<CallDocument[]>;
+  getActiveCalls(): Promise<CallDocument[]>;
 }
