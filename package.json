@@ -11,7 +11,7 @@
     "dev": "nodemon",
     "prestart": "npm run build:frontend",
     "start": "ts-node -T src/server.ts",
-    "build:frontend": "rm -rf public && mkdir -p /tmp/ic2-frontend-build && cd /tmp/ic2-frontend-build && ([ -d .git ] || git clone https://github.com/borisasadanin/intercom-frontend.git .) && git pull && npm install && VITE_BACKEND_URL=/ VITE_BACKEND_API_VERSION=api/v1/ ./node_modules/.bin/vite build && cp -r dist/ \"$OLDPWD/public/\" && cd \"$OLDPWD\"",
+    "build:frontend": "rm -rf public && mkdir -p /tmp/ic2-frontend-build && cd /tmp/ic2-frontend-build && ([ -d .git ] || git clone https://github.com/borisasadanin/intercom-frontend.git .) && git pull && npx yarn@1.22.22 install && VITE_BACKEND_URL=/ VITE_BACKEND_API_VERSION=api/v1/ npx yarn@1.22.22 vite build && cp -r dist/ \"$OLDPWD/public/\" && cd \"$OLDPWD\"",
     "build:all": "npm run build:frontend",
     "postversion": "git push && git push --tags"
   },
