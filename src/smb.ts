@@ -187,19 +187,15 @@ export class SmbProtocol {
     });
 
     if (!response.ok) {
-      const contentType = response.headers.get('content-type');
-
-      let text;
-      let json;
-
-      if (contentType && contentType.indexOf('text/plain') > -1) {
-        text = await response.text();
-      } else if (contentType && contentType.indexOf('application/json') > -1) {
-        json = await response.json();
+      let errorBody: string;
+      try {
+        errorBody = await response.text();
+      } catch {
+        errorBody = `HTTP ${response.status} ${response.statusText}`;
       }
 
       throw new Error(
-        `Failed to configure endpoint ${text ? text : JSON.stringify(json)}`
+        `Failed to configure endpoint: ${response.status} ${errorBody}`
       );
     }
   }

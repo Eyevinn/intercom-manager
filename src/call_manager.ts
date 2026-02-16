@@ -328,6 +328,14 @@ export class CallManager {
       throw new CallError(409, 'Call has ended');
     }
 
+    // Idempotency guard: if callee signaling already completed, return
+    // the existing call document. This handles duplicate calls from the
+    // frontend (React race condition) without hitting SMB again.
+    if (call.calleeReady) {
+      Log().info(`Callee signaling already complete for call ${callId}, skipping duplicate`);
+      return call;
+    }
+
     // Configure callee endpoint on SMB with the SDP answer
     await this.configureEndpointFromSdpAnswer(
       call.smbConferenceId,
