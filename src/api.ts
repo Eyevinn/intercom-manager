@@ -1,12 +1,15 @@
 import fastifyCookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import fastifyRateLimit from '@fastify/rate-limit';
+import fastifyStatic from '@fastify/static';
 import swagger from '@fastify/swagger';
 import swaggerUI from '@fastify/swagger-ui';
 import fastifyWebsocket from '@fastify/websocket';
 import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
-import { Static, Type } from '@sinclair/typebox';
-import fastify, { FastifyPluginCallback } from 'fastify';
+import { Type } from '@sinclair/typebox';
+import fastify from 'fastify';
+import path from 'path';
+import fs from 'fs';
 import { getApiCalls } from './api_calls';
 import { getApiIngests } from './api_ingests';
 import { getApiClients } from './api_clients';
@@ -24,35 +27,6 @@ import { ProductionManager } from './production_manager';
 import { StatusManager } from './websocket/status_manager';
 import { TalkManager } from './talk_manager';
 
-const HelloWorld = Type.String({
-  description: 'The magical words!'
-});
-
-export interface HealthcheckOptions {
-  title: string;
-}
-
-const healthcheck: FastifyPluginCallback<HealthcheckOptions> = (
-  fastify,
-  opts,
-  next
-) => {
-  fastify.get<{ Reply: Static<typeof HelloWorld> }>(
-    '/',
-    {
-      schema: {
-        description: 'Say hello',
-        response: {
-          200: HelloWorld
-        }
-      }
-    },
-    async (_, reply) => {
-      reply.send('Hello, world! I am ' + opts.title);
-    }
-  );
-  next();
-};
 
 export interface ApiGeneralOptions {
   title: string;
@@ -109,8 +83,6 @@ export default async (opts: ApiOptions) => {
 
   // Register WebSocket support
   await api.register(fastifyWebsocket);
-
-  api.register(healthcheck, { title: opts.title });
 
   // Register client registry routes (M1)
   if (opts.clientRegistry) {
@@ -197,6 +169,24 @@ export default async (opts: ApiOptions) => {
     dbManager: opts.dbManager,
     ingestManager: opts.ingestManager
   });
+
+  // Serve frontend static files from public/ directory
+  const publicDir = path.join(__dirname, '..', 'public');
+  if (fs.existsSync(publicDir)) {
+    api.register(fastifyStatic, {
+      root: publicDir,
+      prefix: '/',
+      wildcard: false
+    });
+
+    // SPA fallback: serve index.html for non-API routes that don't match a static file
+    api.setNotFoundHandler(async (request, reply) => {
+      if (request.url.startsWith('/api/')) {
+        return reply.code(404).send({ error: 'Not Found' });
+      }
+      return reply.sendFile('index.html');
+    });
+  }
 
   return api;
 };
