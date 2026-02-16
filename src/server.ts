@@ -80,7 +80,7 @@ process.on('unhandledRejection', (reason: unknown) => {
   await ingestManager.load();
 
   // Initialize JWT authentication (M1)
-  const JWT_SECRET = process.env.JWT_SECRET ?? 'srpoc-dev-secret-change-in-production';
+  const JWT_SECRET = process.env.JWT_SECRET ?? 'intercom2-dev-secret-change-in-production';
   initJwt(JWT_SECRET);
   if (!process.env.JWT_SECRET) {
     Log().warn('JWT_SECRET not set — using default dev secret. Set JWT_SECRET in production!');

@@ -294,7 +294,7 @@ export class DbManagerMongoDb implements DbManager {
   }
 
   // ── Client Registry Methods (M1) — MongoDB stubs ──
-  // SR POC uses CouchDB. These are placeholder implementations for interface compliance.
+  // Intercom 2 uses CouchDB. These are placeholder implementations for interface compliance.
 
   async saveClient(client: ClientDocument): Promise<void> {
     const db = this.client.db();
@@ -327,7 +327,7 @@ export class DbManagerMongoDb implements DbManager {
   }
 
   // ── Call Management Methods (M2) — MongoDB stubs ──
-  // SR POC uses CouchDB. These are placeholder implementations for interface compliance.
+  // Intercom 2 uses CouchDB. These are placeholder implementations for interface compliance.
 
   async saveCall(call: CallDocument): Promise<void> {
     const db = this.client.db();
