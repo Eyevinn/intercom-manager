@@ -4,7 +4,7 @@ import { assert } from '../utils';
 import { DbManager } from './interface';
 import nano from 'nano';
 
-const SESSION_PRUNE_SECONDS = 10;
+const SESSION_PRUNE_SECONDS = 7_200;
 export class DbManagerCouchDb implements DbManager {
   private client;
   private nanoDb: nano.DocumentScope<unknown> | undefined;
@@ -53,7 +53,7 @@ export class DbManagerCouchDb implements DbManager {
       } catch (error: any) {
         Log().error(error);
       }
-    }, 10_000); // runs every 5th minute
+    }, 300_000); // runs every 5th minute
   }
 
   async disconnect(): Promise<void> {
