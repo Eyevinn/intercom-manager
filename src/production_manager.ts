@@ -229,7 +229,7 @@ export class ProductionManager extends EventEmitter {
         }
       }
     } catch (e) {
-      Log().warn('checkUserStatus (WHIP) failed', e);
+      Log().warn('checkUserStatus failed', e);
     }
 
     if (hasChanged) {
