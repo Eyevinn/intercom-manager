@@ -6,13 +6,13 @@ Deploy the complete Intercom 2 system on [Eyevinn Open Source Cloud](https://www
 
 This Terraform configuration provisions:
 
-| Component | Purpose |
-|-----------|---------|
-| **Symphony Media Bridge** | WebRTC SFU for low-latency audio |
-| **CouchDB** | Database for productions, clients, calls |
-| **Valkey** | Backing store for config service |
-| **App Config Service** | Environment variable injection |
-| **Web Runner** | Runs the Intercom Manager + Frontend |
+| Component                 | Purpose                                  |
+| ------------------------- | ---------------------------------------- |
+| **Symphony Media Bridge** | WebRTC SFU for low-latency audio         |
+| **CouchDB**               | Database for productions, clients, calls |
+| **Valkey**                | Backing store for config service         |
+| **App Config Service**    | Environment variable injection           |
+| **Web Runner**            | Runs the Intercom Manager + Frontend     |
 
 ## Prerequisites
 
@@ -32,16 +32,16 @@ terraform apply
 
 ## Variables
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `osc_pat` | Yes | -- | OSC Personal Access Token |
-| `intercom_name` | No | `intercom2` | Name prefix for all resources |
-| `github_url` | No | `https://github.com/borisasadanin/intercom-manager` | GitHub repo URL |
-| `github_token` | No | `""` | GitHub PAT (for private repos only) |
-| `smb_api_key` | No | auto-generated | SMB API key |
-| `db_admin_password` | No | auto-generated | CouchDB admin password |
-| `db_name` | No | `intercom` | CouchDB database name |
-| `jwt_secret` | No | auto-generated | JWT signing secret |
+| Variable            | Required | Default                                             | Description                         |
+| ------------------- | -------- | --------------------------------------------------- | ----------------------------------- |
+| `osc_pat`           | Yes      | --                                                  | OSC Personal Access Token           |
+| `intercom_name`     | No       | `intercom2`                                         | Name prefix for all resources       |
+| `github_url`        | No       | `https://github.com/borisasadanin/intercom-manager` | GitHub repo URL                     |
+| `github_token`      | No       | `""`                                                | GitHub PAT (for private repos only) |
+| `smb_api_key`       | No       | auto-generated                                      | SMB API key                         |
+| `db_admin_password` | No       | auto-generated                                      | CouchDB admin password              |
+| `db_name`           | No       | `intercom`                                          | CouchDB database name               |
+| `jwt_secret`        | No       | auto-generated                                      | JWT signing secret                  |
 
 ## Custom Fork
 

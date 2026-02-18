@@ -303,22 +303,32 @@ export class DbManagerMongoDb implements DbManager {
 
   async getClient(clientId: string): Promise<ClientDocument | null> {
     const db = this.client.db();
-    return db.collection<ClientDocument>('clients').findOne({ _id: clientId as any });
+    return db
+      .collection<ClientDocument>('clients')
+      .findOne({ _id: clientId as any });
   }
 
-  async updateClient(clientId: string, updates: Partial<ClientDocument>): Promise<ClientDocument | null> {
+  async updateClient(
+    clientId: string,
+    updates: Partial<ClientDocument>
+  ): Promise<ClientDocument | null> {
     const db = this.client.db();
-    const result = await db.collection<ClientDocument>('clients').findOneAndUpdate(
-      { _id: clientId as any },
-      { $set: updates },
-      { returnDocument: 'after' }
-    );
+    const result = await db
+      .collection<ClientDocument>('clients')
+      .findOneAndUpdate(
+        { _id: clientId as any },
+        { $set: updates },
+        { returnDocument: 'after' }
+      );
     return result ?? null;
   }
 
   async getOnlineClients(): Promise<ClientDocument[]> {
     const db = this.client.db();
-    return db.collection<ClientDocument>('clients').find({ isOnline: true }).toArray();
+    return db
+      .collection<ClientDocument>('clients')
+      .find({ isOnline: true })
+      .toArray();
   }
 
   async getAllClients(): Promise<ClientDocument[]> {
@@ -344,11 +354,13 @@ export class DbManagerMongoDb implements DbManager {
     updates: Partial<CallDocument>
   ): Promise<CallDocument | null> {
     const db = this.client.db();
-    const result = await db.collection<CallDocument>('calls').findOneAndUpdate(
-      { _id: callId as any },
-      { $set: updates },
-      { returnDocument: 'after' }
-    );
+    const result = await db
+      .collection<CallDocument>('calls')
+      .findOneAndUpdate(
+        { _id: callId as any },
+        { $set: updates },
+        { returnDocument: 'after' }
+      );
     return result ?? null;
   }
 

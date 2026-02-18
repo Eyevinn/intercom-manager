@@ -69,7 +69,9 @@ export class CallManager {
     this.endpointIdleTimeout = endpointIdleTimeout;
 
     Log().info(
-      `CallManager initialized with ${smbInstances.length} SMB instance(s): ${smbInstances.map((s) => s.url).join(', ')}`
+      `CallManager initialized with ${
+        smbInstances.length
+      } SMB instance(s): ${smbInstances.map((s) => s.url).join(', ')}`
     );
   }
 
@@ -91,7 +93,9 @@ export class CallManager {
     if (!best) {
       throw new CallError(
         503,
-        `All ${this.smbInstances.length} SMB instances at capacity (max ${this.smbInstances[0]?.maxConferences ?? 0} conferences each)`
+        `All ${this.smbInstances.length} SMB instances at capacity (max ${
+          this.smbInstances[0]?.maxConferences ?? 0
+        } conferences each)`
       );
     }
 
@@ -332,7 +336,9 @@ export class CallManager {
     // the existing call document. This handles duplicate calls from the
     // frontend (React race condition) without hitting SMB again.
     if (call.calleeReady) {
-      Log().info(`Callee signaling already complete for call ${callId}, skipping duplicate`);
+      Log().info(
+        `Callee signaling already complete for call ${callId}, skipping duplicate`
+      );
       return call;
     }
 
@@ -487,14 +493,12 @@ export class CallManager {
       throw new Error('Missing audio SSRCs in endpoint description');
     }
 
-    const ssrcs = endpointDescription.audio.ssrcs.map(
-      (ssrcNr: number) => ({
-        ssrc: ssrcNr.toString(),
-        cname: uuidv4(),
-        mslabel: uuidv4(),
-        label: uuidv4()
-      })
-    );
+    const ssrcs = endpointDescription.audio.ssrcs.map((ssrcNr: number) => ({
+      ssrc: ssrcNr.toString(),
+      cname: uuidv4(),
+      mslabel: uuidv4(),
+      label: uuidv4()
+    }));
 
     const connection = new Connection(
       `call_${endpointId}`,
@@ -566,8 +570,7 @@ export class CallManager {
     if (transport) {
       // DTLS fingerprint
       if (transport.dtls) {
-        const fingerprint =
-          parsedAnswer.fingerprint || audioMedia.fingerprint;
+        const fingerprint = parsedAnswer.fingerprint || audioMedia.fingerprint;
         if (fingerprint) {
           transport.dtls.type = fingerprint.type;
           transport.dtls.hash = fingerprint.hash;

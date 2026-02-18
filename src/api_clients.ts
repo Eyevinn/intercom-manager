@@ -129,7 +129,8 @@ export const getApiClients = (): FastifyPluginCallback<ApiClientsOptions> => {
         const updates: Record<string, string> = {};
         if (request.body.name) updates.name = request.body.name.trim();
         if (request.body.role) updates.role = request.body.role.trim();
-        if (request.body.location) updates.location = request.body.location.trim();
+        if (request.body.location)
+          updates.location = request.body.location.trim();
 
         const updated = await clientRegistry.updateClient(clientId, updates);
 

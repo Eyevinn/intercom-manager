@@ -17,7 +17,9 @@ export const ClientDocument = Type.Object({
   location: Type.String({
     description: 'Location / editorial office (Plats/Redaktion)'
   }),
-  isOnline: Type.Boolean({ description: 'Whether the client is currently connected' }),
+  isOnline: Type.Boolean({
+    description: 'Whether the client is currently connected'
+  }),
   lastSeenAt: Type.String({
     format: 'date-time',
     description: 'ISO timestamp of last activity'
@@ -34,9 +36,21 @@ export type ClientDocument = Static<typeof ClientDocument>;
  * Request body for POST /api/v1/client/register
  */
 export const ClientRegistrationRequest = Type.Object({
-  name: Type.String({ minLength: 1, maxLength: 100, description: 'Display name' }),
-  role: Type.String({ minLength: 1, maxLength: 100, description: 'Client role' }),
-  location: Type.String({ minLength: 1, maxLength: 100, description: 'Location / editorial office' }),
+  name: Type.String({
+    minLength: 1,
+    maxLength: 100,
+    description: 'Display name'
+  }),
+  role: Type.String({
+    minLength: 1,
+    maxLength: 100,
+    description: 'Client role'
+  }),
+  location: Type.String({
+    minLength: 1,
+    maxLength: 100,
+    description: 'Location / editorial office'
+  }),
   existingClientId: Type.Optional(
     Type.String({
       maxLength: 100,
@@ -46,7 +60,9 @@ export const ClientRegistrationRequest = Type.Object({
   )
 });
 
-export type ClientRegistrationRequest = Static<typeof ClientRegistrationRequest>;
+export type ClientRegistrationRequest = Static<
+  typeof ClientRegistrationRequest
+>;
 
 /**
  * Response body for POST /api/v1/client/register
@@ -59,7 +75,9 @@ export const ClientRegistrationResponse = Type.Object({
   location: Type.String()
 });
 
-export type ClientRegistrationResponse = Static<typeof ClientRegistrationResponse>;
+export type ClientRegistrationResponse = Static<
+  typeof ClientRegistrationResponse
+>;
 
 /**
  * Response body for GET /api/v1/client/me and GET /api/v1/client/:clientId

@@ -37,7 +37,9 @@ export async function requireAuth(
     const payload = verifyToken(token);
     request.client = payload;
   } catch (err: any) {
-    Log().warn(`Auth failed: invalid token for ${request.method} ${request.url} — ${err.message}`);
+    Log().warn(
+      `Auth failed: invalid token for ${request.method} ${request.url} — ${err.message}`
+    );
     reply.code(401).send({ message: 'Invalid or expired token' });
     return;
   }

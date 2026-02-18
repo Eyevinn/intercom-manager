@@ -74,9 +74,7 @@ export class TalkManager {
     }
 
     if (validTargets.length === 0) {
-      Log().debug(
-        `talk_start from ${clientId}: all callIds invalid, ignoring`
-      );
+      Log().debug(`talk_start from ${clientId}: all callIds invalid, ignoring`);
       return null;
     }
 
@@ -89,7 +87,9 @@ export class TalkManager {
 
     this.activeTalks.set(clientId, talkState);
     Log().info(
-      `Talk started: ${clientName} -> [${validTargets.map((t) => t.clientName).join(', ')}]`
+      `Talk started: ${clientName} -> [${validTargets
+        .map((t) => t.clientName)
+        .join(', ')}]`
     );
     return talkState;
   }
@@ -144,14 +144,14 @@ export class TalkManager {
       if (talkState.targets.length === 0) {
         // No more targets — talk stopped entirely
         this.activeTalks.delete(clientId);
-        Log().info(
-          `Talk stopped (call ended): ${talkState.clientName}`
-        );
+        Log().info(`Talk stopped (call ended): ${talkState.clientName}`);
         return { stopped: talkState };
       } else {
         // Still has other targets — update in place
         Log().info(
-          `Talk updated (call ended): ${talkState.clientName} -> [${talkState.targets.map((t) => t.clientName).join(', ')}]`
+          `Talk updated (call ended): ${
+            talkState.clientName
+          } -> [${talkState.targets.map((t) => t.clientName).join(', ')}]`
         );
         return { updated: talkState };
       }

@@ -115,7 +115,11 @@ export const getApiCalls = (): FastifyPluginCallback<ApiCallsOptions> => {
         const { sdpAnswer } = request.body;
 
         try {
-          await callManager.completeCallerSignaling(callId, clientId, sdpAnswer);
+          await callManager.completeCallerSignaling(
+            callId,
+            clientId,
+            sdpAnswer
+          );
 
           // Check if call is now active (both sides ready)
           const call = await callManager.getCall(callId);
@@ -137,11 +141,9 @@ export const getApiCalls = (): FastifyPluginCallback<ApiCallsOptions> => {
             reply.code(err.statusCode).send({ message: err.message } as any);
           } else {
             Log().error(`Failed to complete caller signaling: ${err.message}`);
-            reply
-              .code(500)
-              .send({
-                message: 'Failed to configure media connection'
-              } as any);
+            reply.code(500).send({
+              message: 'Failed to configure media connection'
+            } as any);
           }
         }
       }
@@ -234,11 +236,9 @@ export const getApiCalls = (): FastifyPluginCallback<ApiCallsOptions> => {
             reply.code(err.statusCode).send({ message: err.message } as any);
           } else {
             Log().error(`Failed to complete callee signaling: ${err.message}`);
-            reply
-              .code(500)
-              .send({
-                message: 'Failed to configure media connection'
-              } as any);
+            reply.code(500).send({
+              message: 'Failed to configure media connection'
+            } as any);
           }
         }
       }

@@ -27,7 +27,6 @@ import { ProductionManager } from './production_manager';
 import { StatusManager } from './websocket/status_manager';
 import { TalkManager } from './talk_manager';
 
-
 export interface ApiGeneralOptions {
   title: string;
   smbServerBaseUrl: string;

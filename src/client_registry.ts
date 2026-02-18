@@ -43,9 +43,7 @@ export class ClientRegistry {
             updated.role,
             updated.location
           );
-          Log().info(
-            `Client re-registered: ${updated._id} (${updated.name})`
-          );
+          Log().info(`Client re-registered: ${updated._id} (${updated.name})`);
           return { client: updated, token };
         }
       }

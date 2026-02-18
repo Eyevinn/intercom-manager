@@ -41,8 +41,7 @@ if (dbUrl.protocol === 'mongodb:' || dbUrl.protocol === 'mongodb+srv:') {
 
 // Global safety net for unhandled rejections (e.g., transient CouchDB errors)
 process.on('unhandledRejection', (reason: unknown) => {
-  const message =
-    reason instanceof Error ? reason.message : String(reason);
+  const message = reason instanceof Error ? reason.message : String(reason);
   Log().error(`Unhandled rejection: ${message}`);
   // Don't crash — transient DB/network errors should not kill the server
 });
@@ -66,9 +65,7 @@ process.on('unhandledRejection', (reason: unknown) => {
     }
   }
   if (!dbConnected) {
-    Log().error(
-      'Failed to connect to database after 3 attempts. Exiting.'
-    );
+    Log().error('Failed to connect to database after 3 attempts. Exiting.');
     process.exit(1);
   }
 
@@ -80,10 +77,13 @@ process.on('unhandledRejection', (reason: unknown) => {
   await ingestManager.load();
 
   // Initialize JWT authentication (M1)
-  const JWT_SECRET = process.env.JWT_SECRET ?? 'intercom2-dev-secret-change-in-production';
+  const JWT_SECRET =
+    process.env.JWT_SECRET ?? 'intercom2-dev-secret-change-in-production';
   initJwt(JWT_SECRET);
   if (!process.env.JWT_SECRET) {
-    Log().warn('JWT_SECRET not set — using default dev secret. Set JWT_SECRET in production!');
+    Log().warn(
+      'JWT_SECRET not set — using default dev secret. Set JWT_SECRET in production!'
+    );
   }
 
   // Initialize client registry and status manager (M1)
@@ -93,7 +93,10 @@ process.on('unhandledRejection', (reason: unknown) => {
   // Initialize call manager with multi-SMB support (M2 + M4)
   // SMB_ADDRESSES (comma-separated) takes priority over single SMB_ADDRESS.
   // All URLs get /conferences/ appended to match the SMB API path.
-  const smbMaxConferences = parseInt(process.env.SMB_MAX_CONFERENCES || '80', 10);
+  const smbMaxConferences = parseInt(
+    process.env.SMB_MAX_CONFERENCES || '80',
+    10
+  );
   const defaultApiKey = process.env.SMB_APIKEY || '';
 
   let smbInstances: SmbInstance[];
@@ -101,7 +104,10 @@ process.on('unhandledRejection', (reason: unknown) => {
 
   if (smbAddressesRaw) {
     // Multi-SMB mode: comma-separated URLs
-    const urls = smbAddressesRaw.split(',').map((s) => s.trim()).filter((s) => s.length > 0);
+    const urls = smbAddressesRaw
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
     // SMB_APIKEYS can be comma-separated (parallel to URLs) or a single shared key
     const apiKeysRaw = process.env.SMB_APIKEYS;
     const apiKeys = apiKeysRaw
@@ -120,14 +126,18 @@ process.on('unhandledRejection', (reason: unknown) => {
     );
   } else {
     // Single SMB backward compat
-    smbInstances = [{
-      url: new URL('/conferences/', SMB_ADDRESS).toString(),
-      apiKey: defaultApiKey,
-      conferenceCount: 0,
-      maxConferences: smbMaxConferences
-    }];
+    smbInstances = [
+      {
+        url: new URL('/conferences/', SMB_ADDRESS).toString(),
+        apiKey: defaultApiKey,
+        conferenceCount: 0,
+        maxConferences: smbMaxConferences
+      }
+    ];
 
-    Log().info(`Single SMB mode: ${SMB_ADDRESS} (max ${smbMaxConferences} conferences)`);
+    Log().info(
+      `Single SMB mode: ${SMB_ADDRESS} (max ${smbMaxConferences} conferences)`
+    );
   }
 
   const callManager = new CallManager(
@@ -143,39 +153,48 @@ process.on('unhandledRejection', (reason: unknown) => {
   statusManager.setTalkManager(talkManager);
 
   // Wire disconnect callback for call cleanup (M2)
-  statusManager.setOnDisconnectCallback(async (disconnectedClientId: string) => {
-    try {
-      const activeCalls = await callManager.getActiveCallsForClient(disconnectedClientId);
-      for (const call of activeCalls) {
-        const endedCall = await callManager.endCallDueToDisconnect(call._id, disconnectedClientId);
-        if (endedCall) {
-          const otherClientId =
-            endedCall.callerId === disconnectedClientId
-              ? endedCall.calleeId
-              : endedCall.callerId;
+  statusManager.setOnDisconnectCallback(
+    async (disconnectedClientId: string) => {
+      try {
+        const activeCalls = await callManager.getActiveCallsForClient(
+          disconnectedClientId
+        );
+        for (const call of activeCalls) {
+          const endedCall = await callManager.endCallDueToDisconnect(
+            call._id,
+            disconnectedClientId
+          );
+          if (endedCall) {
+            const otherClientId =
+              endedCall.callerId === disconnectedClientId
+                ? endedCall.calleeId
+                : endedCall.callerId;
 
-          const callEndedEvent = {
-            type: 'call_ended' as const,
-            callId: endedCall._id,
-            callerId: endedCall.callerId,
-            callerName: endedCall.callerName,
-            calleeId: endedCall.calleeId,
-            calleeName: endedCall.calleeName,
-            endedBy: disconnectedClientId,
-            reason: endedCall.endReason || 'caller_disconnected',
-            timestamp: new Date().toISOString()
-          };
+            const callEndedEvent = {
+              type: 'call_ended' as const,
+              callId: endedCall._id,
+              callerId: endedCall.callerId,
+              callerName: endedCall.callerName,
+              calleeId: endedCall.calleeId,
+              calleeName: endedCall.calleeName,
+              endedBy: disconnectedClientId,
+              reason: endedCall.endReason || 'caller_disconnected',
+              timestamp: new Date().toISOString()
+            };
 
-          // Notify the other party
-          statusManager.sendToClient(otherClientId, callEndedEvent);
-          // Broadcast for status API
-          statusManager.broadcastToAll(callEndedEvent);
+            // Notify the other party
+            statusManager.sendToClient(otherClientId, callEndedEvent);
+            // Broadcast for status API
+            statusManager.broadcastToAll(callEndedEvent);
+          }
         }
+      } catch (err: any) {
+        Log().error(
+          `Failed to clean up calls for disconnected client ${disconnectedClientId}: ${err.message}`
+        );
       }
-    } catch (err: any) {
-      Log().error(`Failed to clean up calls for disconnected client ${disconnectedClientId}: ${err.message}`);
     }
-  });
+  );
 
   const server = await api({
     title: 'intercom-manager',

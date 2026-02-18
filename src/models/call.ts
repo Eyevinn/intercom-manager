@@ -33,7 +33,11 @@ export const CallDocument = Type.Object({
   calleeId: Type.String(),
   calleeName: Type.String(),
   smbConferenceId: Type.String(),
-  smbInstanceUrl: Type.Optional(Type.String({ description: 'SMB instance URL used for this call (multi-SMB routing)' })),
+  smbInstanceUrl: Type.Optional(
+    Type.String({
+      description: 'SMB instance URL used for this call (multi-SMB routing)'
+    })
+  ),
   state: CallState,
   callerEndpointId: Type.String(),
   calleeEndpointId: Type.String(),
@@ -75,7 +79,10 @@ export type InitiateCallResponse = Static<typeof InitiateCallResponse>;
  * Request body for PATCH /api/v1/calls/:callId/answer (SDP answer)
  */
 export const CallSdpAnswer = Type.Object({
-  sdpAnswer: Type.String({ maxLength: 16384, description: 'SDP answer from client' })
+  sdpAnswer: Type.String({
+    maxLength: 16384,
+    description: 'SDP answer from client'
+  })
 });
 export type CallSdpAnswer = Static<typeof CallSdpAnswer>;
 
@@ -109,10 +116,7 @@ export const ActiveCallEntry = Type.Object({
   calleeId: Type.String(),
   calleeName: Type.String(),
   state: CallState,
-  direction: Type.Union([
-    Type.Literal('incoming'),
-    Type.Literal('outgoing')
-  ]),
+  direction: Type.Union([Type.Literal('incoming'), Type.Literal('outgoing')]),
   createdAt: Type.String({ format: 'date-time' })
 });
 export type ActiveCallEntry = Static<typeof ActiveCallEntry>;

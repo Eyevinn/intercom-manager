@@ -119,7 +119,9 @@ export class StatusManager {
     try {
       payload = verifyToken(token);
     } catch (err: any) {
-      Log().warn(`WebSocket connection rejected: invalid token — ${err.message}`);
+      Log().warn(
+        `WebSocket connection rejected: invalid token — ${err.message}`
+      );
       ws.close(4001, 'Invalid or expired token');
       return;
     }
@@ -175,7 +177,9 @@ export class StatusManager {
       try {
         const message = JSON.parse(data.toString());
         this.handleMessage(clientId, message).catch((err) => {
-          Log().error(`Error handling message from ${clientId}: ${err.message}`);
+          Log().error(
+            `Error handling message from ${clientId}: ${err.message}`
+          );
         });
       } catch {
         // Ignore malformed messages
@@ -239,7 +243,9 @@ export class StatusManager {
       return;
     }
 
-    Log().debug(`WebSocket message from ${clientId}: ${JSON.stringify(message)}`);
+    Log().debug(
+      `WebSocket message from ${clientId}: ${JSON.stringify(message)}`
+    );
   }
 
   private handleDisconnect(clientId: string): void {
