@@ -60,9 +60,9 @@ async function createTestApp(): Promise<FastifyInstance> {
 // Helper to generate auth token
 function createAuthToken(
   clientId: string,
-  name: string = 'Test User',
-  role: string = 'producer',
-  location: string = 'Stockholm'
+  name = 'Test User',
+  role = 'producer',
+  location = 'Stockholm'
 ): string {
   return generateToken(clientId, name, role, location);
 }
