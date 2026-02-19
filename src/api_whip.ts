@@ -6,7 +6,7 @@ import { CoreFunctions } from './api_productions_core_functions';
 import { Log } from './log';
 import { Line, WhipWhepRequest, WhipWhepResponse } from './models';
 import { ProductionManager } from './production_manager';
-import { SmbProtocol } from './smb';
+import { ISmbProtocol, SmbProtocol } from './smb';
 import { getIceServers } from './utils';
 import { DbManager } from './db/interface';
 
@@ -18,6 +18,7 @@ export interface ApiWhipOptions {
   productionManager: ProductionManager;
   dbManager: DbManager;
   whipAuthKey?: string;
+  smb?: ISmbProtocol;
 }
 
 export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
@@ -48,7 +49,7 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
     opts.smbServerBaseUrl
   ).toString();
 
-  const smb = new SmbProtocol();
+  const smb = opts.smb || new SmbProtocol();
   const smbServerApiKey = opts.smbServerApiKey || '';
   const coreFunctions = opts.coreFunctions;
   const whipAuthKey = opts.whipAuthKey?.trim();
