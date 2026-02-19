@@ -560,8 +560,9 @@ export class CoreFunctions {
       );
     }
 
-    if (parsedAnswer.media[1].ssrcs) {
-      let parsedSsrcs = parsedAnswer.media[1].ssrcs[0].id;
+    const audioMedia = parsedAnswer.media.find((m) => m.type === 'audio');
+    if (audioMedia?.ssrcs) {
+      let parsedSsrcs = audioMedia.ssrcs[0].id;
       if (typeof parsedSsrcs === 'string') {
         parsedSsrcs = parseInt(parsedSsrcs, 10);
       }
