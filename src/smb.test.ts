@@ -246,7 +246,14 @@ describe('SmbProtocol', () => {
       mockFetch.mockResolvedValue(mockResponse(500, null));
 
       await expect(
-        smb.allocateAudioEndpoint(smbUrl, 'conf-1', 'ep-1', 'ssrc-rewrite', 60, smbKey)
+        smb.allocateAudioEndpoint(
+          smbUrl,
+          'conf-1',
+          'ep-1',
+          'ssrc-rewrite',
+          60,
+          smbKey
+        )
       ).rejects.toThrow('Failed to allocate endpoint');
     });
   });
@@ -302,7 +309,13 @@ describe('SmbProtocol', () => {
       );
 
       await expect(
-        smb.configureEndpoint(smbUrl, 'conf-1', 'ep-1', endpointDescription as any, smbKey)
+        smb.configureEndpoint(
+          smbUrl,
+          'conf-1',
+          'ep-1',
+          endpointDescription as any,
+          smbKey
+        )
       ).rejects.toThrow('Bad configuration');
     });
 
@@ -312,7 +325,13 @@ describe('SmbProtocol', () => {
       );
 
       await expect(
-        smb.configureEndpoint(smbUrl, 'conf-1', 'ep-1', endpointDescription as any, smbKey)
+        smb.configureEndpoint(
+          smbUrl,
+          'conf-1',
+          'ep-1',
+          endpointDescription as any,
+          smbKey
+        )
       ).rejects.toThrow('Failed to configure endpoint');
     });
   });
@@ -367,9 +386,7 @@ describe('SmbProtocol', () => {
     });
 
     it('should include abort signal with timeout', async () => {
-      mockFetch.mockResolvedValue(
-        mockResponse(200, [])
-      );
+      mockFetch.mockResolvedValue(mockResponse(200, []));
 
       await smb.getConferencesWithUsers(smbUrl, smbKey);
 

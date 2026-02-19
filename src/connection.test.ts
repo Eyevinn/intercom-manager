@@ -404,7 +404,10 @@ describe('Connection', () => {
       const endpoint = createEndpointDescription();
       endpoint.audio['rtp-hdrexts'] = [
         { id: 1, uri: 'urn:ietf:params:rtp-hdrext:ssrc-audio-level' },
-        { id: 3, uri: 'http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time' }
+        {
+          id: 3,
+          uri: 'http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time'
+        }
       ];
 
       const conn = new Connection(
@@ -421,7 +424,10 @@ describe('Connection', () => {
 
       expect(audioMedia.ext).toEqual([
         { value: 1, uri: 'urn:ietf:params:rtp-hdrext:ssrc-audio-level' },
-        { value: 3, uri: 'http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time' }
+        {
+          value: 3,
+          uri: 'http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time'
+        }
       ]);
     });
 
