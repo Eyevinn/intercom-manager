@@ -225,19 +225,28 @@ export class SmbProtocol {
     smbKey: string
   ): Promise<Conference[]> {
     const url = smbUrl + '?brief';
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        ...(smbKey !== '' && { Authorization: `Bearer ${smbKey}` })
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10_000);
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          ...(smbKey !== '' && { Authorization: `Bearer ${smbKey}` })
+        },
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        return [];
       }
-    });
 
-    if (!response.ok) {
-      return [];
+      const responseBody: Conference[] =
+        (await response.json()) as Conference[];
+      return responseBody;
+    } finally {
+      clearTimeout(timeoutId);
     }
-
-    const responseBody: Conference[] = (await response.json()) as Conference[];
-    return responseBody;
   }
 
   async getConference(
