@@ -16,7 +16,7 @@ import {
 } from './media_streams_info';
 import { LineResponse, Production, SmbEndpointDescription } from './models';
 import { ProductionManager } from './production_manager';
-import { SmbProtocol } from './smb';
+import { ISmbProtocol } from './smb';
 
 export class CoreFunctions {
   private productionManager: ProductionManager;
@@ -88,7 +88,7 @@ export class CoreFunctions {
   }
 
   async createEndpoint(
-    smb: SmbProtocol,
+    smb: ISmbProtocol,
     smbServerUrl: string,
     smbServerApiKey: string,
     lineId: string,
@@ -117,7 +117,7 @@ export class CoreFunctions {
   async configureEndpointForWhipWhep(
     sdpOffer: SessionDescription,
     endpointDescription: SmbEndpointDescription,
-    smb: SmbProtocol,
+    smb: ISmbProtocol,
     smbServerUrl: string,
     smbServerApiKey: string,
     smbConferenceId: string,
@@ -532,7 +532,7 @@ export class CoreFunctions {
   }
 
   async handleAnswerRequest(
-    smb: SmbProtocol,
+    smb: ISmbProtocol,
     smbServerUrl: string,
     smbServerApiKey: string,
     lineId: string,
@@ -637,7 +637,7 @@ export class CoreFunctions {
    * previously created conference IDs, if the function call targets the same line.
    */
   private async createConference(
-    smb: SmbProtocol,
+    smb: ISmbProtocol,
     smbServerUrl: string,
     smbServerApiKey: string,
     productionId: string,
@@ -679,7 +679,7 @@ export class CoreFunctions {
   }
 
   async createConferenceForLine(
-    smb: SmbProtocol,
+    smb: ISmbProtocol,
     smbServerUrl: string,
     smbServerApiKey: string,
     productionId: string,

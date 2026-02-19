@@ -11,7 +11,7 @@ import {
 import { assert } from './utils';
 import { Log } from './log';
 import { DbManager } from './db/interface';
-import { SmbProtocol } from './smb';
+import { ISmbProtocol } from './smb';
 
 const SESSION_INACTIVE_THRESHOLD = 60_000;
 const SESSION_EXPIRED_THRESHOLD = 100_000; // used to exclude sessions from being returned to client
@@ -52,7 +52,7 @@ export class ProductionManager extends EventEmitter {
   }
 
   async checkUserStatus(
-    smb: SmbProtocol,
+    smb: ISmbProtocol,
     smbServerUrl: string,
     smbServerApiKey: string
   ) {
