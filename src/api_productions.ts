@@ -806,7 +806,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           connectionEndpointDescription,
           request.body.sdpAnswer
         );
-        reply.code(204);
+        reply.code(204).send();
       } catch (err) {
         Log().error(err);
         reply
