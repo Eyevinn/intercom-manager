@@ -25,7 +25,7 @@ import {
   UserSession
 } from './models';
 import { ProductionManager } from './production_manager';
-import { SmbProtocol } from './smb';
+import { ISmbProtocol, SmbProtocol } from './smb';
 dotenv.config();
 
 export interface ApiProductionsOptions {
@@ -35,6 +35,7 @@ export interface ApiProductionsOptions {
   dbManager: DbManager;
   productionManager: ProductionManager;
   coreFunctions: CoreFunctions;
+  smb?: ISmbProtocol;
 }
 
 function toUserResponse(doc: any) {
@@ -64,6 +65,21 @@ function sortParticipants(participants: UserResponse[]): UserResponse[] {
   });
 }
 
+// ── Param schemas for route validation ──────────────────────────────────
+
+const ProductionIdParams = Type.Object({
+  productionId: Type.String({ minLength: 1, pattern: '^[0-9]+$' })
+});
+
+const ProductionLineParams = Type.Object({
+  productionId: Type.String({ minLength: 1, pattern: '^[0-9]+$' }),
+  lineId: Type.String({ minLength: 1 })
+});
+
+const SessionIdParams = Type.Object({
+  sessionId: Type.String({ minLength: 1 })
+});
+
 const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   fastify,
   opts,
@@ -73,7 +89,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     '/conferences/',
     opts.smbServerBaseUrl
   ).toString();
-  const smb = new SmbProtocol();
+  const smb = opts.smb || new SmbProtocol();
   const smbServerApiKey = opts.smbServerApiKey || '';
 
   const productionManager = opts.productionManager;
@@ -273,8 +289,10 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     {
       schema: {
         description: 'Retrieves a Production.',
+        params: ProductionIdParams,
         response: {
           200: DetailedProductionResponse,
+          400: Type.String(),
           500: Type.String()
         }
       }
@@ -310,6 +328,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     {
       schema: {
         description: 'Modify an existing Production line.',
+        params: ProductionIdParams,
         body: PatchProduction,
         response: {
           200: PatchProductionResponse,
@@ -369,8 +388,10 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     {
       schema: {
         description: 'Retrieves all lines for a Production.',
+        params: ProductionIdParams,
         response: {
           200: Type.Array(LineResponse),
+          400: Type.String(),
           500: Type.String()
         }
       }
@@ -422,6 +443,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     {
       schema: {
         description: 'Add a new Line to a Production.',
+        params: ProductionIdParams,
         body: NewProductionLine,
         response: {
           200: Type.Array(LineResponse),
@@ -466,8 +488,10 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     {
       schema: {
         description: 'Retrieves an active Production line.',
+        params: ProductionLineParams,
         response: {
           200: LineResponse,
+          400: Type.String(),
           404: ErrorResponse,
           500: Type.String()
         }
@@ -525,6 +549,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     {
       schema: {
         description: 'Modify an existing Production line.',
+        params: ProductionLineParams,
         body: PatchLine,
         response: {
           200: PatchLineResponse,
@@ -594,6 +619,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     {
       schema: {
         description: 'Removes a line from a production.',
+        params: ProductionLineParams,
         response: {
           200: Type.String(),
           400: ErrorResponse,
@@ -743,8 +769,10 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       schema: {
         description:
           'Provide client local SDP description as request body to finalize connection protocol.',
+        params: SessionIdParams,
         response: {
           200: Type.String(),
+          400: Type.String(),
           500: Type.String()
         }
       }
@@ -824,8 +852,10 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     {
       schema: {
         description: 'Deletes a Production.',
+        params: ProductionIdParams,
         response: {
           200: Type.String(),
+          400: Type.String(),
           500: Type.String()
         }
       }
@@ -858,8 +888,10 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     {
       schema: {
         description: 'Deletes a Connection from ProductionManager.',
+        params: SessionIdParams,
         response: {
           200: Type.String(),
+          400: Type.String(),
           500: Type.String()
         }
       }
@@ -890,8 +922,10 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     {
       schema: {
         description: 'Long Poll Endpoint to get participant list.',
+        params: ProductionLineParams,
         response: {
           200: Type.Array(UserResponse),
+          400: Type.String(),
           500: Type.String()
         }
       }
@@ -952,8 +986,10 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     {
       schema: {
         description: 'Update user session lastSeen',
+        params: SessionIdParams,
         response: {
           200: Type.String(),
+          400: Type.String(),
           410: Type.String()
         }
       }
