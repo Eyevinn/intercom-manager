@@ -325,7 +325,11 @@ export const ErrorResponse = Type.Object({
 });
 
 export const ShareRequest = Type.Object({
-  path: Type.String({ description: 'The application path to share' })
+  path: Type.String({
+    description: 'The application path to share',
+    maxLength: 500,
+    pattern: '^/'
+  })
 });
 export type ShareRequest = Static<typeof ShareRequest>;
 

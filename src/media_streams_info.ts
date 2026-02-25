@@ -34,7 +34,7 @@ export type RtpHeaderExt = {
 };
 
 export type RtcpFb = {
-  payload: number;
+  payload: number | string;
   type: string;
   subtype?: string;
 };

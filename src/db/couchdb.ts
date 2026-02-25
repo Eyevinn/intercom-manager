@@ -9,6 +9,7 @@ export class DbManagerCouchDb implements DbManager {
   private client;
   private nanoDb: nano.DocumentScope<unknown> | undefined;
   private dbConnectionUrl: URL;
+  private pruneIntervalId: ReturnType<typeof setInterval> | null = null;
 
   constructor(dbConnectionUrl: URL) {
     this.dbConnectionUrl = dbConnectionUrl;
@@ -37,7 +38,7 @@ export class DbManagerCouchDb implements DbManager {
   // This interval is used to track and remove sessions based on 'isExpired' flag, set in production_manager.
   // Deviates from mongoDB, which handles session pruning based on internal TTL index. This isn't supported by CouchDB.
   private sessionPruneInterval() {
-    setInterval(async () => {
+    this.pruneIntervalId = setInterval(async () => {
       try {
         const cutoff = new Date(
           Date.now() - SESSION_PRUNE_SECONDS * 1000
@@ -57,7 +58,10 @@ export class DbManagerCouchDb implements DbManager {
   }
 
   async disconnect(): Promise<void> {
-    // CouchDB does not require a disconnection
+    if (this.pruneIntervalId) {
+      clearInterval(this.pruneIntervalId);
+      this.pruneIntervalId = null;
+    }
   }
 
   private async getNextSequence(collectionName: string): Promise<number> {
@@ -313,19 +317,41 @@ export class DbManagerCouchDb implements DbManager {
 
   // Session management methods
 
-  // Helper method, to avoid condlicting _revs on simultaneous update requests
+  private isTransientError(error: any): boolean {
+    const codes = [
+      'ECONNRESET',
+      'ECONNREFUSED',
+      'ETIMEDOUT',
+      'ENOTFOUND',
+      'EPIPE'
+    ];
+    if (error.code && codes.includes(error.code)) return true;
+    if (
+      typeof error.message === 'string' &&
+      error.message.includes('socket hang up')
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  // Helper method, to avoid conflicting _revs on simultaneous update requests.
+  // Also retries on transient socket errors (ECONNRESET, socket hang up, etc).
   private async insertWithRetry(doc: any, maxRetries = 3): Promise<any> {
     if (!this.nanoDb) {
       throw new Error('Database not connected');
     }
-    // retries 3 times to fetch the latets doc and _rev, if all fail then throw error
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         return await this.nanoDb.insert(doc);
       } catch (error: any) {
-        if (error.statusCode === 409 && attempt < maxRetries - 1) {
-          const latestDoc = await this.nanoDb.get(doc._id);
-          doc = { ...latestDoc, ...doc, _rev: latestDoc._rev };
+        const isConflict = error.statusCode === 409;
+        const isTransient = this.isTransientError(error);
+        if ((isConflict || isTransient) && attempt < maxRetries - 1) {
+          if (isConflict) {
+            const latestDoc = await this.nanoDb.get(doc._id);
+            doc = { ...latestDoc, ...doc, _rev: latestDoc._rev };
+          }
           await new Promise((resolve) =>
             setTimeout(resolve, 100 * Math.pow(2, attempt))
           );
@@ -408,7 +434,16 @@ export class DbManagerCouchDb implements DbManager {
     if (!sessionId.startsWith('session')) {
       sessionId = `session_${sessionId}`;
     }
-    const doc = await this.nanoDb.get(sessionId);
+
+    let doc: any;
+    try {
+      doc = await this.nanoDb.get(sessionId);
+    } catch (error: any) {
+      if (error.statusCode === 404) {
+        return false;
+      }
+      throw error;
+    }
 
     const updateData: any = { ...updates };
 

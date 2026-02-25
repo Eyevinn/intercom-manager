@@ -73,11 +73,11 @@ const ProductionIdParams = Type.Object({
 
 const ProductionLineParams = Type.Object({
   productionId: Type.String({ minLength: 1, pattern: '^[0-9]+$' }),
-  lineId: Type.String({ minLength: 1 })
+  lineId: Type.String({ minLength: 1, maxLength: 200 })
 });
 
 const SessionIdParams = Type.Object({
-  sessionId: Type.String({ minLength: 1 })
+  sessionId: Type.String({ minLength: 1, maxLength: 200 })
 });
 
 const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
@@ -96,10 +96,17 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   const coreFunctions = opts.coreFunctions;
   const dbManager = opts.dbManager;
 
-  setInterval(
-    () => productionManager.checkUserStatus(smb, smbServerUrl, smbServerApiKey),
-    2_000
-  );
+  setInterval(async () => {
+    try {
+      await productionManager.checkUserStatus(
+        smb,
+        smbServerUrl,
+        smbServerApiKey
+      );
+    } catch (err) {
+      Log().error('checkUserStatus failed:', err);
+    }
+  }, 2_000);
 
   fastify.post<{
     Body: NewProduction;
@@ -133,9 +140,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         }
       } catch (err) {
         Log().error(err);
-        reply
-          .code(500)
-          .send('Exception thrown when trying to create production: ' + err);
+        reply.code(500).send('Failed to create production');
       }
     }
   );
@@ -239,11 +244,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         });
       } catch (err) {
         Log().error(err);
-        reply
-          .code(500)
-          .send(
-            'Exception thrown when trying to get paginated productions: ' + err
-          );
+        reply.code(500).send('Failed to get productions');
       }
     }
   );
@@ -274,9 +275,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         );
       } catch (err) {
         Log().error(err);
-        reply
-          .code(500)
-          .send('Exception thrown when trying to get productions: ' + err);
+        reply.code(500).send('Failed to get productions');
       }
     }
   );
@@ -312,9 +311,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         reply.code(200).send(productionResponse);
       } catch (err) {
         Log().error(err);
-        reply
-          .code(500)
-          .send('Exception thrown when trying to get productions: ' + err);
+        reply.code(500).send('Failed to get productions');
       }
     }
   );
@@ -347,7 +344,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
             parseInt(productionId, 10)
           );
         } catch (err) {
-          console.warn(
+          Log().warn(
             'Trying to patch a production line in a production that does not exist'
           );
         }
@@ -373,9 +370,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         }
       } catch (err) {
         Log().error(err);
-        reply
-          .code(500)
-          .send('Exception thrown when trying to get production: ' + err);
+        reply.code(500).send('Failed to get production');
       }
     }
   );
@@ -427,9 +422,8 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
 
         reply.code(200).send(allLinesResponse);
       } catch (err) {
-        reply
-          .code(500)
-          .send('Exception thrown when trying to get lines: ' + err);
+        Log().error(err);
+        reply.code(500).send('Failed to get lines');
       }
     }
   );
@@ -473,9 +467,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         }
       } catch (err) {
         Log().error(err);
-        reply
-          .code(500)
-          .send('Unhandled exception thrown when trying to add line: ' + err);
+        reply.code(500).send('Failed to add line');
       }
     }
   );
@@ -533,9 +525,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         reply.code(200).send(lineResponse);
       } catch (err) {
         Log().error(err);
-        reply
-          .code(500)
-          .send('Exception thrown when trying to get line: ' + err);
+        reply.code(500).send('Failed to get line');
       }
     }
   );
@@ -568,7 +558,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
             parseInt(productionId, 10)
           );
         } catch (err) {
-          console.warn(
+          Log().warn(
             'Trying to patch a production line in a production that does not exist'
           );
         }
@@ -604,9 +594,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         }
       } catch (err) {
         Log().error(err);
-        reply
-          .code(500)
-          .send('Exception thrown when trying to get line: ' + err);
+        reply.code(500).send('Failed to get line');
       }
     }
   );
@@ -656,9 +644,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         }
       } catch (err) {
         Log().error(err);
-        reply
-          .code(500)
-          .send('Exception thrown when trying to get line: ' + err);
+        reply.code(500).send('Failed to get line');
       }
     }
   );
@@ -703,6 +689,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         );
 
         const endpointId: string = uuidv4();
+        const idleTimeout = parseInt(opts.endpointIdleTimeout, 10);
         const endpoint = await coreFunctions.createEndpoint(
           smb,
           smbServerUrl,
@@ -713,7 +700,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           true, // data
           true, // iceControlling
           'ssrc-rewrite', // relayType
-          parseInt(opts.endpointIdleTimeout, 10)
+          isNaN(idleTimeout) ? 60 : idleTimeout
         );
         if (!endpoint.audio) {
           throw new Error('Missing audio when creating sdp offer for endpoint');
@@ -753,9 +740,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         }
       } catch (err) {
         Log().error(err);
-        reply
-          .code(500)
-          .send('Exception thrown when trying to create endpoint: ' + err);
+        reply.code(500).send('Failed to create endpoint');
       }
     }
   );
@@ -806,8 +791,13 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           lastSeen: Date.now()
         });
 
+        const productionIdNum = parseInt(userSession.productionId, 10);
+        if (isNaN(productionIdNum)) {
+          reply.code(400).send('Invalid production ID in session');
+          return;
+        }
         const production = await productionManager.requireProduction(
-          parseInt(userSession.productionId, 10)
+          productionIdNum
         );
         const line = productionManager.requireLine(
           production.lines,
@@ -834,12 +824,10 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           connectionEndpointDescription,
           request.body.sdpAnswer
         );
-        reply.code(204);
+        reply.code(204).send();
       } catch (err) {
         Log().error(err);
-        reply
-          .code(500)
-          .send('Exception thrown when trying to configure endpoint: ' + err);
+        reply.code(500).send('Failed to configure endpoint');
       }
     }
   );
@@ -873,9 +861,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         reply.code(200).send(`Deleted production ${productionId}`);
       } catch (err) {
         Log().error(err);
-        reply
-          .code(500)
-          .send('Exception thrown when trying to delete production: ' + err);
+        reply.code(500).send('Failed to delete production');
       }
     }
   );
@@ -906,9 +892,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         reply.code(200).send(`Deleted connection ${sessionId}`);
       } catch (err) {
         Log().error(err);
-        reply
-          .code(500)
-          .send('Exception thrown when trying to delete connection: ' + err);
+        reply.code(500).send('Failed to delete connection');
       }
     }
   );
@@ -968,12 +952,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         reply.code(200).send(sortParticipants(participants));
       } catch (err) {
         Log().error(err);
-        reply
-          .code(500)
-          .send(
-            'Exception thrown when trying to set connection status for session: ' +
-              err
-          );
+        reply.code(500).send('Failed to set connection status');
       }
     }
   );
@@ -1008,6 +987,6 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   next();
 };
 
-export function getApiProductions() {
+export function getApiProductions(): FastifyPluginCallback<ApiProductionsOptions> {
   return apiProductions;
 }

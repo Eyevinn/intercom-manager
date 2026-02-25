@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'crypto';
 import { Static, Type } from '@sinclair/typebox';
 import { FastifyPluginCallback } from 'fastify';
 import sdpTransform, { parse } from 'sdp-transform';
@@ -17,6 +18,7 @@ export interface ApiWhepOptions {
   coreFunctions: CoreFunctions;
   productionManager: ProductionManager;
   dbManager: DbManager;
+  whipAuthKey?: string;
   smb?: ISmbProtocol;
 }
 
@@ -51,6 +53,34 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
   const smb = opts.smb || new SmbProtocol();
   const smbServerApiKey = opts.smbServerApiKey || '';
   const coreFunctions = opts.coreFunctions;
+  const whipAuthKey = opts.whipAuthKey?.trim();
+
+  async function requireWhepAuth(request: any, reply: any): Promise<boolean> {
+    if (!whipAuthKey) {
+      return true; // auth disabled
+    }
+
+    const authHeader =
+      request.headers['authorization'] || request.headers['Authorization'];
+    const prefix = 'Bearer ';
+
+    const token = authHeader?.startsWith?.(prefix)
+      ? authHeader.slice(prefix.length).trim()
+      : '';
+    const tokenBuf = Buffer.from(token);
+    const keyBuf = Buffer.from(whipAuthKey);
+    const isValid =
+      tokenBuf.length === keyBuf.length && timingSafeEqual(tokenBuf, keyBuf);
+
+    if (!authHeader || typeof authHeader !== 'string' || !isValid) {
+      reply
+        .header('WWW-Authenticate', 'Bearer realm="whep", charset="UTF-8"')
+        .code(401)
+        .send({ error: 'Unauthorized' });
+      return false;
+    }
+    return true;
+  }
 
   fastify.post<{
     Params: { productionId: string; lineId: string; username: string };
@@ -61,6 +91,11 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
     {
       schema: {
         description: 'WHEP endpoint for Egress WebRTC streams',
+        params: Type.Object({
+          productionId: Type.String({ maxLength: 200 }),
+          lineId: Type.String({ maxLength: 200 }),
+          username: Type.String({ maxLength: 200 })
+        }),
         body: WhipWhepRequest,
         response: {
           201: WhipWhepResponse,
@@ -88,6 +123,7 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
       }
     },
     async (request, reply) => {
+      if (!(await requireWhepAuth(request, reply))) return;
       try {
         const { productionId, lineId, username } = request.params;
 
@@ -198,20 +234,13 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
           'Content-Type': 'application/sdp',
           Location: locationUrl,
           ETag: sessionId,
-          Link: getIceServers().join(','),
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS, PATCH',
-          'Access-Control-Allow-Headers':
-            'Content-Type, Authorization, ETag, If-Match, Link',
-          'Access-Control-Expose-Headers': 'Location, ETag, Link'
+          Link: getIceServers().join(',')
         });
 
-        await reply.code(201).send(sdpAnswer);
+        reply.code(201).send(sdpAnswer);
       } catch (err) {
         Log().error(err);
-        reply
-          .code(500)
-          .send({ error: `Failed to process WHEP request: ${err}` });
+        reply.code(500).send({ error: 'Failed to process WHEP request' });
       }
     }
   );
@@ -223,6 +252,11 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
     {
       schema: {
         description: 'Terminate a WHEP connection',
+        params: Type.Object({
+          productionId: Type.String({ maxLength: 200 }),
+          lineId: Type.String({ maxLength: 200 }),
+          sessionId: Type.String({ maxLength: 200 })
+        }),
         response: {
           200: Type.String({ description: 'OK' }),
           404: Type.Object({ error: Type.String() }),
@@ -231,9 +265,9 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
       }
     },
     async (request, reply) => {
+      if (!(await requireWhepAuth(request, reply))) return;
+      const { sessionId } = request.params;
       try {
-        const { sessionId } = request.params;
-
         Log().info(
           `Received WHEP DELETE request - sessionId: ${sessionId}, IP: ${request.ip}`
         );
@@ -255,22 +289,13 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
           `WHEP session deleted successfully - sessionId: ${sessionId}`
         );
 
-        // CORS & response
-        reply.headers({
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'POST, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization'
-        });
-
         reply.code(200).send('OK');
       } catch (err) {
         Log().error(
-          `Failed to delete WHEP session - sessionId: ${request.params.sessionId}:`,
+          `Failed to delete WHEP session - sessionId: ${sessionId}:`,
           err
         );
-        reply
-          .code(500)
-          .send({ error: `Failed to terminate WHEP connection: ${err}` });
+        reply.code(500).send({ error: 'Failed to terminate WHEP connection' });
       }
     }
   );
@@ -320,20 +345,13 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
         }
 
         reply.headers({
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'POST, DELETE, OPTIONS, PATCH',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization, ETag',
-          'Access-Control-Expose-Headers': 'Location, ETag, Link',
-          'Access-Control-Max-Age': '86400', // 24 hours
           'Accept-Post': 'application/sdp'
         });
 
         reply.code(200).send('OK');
       } catch (err) {
         Log().error(err);
-        reply
-          .code(500)
-          .send({ error: `Failed to process OPTIONS request: ${err}` });
+        reply.code(500).send({ error: 'Failed to process OPTIONS request' });
       }
     }
   );

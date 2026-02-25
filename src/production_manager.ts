@@ -64,7 +64,7 @@ export class ProductionManager extends EventEmitter {
     const inactiveCutoff = new Date(Date.now() - SESSION_INACTIVE_THRESHOLD);
     const expiredCutoff = new Date(Date.now() - SESSION_EXPIRED_THRESHOLD);
 
-    {
+    try {
       // Get sessions that should be inactive
       const toInactivate = await this.dbManager.getSessionsByQuery({
         isWhip: { $ne: true } as any,
@@ -74,14 +74,16 @@ export class ProductionManager extends EventEmitter {
       });
 
       if (toInactivate.length) {
-        const results = await Promise.all(
+        const results = await Promise.allSettled(
           (toInactivate as any[]).map((s) =>
             this.dbManager.updateSession(String(s._id), {
               isActive: false
             })
           )
         );
-        if (results.some(Boolean)) hasChanged = true;
+        if (results.some((r) => r.status === 'fulfilled' && r.value)) {
+          hasChanged = true;
+        }
       }
 
       // Get sessions that should be active
@@ -93,12 +95,14 @@ export class ProductionManager extends EventEmitter {
       });
 
       if (toReactivate.length) {
-        const results = await Promise.all(
+        const results = await Promise.allSettled(
           (toReactivate as any[]).map((s) =>
             this.dbManager.updateSession(String(s._id), { isActive: true })
           )
         );
-        if (results.some(Boolean)) hasChanged = true;
+        if (results.some((r) => r.status === 'fulfilled' && r.value)) {
+          hasChanged = true;
+        }
       }
 
       // Get sessions that should be expired
@@ -109,7 +113,7 @@ export class ProductionManager extends EventEmitter {
       });
 
       if (toExpire.length) {
-        const results = await Promise.all(
+        const results = await Promise.allSettled(
           (toExpire as any[]).map((s) =>
             this.dbManager.updateSession(String(s._id), {
               isExpired: true,
@@ -117,8 +121,12 @@ export class ProductionManager extends EventEmitter {
             })
           )
         );
-        if (results.some(Boolean)) hasChanged = true;
+        if (results.some((r) => r.status === 'fulfilled' && r.value)) {
+          hasChanged = true;
+        }
       }
+    } catch (e) {
+      Log().warn('checkUserStatus: session lifecycle failed', e);
     }
 
     try {
