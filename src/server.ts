@@ -11,7 +11,7 @@ const SMB_ADDRESS: string = process.env.SMB_ADDRESS ?? 'http://localhost:8080';
 const PUBLIC_HOST: string = process.env.PUBLIC_HOST ?? 'http://localhost:8000';
 
 if (!process.env.SMB_ADDRESS) {
-  console.warn('SMB_ADDRESS environment variable not set, using defaults');
+  Log().warn('SMB_ADDRESS environment variable not set, using defaults');
 }
 
 const ENDPOINT_IDLE_TIMEOUT_S: string =
@@ -63,5 +63,21 @@ if (dbUrl.protocol === 'mongodb:' || dbUrl.protocol === 'mongodb+srv:') {
     Log().info(
       `Media Bridge at ${SMB_ADDRESS} (${ENDPOINT_IDLE_TIMEOUT_S}s idle timeout)`
     );
+  });
+
+  const shutdown = async (signal: string) => {
+    Log().info(`${signal} received, shutting down gracefully`);
+    await server.close();
+    process.exit(0);
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+
+  process.on('unhandledRejection', (reason) => {
+    Log().error('Unhandled promise rejection:', reason);
+  });
+
+  process.on('uncaughtException', (err) => {
+    Log().error('Uncaught exception:', err);
   });
 })();

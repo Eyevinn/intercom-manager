@@ -26,9 +26,9 @@ const apiIngests: FastifyPluginCallback<ApiIngestsOptions> = (
 ) => {
   const ingestManager = opts.ingestManager;
 
-  // Hook to return 405 for all ingest routes
-  fastify.addHook('preHandler', async (request, reply) => {
-    reply.code(405).send({ message: 'Method Not Allowed' });
+  // Ingest routes are disabled — return 501 Not Implemented
+  fastify.addHook('preHandler', async (_request, reply) => {
+    reply.code(501).send({ message: 'Ingest API is not implemented' });
   });
 
   fastify.post<{
@@ -70,7 +70,7 @@ const apiIngests: FastifyPluginCallback<ApiIngestsOptions> = (
         Log().error(err);
         reply.code(500).send({
           success: false,
-          message: 'Exception thrown when trying to create ingest: ' + err
+          message: 'Failed to create ingest'
         });
       }
     }
@@ -122,11 +122,7 @@ const apiIngests: FastifyPluginCallback<ApiIngestsOptions> = (
         });
       } catch (err) {
         Log().error(err);
-        reply
-          .code(500)
-          .send(
-            'Exception thrown when trying to get paginated ingests: ' + err
-          );
+        reply.code(500).send('Failed to get ingests');
       }
     }
   );
@@ -164,9 +160,7 @@ const apiIngests: FastifyPluginCallback<ApiIngestsOptions> = (
         reply.code(200).send(ingestResponse);
       } catch (err) {
         Log().error(err);
-        reply
-          .code(500)
-          .send('Exception thrown when trying to get ingests: ' + err);
+        reply.code(500).send('Failed to get ingests');
       }
     }
   );
@@ -197,9 +191,7 @@ const apiIngests: FastifyPluginCallback<ApiIngestsOptions> = (
         try {
           ingest = await ingestManager.getIngest(parseInt(ingestId, 10));
         } catch (err) {
-          console.warn(
-            'Trying to patch a ingest in a ingest that does not exist'
-          );
+          Log().warn('Trying to patch an ingest that does not exist');
         }
         if (!ingest) {
           reply.code(404).send({
@@ -242,9 +234,7 @@ const apiIngests: FastifyPluginCallback<ApiIngestsOptions> = (
         }
       } catch (err) {
         Log().error(err);
-        reply
-          .code(500)
-          .send('Exception thrown when trying to get ingest: ' + err);
+        reply.code(500).send('Failed to get ingest');
       }
     }
   );
@@ -272,9 +262,7 @@ const apiIngests: FastifyPluginCallback<ApiIngestsOptions> = (
         reply.code(200).send(`Deleted ingest ${ingestId}`);
       } catch (err) {
         Log().error(err);
-        reply
-          .code(500)
-          .send('Exception thrown when trying to delete ingest: ' + err);
+        reply.code(500).send('Failed to delete ingest');
       }
     }
   );

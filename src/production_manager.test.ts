@@ -1,3 +1,12 @@
+jest.mock('./log', () => ({
+  Log: () => ({
+    info: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+    warn: jest.fn()
+  })
+}));
+
 import {
   NewProduction,
   Production,
@@ -413,5 +422,84 @@ describe('production_manager', () => {
         });
       }
     });
+  });
+});
+
+describe('checkUserStatus resilience', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+  });
+
+  it('Block B (WHIP) runs even when Block A getSessionsByQuery throws', async () => {
+    const dbManager = jest.requireMock('./db/interface');
+    // Block A: first getSessionsByQuery (toInactivate) throws a socket error
+    dbManager.getSessionsByQuery
+      .mockRejectedValueOnce(new Error('socket hang up'))
+      // Block B: WHIP sessions query succeeds (empty)
+      .mockResolvedValueOnce([]);
+
+    const smb = {
+      getConferencesWithUsers: jest.fn().mockResolvedValue([])
+    };
+
+    const pm = new ProductionManager(dbManager);
+    // Should not throw — Block A failure is caught internally
+    await expect(
+      pm.checkUserStatus(smb as any, 'http://smb', '')
+    ).resolves.toBeUndefined();
+    // Block B still ran: smb.getConferencesWithUsers was called
+    expect(smb.getConferencesWithUsers).toHaveBeenCalledTimes(1);
+  });
+
+  it('partial updateSession failure in Block A does not prevent other batches', async () => {
+    const dbManager = jest.requireMock('./db/interface');
+    const session = {
+      _id: 'session_abc',
+      isActive: true,
+      isExpired: false,
+      lastSeenAt: new Date(Date.now() - 20_000).toISOString()
+    };
+    dbManager.getSessionsByQuery
+      .mockResolvedValueOnce([session]) // toInactivate
+      .mockResolvedValueOnce([]) // toReactivate
+      .mockResolvedValueOnce([]) // toExpire
+      .mockResolvedValueOnce([]); // WHIP sessions (Block B)
+
+    // One updateSession fails
+    dbManager.updateSession.mockRejectedValueOnce(new Error('ECONNRESET'));
+
+    const smb = {
+      getConferencesWithUsers: jest.fn().mockResolvedValue([])
+    };
+    const pm = new ProductionManager(dbManager);
+    await expect(
+      pm.checkUserStatus(smb as any, 'http://smb', '')
+    ).resolves.toBeUndefined();
+    // All 4 getSessionsByQuery calls completed (Block A continued past the failure)
+    expect(dbManager.getSessionsByQuery).toHaveBeenCalledTimes(4);
+  });
+
+  it('emits users:change when at least one update in a batch succeeds', async () => {
+    const dbManager = jest.requireMock('./db/interface');
+    const session = {
+      _id: 'session_abc',
+      isActive: true,
+      isExpired: false,
+      lastSeenAt: new Date(Date.now() - 20_000).toISOString()
+    };
+    dbManager.getSessionsByQuery
+      .mockResolvedValueOnce([session]) // toInactivate
+      .mockResolvedValueOnce([]) // toReactivate
+      .mockResolvedValueOnce([]) // toExpire
+      .mockResolvedValueOnce([]); // WHIP sessions
+    dbManager.updateSession.mockResolvedValueOnce(true);
+
+    const smb = {
+      getConferencesWithUsers: jest.fn().mockResolvedValue([])
+    };
+    const pm = new ProductionManager(dbManager);
+    const emitSpy = jest.spyOn(pm, 'emit');
+    await pm.checkUserStatus(smb as any, 'http://smb', '');
+    expect(emitSpy).toHaveBeenCalledWith('users:change');
   });
 });

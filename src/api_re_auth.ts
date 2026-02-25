@@ -18,7 +18,9 @@ const apiReAuth: FastifyPluginCallback = (fastify, _, next) => {
           'Generate a new OSC Service Access Token for the OSC Intercom instance.',
         response: {
           200: ReAuthResponse,
-          400: ErrorResponse
+          400: ErrorResponse,
+          405: ErrorResponse,
+          500: ErrorResponse
         }
       }
     },

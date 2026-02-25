@@ -326,10 +326,10 @@ describe('Connection', () => {
       const audioMedia = offer.media[1];
 
       expect(audioMedia.ssrcs).toEqual([
-        { id: '1001', attribute: 'cname', value: 'cn1' },
-        { id: '1001', attribute: 'label', value: 'lbl1' },
-        { id: '1001', attribute: 'mslabel', value: 'ms1' },
-        { id: '1001', attribute: 'msid', value: 'ms1 lbl1' }
+        { id: 1001, attribute: 'cname', value: 'cn1' },
+        { id: 1001, attribute: 'label', value: 'lbl1' },
+        { id: 1001, attribute: 'mslabel', value: 'ms1' },
+        { id: 1001, attribute: 'msid', value: 'ms1 lbl1' }
       ]);
     });
 

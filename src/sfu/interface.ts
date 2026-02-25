@@ -97,7 +97,7 @@ interface Ext {
 }
 
 interface Ssrc {
-  id: string;
+  id: number;
   attribute: string;
   value?: string;
 }
@@ -141,7 +141,7 @@ export interface MediaDescriptionBase {
   };
   setup: string;
   direction: 'sendrecv' | 'recvonly' | 'sendonly' | 'inactive' | undefined;
-  rtcpMux: string;
+  rtcpMux: 'rtcp-mux';
   connection: {
     version: number;
     ip: string;

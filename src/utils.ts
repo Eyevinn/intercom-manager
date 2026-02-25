@@ -1,3 +1,5 @@
+import { Log } from './log';
+
 // Custom light assert function because jest breaks node:assert
 // see https://github.com/jestjs/jest/issues/7547
 export function assert(condition: any, message: string): asserts condition {
@@ -22,7 +24,7 @@ export function getIceServers(): string[] {
       const rest = entry.slice('turn:'.length);
       const atIndex = rest.indexOf('@');
       if (atIndex === -1) {
-        console.warn('Invalid TURN format, missing "@":', entry);
+        Log().warn('Invalid TURN format, missing "@":', entry);
         continue;
       }
 
@@ -31,7 +33,7 @@ export function getIceServers(): string[] {
 
       const [username, credential] = creds.split(':');
       if (!username || !credential) {
-        console.warn('Invalid TURN credentials:', creds);
+        Log().warn('Invalid TURN credentials:', creds);
         continue;
       }
 

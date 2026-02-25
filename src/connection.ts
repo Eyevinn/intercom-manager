@@ -137,7 +137,7 @@ export class Connection {
       direction: <
         'sendrecv' | 'recvonly' | 'sendonly' | 'inactive' | undefined
       >'sendrecv',
-      rtcpMux: 'rtcp-mux',
+      rtcpMux: 'rtcp-mux' as const,
       connection: {
         version: 4,
         ip: '0.0.0.0'
@@ -214,22 +214,22 @@ export class Connection {
       });
 
       audioDescription.ssrcs.push({
-        id: element.ssrc,
+        id: Number(element.ssrc),
         attribute: 'cname',
         value: element.cname
       });
       audioDescription.ssrcs.push({
-        id: element.ssrc,
+        id: Number(element.ssrc),
         attribute: 'label',
         value: element.label
       });
       audioDescription.ssrcs.push({
-        id: element.ssrc,
+        id: Number(element.ssrc),
         attribute: 'mslabel',
         value: element.mslabel
       });
       audioDescription.ssrcs.push({
-        id: element.ssrc,
+        id: Number(element.ssrc),
         attribute: 'msid',
         value: `${element.mslabel} ${element.label}`
       });
