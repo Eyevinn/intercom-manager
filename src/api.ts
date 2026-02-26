@@ -76,13 +76,28 @@ export default async (opts: ApiOptions) => {
     contentSecurityPolicy: false // CSP managed per-deployment
   });
 
-  // register the cors plugin, configure it for better security
+  // Dynamic CORS: permissive for WHIP/WHEP routes, restrictive for everything else
   const corsOrigin = process.env.CORS_ORIGIN;
   api.register(cors, {
-    origin: corsOrigin ? corsOrigin.split(',') : false,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    exposedHeaders: ['Content-Type', 'Location', 'ETag', 'Link']
+    delegator: (req, callback) => {
+      const url = req.url || '';
+      if (url.startsWith('/api/v1/whip') || url.startsWith('/api/v1/whep')) {
+        callback(null, {
+          origin: '*',
+          methods: ['POST', 'DELETE', 'PATCH', 'OPTIONS'],
+          allowedHeaders: ['Content-Type', 'Authorization'],
+          exposedHeaders: ['Content-Type', 'Location', 'ETag', 'Link'],
+          preflightContinue: true
+        });
+      } else {
+        callback(null, {
+          origin: corsOrigin ? corsOrigin.split(',') : false,
+          methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+          allowedHeaders: ['Content-Type', 'Authorization'],
+          exposedHeaders: ['Content-Type', 'Location', 'ETag', 'Link']
+        });
+      }
+    }
   });
 
   await api.register(fastifyRateLimit, {
