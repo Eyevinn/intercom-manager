@@ -425,6 +425,110 @@ describe('production_manager', () => {
   });
 });
 
+describe('getUsersForLine', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+  });
+
+  it('returns actual isActive for WHIP sessions (not hardcoded true)', async () => {
+    const dbManager = jest.requireMock('./db/interface');
+    dbManager.getSessionsByQuery.mockResolvedValueOnce([
+      {
+        _id: 'whip_session_1',
+        name: 'OBS Studio',
+        isActive: false,
+        isExpired: false,
+        isWhip: true,
+        endpointId: 'ep-1'
+      }
+    ]);
+
+    const pm = new ProductionManager(dbManager);
+    const users = await pm.getUsersForLine('1', '1');
+
+    expect(users).toHaveLength(1);
+    expect(users[0].isActive).toBe(false);
+    expect(users[0].isWhip).toBe(true);
+  });
+
+  it('returns isActive true for active WHIP sessions', async () => {
+    const dbManager = jest.requireMock('./db/interface');
+    dbManager.getSessionsByQuery.mockResolvedValueOnce([
+      {
+        _id: 'whip_session_2',
+        name: 'Hardware Encoder',
+        isActive: true,
+        isExpired: false,
+        isWhip: true,
+        endpointId: 'ep-2'
+      }
+    ]);
+
+    const pm = new ProductionManager(dbManager);
+    const users = await pm.getUsersForLine('1', '1');
+
+    expect(users).toHaveLength(1);
+    expect(users[0].isActive).toBe(true);
+    expect(users[0].isWhip).toBe(true);
+  });
+
+  it('includes endpointId for WHIP sessions that have one', async () => {
+    const dbManager = jest.requireMock('./db/interface');
+    dbManager.getSessionsByQuery.mockResolvedValueOnce([
+      {
+        _id: 'whip_session_3',
+        name: 'WHIP Client',
+        isActive: true,
+        isExpired: false,
+        isWhip: true,
+        endpointId: 'ep-abc'
+      },
+      {
+        _id: 'regular_session',
+        name: 'Web User',
+        isActive: true,
+        isExpired: false,
+        isWhip: false
+      }
+    ]);
+
+    const pm = new ProductionManager(dbManager);
+    const users = await pm.getUsersForLine('1', '1');
+
+    expect(users).toHaveLength(2);
+    const whipUser = users.find((u) => u.isWhip);
+    const regularUser = users.find((u) => !u.isWhip);
+    expect(whipUser?.endpointId).toBe('ep-abc');
+    expect(regularUser?.endpointId).toBeUndefined();
+  });
+
+  it('sorts participants by name', async () => {
+    const dbManager = jest.requireMock('./db/interface');
+    dbManager.getSessionsByQuery.mockResolvedValueOnce([
+      {
+        _id: 'session_z',
+        name: 'Zara',
+        isActive: true,
+        isExpired: false,
+        isWhip: false
+      },
+      {
+        _id: 'session_a',
+        name: 'Alice',
+        isActive: true,
+        isExpired: false,
+        isWhip: true
+      }
+    ]);
+
+    const pm = new ProductionManager(dbManager);
+    const users = await pm.getUsersForLine('1', '1');
+
+    expect(users[0].name).toBe('Alice');
+    expect(users[1].name).toBe('Zara');
+  });
+});
+
 describe('checkUserStatus resilience', () => {
   beforeEach(() => {
     jest.resetAllMocks();
