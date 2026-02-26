@@ -31,22 +31,16 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
 
   // Permissive CORS for WHEP routes (external clients)
   fastify.addHook('onSend', async (request, reply) => {
-    const origin = request.headers.origin;
-    if (origin) {
-      reply.header('Access-Control-Allow-Origin', origin);
-      reply.header(
-        'Access-Control-Allow-Methods',
-        'POST, DELETE, PATCH, OPTIONS'
-      );
-      reply.header(
-        'Access-Control-Allow-Headers',
-        'Content-Type, Authorization'
-      );
-      reply.header(
-        'Access-Control-Expose-Headers',
-        'Content-Type, Location, ETag, Link'
-      );
-    }
+    reply.header('Access-Control-Allow-Origin', '*');
+    reply.header(
+      'Access-Control-Allow-Methods',
+      'POST, DELETE, PATCH, OPTIONS'
+    );
+    reply.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    reply.header(
+      'Access-Control-Expose-Headers',
+      'Content-Type, Location, ETag, Link'
+    );
   });
 
   fastify.addContentTypeParser(

@@ -31,22 +31,16 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
 
   // Permissive CORS for WHIP routes (external clients like OBS, GStreamer)
   fastify.addHook('onSend', async (request, reply) => {
-    const origin = request.headers.origin;
-    if (origin) {
-      reply.header('Access-Control-Allow-Origin', origin);
-      reply.header(
-        'Access-Control-Allow-Methods',
-        'POST, DELETE, PATCH, OPTIONS'
-      );
-      reply.header(
-        'Access-Control-Allow-Headers',
-        'Content-Type, Authorization'
-      );
-      reply.header(
-        'Access-Control-Expose-Headers',
-        'Content-Type, Location, ETag, Link'
-      );
-    }
+    reply.header('Access-Control-Allow-Origin', '*');
+    reply.header(
+      'Access-Control-Allow-Methods',
+      'POST, DELETE, PATCH, OPTIONS'
+    );
+    reply.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    reply.header(
+      'Access-Control-Expose-Headers',
+      'Content-Type, Location, ETag, Link'
+    );
   });
 
   fastify.addContentTypeParser(
