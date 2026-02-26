@@ -79,5 +79,6 @@ if (dbUrl.protocol === 'mongodb:' || dbUrl.protocol === 'mongodb+srv:') {
 
   process.on('uncaughtException', (err) => {
     Log().error('Uncaught exception:', err);
+    process.exit(1);
   });
 })();

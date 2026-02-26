@@ -490,7 +490,7 @@ export class ProductionManager extends EventEmitter {
       const u: any = {
         sessionId: s._id?.toString?.() ?? '',
         name: s.name ?? '',
-        isActive: s.isWhip ? true : !!s.isActive,
+        isActive: !!s.isActive,
         isWhip: !!s.isWhip
       };
       if (typeof s.endpointId === 'string' && s.endpointId.length > 0)
