@@ -511,7 +511,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           sessionId: (s._id ?? '').toString(),
           endpointId: s.endpointId,
           name: s.name,
-          isActive: s.isWhip ? true : s.isActive,
+          isActive: !!s.isActive,
           isWhip: s.isWhip
         }));
 
@@ -945,7 +945,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           sessionId: s._id.toString(),
           endpointId: s.endpointId,
           name: s.name,
-          isActive: s.isWhip ? true : !!s.isActive,
+          isActive: !!s.isActive,
           isWhip: !!s.isWhip
         }));
 
