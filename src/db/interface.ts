@@ -1,4 +1,11 @@
-import { Ingest, Line, NewIngest, Production, UserSession } from '../models';
+import {
+  Ingest,
+  Line,
+  NewIngest,
+  Preset,
+  Production,
+  UserSession
+} from '../models';
 
 export interface DbManager {
   connect(): Promise<void>;
@@ -28,4 +35,12 @@ export interface DbManager {
     updates: Partial<UserSession>
   ): Promise<boolean>;
   getSessionsByQuery(q: Partial<UserSession>): Promise<UserSession[]>;
+  addPreset(preset: Omit<Preset, '_id'>): Promise<Preset>;
+  getPreset(id: string): Promise<Preset | undefined>;
+  getPresets(): Promise<Preset[]>;
+  deletePreset(id: string): Promise<boolean>;
+  updatePreset(
+    id: string,
+    update: Partial<Pick<Preset, 'name' | 'calls'>>
+  ): Promise<Preset | undefined>;
 }

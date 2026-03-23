@@ -1,6 +1,14 @@
 import '../config/load-env';
 import { MongoClient } from 'mongodb';
-import { Ingest, Line, NewIngest, Production, UserSession } from '../models';
+import {
+  Ingest,
+  Line,
+  NewIngest,
+  Preset,
+  Production,
+  UserSession
+} from '../models';
+import { v4 as uuidv4 } from 'uuid';
 import { assert } from '../utils';
 import { DbManager } from './interface';
 import { Log } from '../log';
@@ -281,6 +289,51 @@ export class DbManagerMongoDb implements DbManager {
   }
 
   // Get database sessions matching query
+  async addPreset(preset: Omit<Preset, '_id'>): Promise<Preset> {
+    const db = this.client.db();
+    const _id = uuidv4();
+    const doc = { ...preset, _id };
+    await db.collection('presets').insertOne(doc as any);
+    return doc;
+  }
+
+  async getPreset(id: string): Promise<Preset | undefined> {
+    const db = this.client.db();
+    const result = await db.collection('presets').findOne({ _id: id as any });
+    return result ? (result as unknown as Preset) : undefined;
+  }
+
+  async getPresets(): Promise<Preset[]> {
+    const db = this.client.db();
+    const results = await db
+      .collection('presets')
+      .find({})
+      .sort({ $natural: -1 })
+      .toArray();
+    return results as unknown as Preset[];
+  }
+
+  async deletePreset(id: string): Promise<boolean> {
+    const db = this.client.db();
+    const result = await db.collection('presets').deleteOne({ _id: id as any });
+    return result.deletedCount === 1;
+  }
+
+  async updatePreset(
+    id: string,
+    update: Partial<Pick<Preset, 'name' | 'calls'>>
+  ): Promise<Preset | undefined> {
+    const db = this.client.db();
+    const result = await db
+      .collection('presets')
+      .findOneAndUpdate(
+        { _id: id as any },
+        { $set: update },
+        { returnDocument: 'after' }
+      );
+    return result ? (result as unknown as Preset) : undefined;
+  }
+
   async getSessionsByQuery(q: Partial<UserSession>): Promise<UserSession[]> {
     const db = this.client.db();
     const sessions = db.collection<UserSession>('sessions');

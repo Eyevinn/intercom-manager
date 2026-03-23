@@ -1,8 +1,16 @@
 import { Log } from '../log';
-import { Ingest, Line, NewIngest, Production, UserSession } from '../models';
+import {
+  Ingest,
+  Line,
+  NewIngest,
+  Preset,
+  Production,
+  UserSession
+} from '../models';
 import { assert } from '../utils';
 import { DbManager } from './interface';
 import nano from 'nano';
+import { v4 as uuidv4 } from 'uuid';
 
 const SESSION_PRUNE_SECONDS = 7_200;
 export class DbManagerCouchDb implements DbManager {
@@ -158,7 +166,8 @@ export class DbManagerCouchDb implements DbManager {
     response.rows.forEach((row: any) => {
       if (
         row.doc._id.toLowerCase().indexOf('counter') === -1 &&
-        row.doc._id.toLowerCase().indexOf('session_') === -1
+        row.doc._id.toLowerCase().indexOf('session_') === -1 &&
+        row.doc._id.toLowerCase().indexOf('preset_') === -1
       )
         productions.push(row.doc);
     });
@@ -176,11 +185,12 @@ export class DbManagerCouchDb implements DbManager {
     const productions = await this.withRetry(() =>
       this.nanoDb!.list({ include_docs: false })
     );
-    // Filter out counter and session documents
+    // Filter out counter, session, and preset documents
     const filteredRows = productions.rows.filter(
       (row: any) =>
         row.id.toLowerCase().indexOf('counter') === -1 &&
-        row.id.toLowerCase().indexOf('session_') === -1
+        row.id.toLowerCase().indexOf('session_') === -1 &&
+        row.id.toLowerCase().indexOf('preset_') === -1
     );
     return filteredRows.length;
   }
@@ -563,6 +573,66 @@ export class DbManagerCouchDb implements DbManager {
       this.nanoDb!.find({ selector, limit: 10000 })
     );
     return response.docs as unknown as UserSession[]; // could also expand type UserSession to avoid unknown
+  }
+
+  async addPreset(preset: Omit<Preset, '_id'>): Promise<Preset> {
+    await this.connect();
+    const _id = `preset_${uuidv4()}`;
+    const doc = { ...preset, _id };
+    await this.withRetry(() => this.nanoDb!.insert(doc as nano.MaybeDocument));
+    return { ...preset, _id };
+  }
+
+  async getPreset(id: string): Promise<Preset | undefined> {
+    await this.connect();
+    try {
+      return (await this.withRetry(() =>
+        this.nanoDb!.get(id)
+      )) as unknown as Preset;
+    } catch (e: any) {
+      if (e.statusCode === 404) return undefined;
+      throw e;
+    }
+  }
+
+  async getPresets(): Promise<Preset[]> {
+    await this.connect();
+    const response = await this.withRetry(() =>
+      this.nanoDb!.list({ include_docs: true })
+    );
+    return response.rows
+      .map((r: any) => r.doc)
+      .filter((d: any) => d._id?.startsWith('preset_'));
+  }
+
+  async deletePreset(id: string): Promise<boolean> {
+    await this.connect();
+    try {
+      const doc = (await this.withRetry(() => this.nanoDb!.get(id))) as any;
+      const res = (await this.withRetry(() =>
+        this.nanoDb!.destroy(doc._id, doc._rev)
+      )) as any;
+      return !!res.ok;
+    } catch (e: any) {
+      if (e.statusCode === 404) return false;
+      throw e;
+    }
+  }
+
+  async updatePreset(
+    id: string,
+    update: Partial<Pick<Preset, 'name' | 'calls'>>
+  ): Promise<Preset | undefined> {
+    await this.connect();
+    try {
+      const doc = (await this.withRetry(() => this.nanoDb!.get(id))) as any;
+      const updated = { ...doc, ...update };
+      await this.withRetry(() => this.nanoDb!.insert(updated));
+      return updated as Preset;
+    } catch (e: any) {
+      if (e.statusCode === 404) return undefined;
+      throw e;
+    }
   }
 
   async ensureSessionIndexes(): Promise<void> {
