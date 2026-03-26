@@ -11,11 +11,11 @@ import {
   UpdatePreset
 } from './models';
 
-export interface ApiPresetsOptions {
+export interface ApiGroupsOptions {
   dbManager: DbManager;
 }
 
-const apiPresets: FastifyPluginCallback<ApiPresetsOptions> = (
+const apiGroups: FastifyPluginCallback<ApiGroupsOptions> = (
   fastify,
   opts,
   next
@@ -90,10 +90,20 @@ const apiPresets: FastifyPluginCallback<ApiPresetsOptions> = (
     },
     async (req, reply) => {
       const { id } = req.params;
-      const updated = await opts.dbManager.updatePreset(
-        id,
-        req.body as TUpdatePreset
-      );
+      const body = req.body as TUpdatePreset;
+      const update: {
+        name?: string;
+        calls?: { productionId: string; lineId: string }[];
+        companionUrl?: string | null;
+      } = {};
+      if (body.name !== undefined) update.name = body.name;
+      if (body.calls !== undefined) update.calls = body.calls;
+      if (body.companionUrl !== undefined) {
+        // AJV coerces null to "" for string|null unions — treat empty string as null (removal)
+        update.companionUrl =
+          body.companionUrl === '' ? null : body.companionUrl;
+      }
+      const updated = await opts.dbManager.updatePreset(id, update);
       if (!updated)
         return reply.code(404).send({ message: 'Preset not found' });
       reply.send(updated);
@@ -122,4 +132,4 @@ const apiPresets: FastifyPluginCallback<ApiPresetsOptions> = (
   next();
 };
 
-export default apiPresets;
+export default apiGroups;

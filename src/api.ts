@@ -9,7 +9,7 @@ import { Static, Type } from '@sinclair/typebox';
 import fastify, { FastifyPluginCallback } from 'fastify';
 import { getApiIngests } from './api_ingests';
 import { ApiProductionsOptions, getApiProductions } from './api_productions';
-import apiPresets from './api_presets';
+import apiGroups from './api_groups';
 import apiReAuth from './api_re_auth';
 import apiShare from './api_share';
 import apiWhip, { ApiWhipOptions } from './api_whip';
@@ -155,7 +155,7 @@ export default async (opts: ApiOptions) => {
   });
   api.register(apiShare, { publicHost: opts.publicHost, prefix: 'api/v1' });
   api.register(apiReAuth, { prefix: 'api/v1' });
-  api.register(apiPresets, { prefix: 'api/v1', dbManager: opts.dbManager });
+  api.register(apiGroups, { prefix: 'api/v1', dbManager: opts.dbManager });
 
   api.all('/whip/:productionId/:lineId', async (request, reply) => {
     if (request.method !== 'POST' && request.method !== 'OPTIONS') {

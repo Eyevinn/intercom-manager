@@ -1,8 +1,8 @@
 import {
+  Preset,
   Ingest,
   Line,
   NewIngest,
-  Preset,
   Production,
   UserSession
 } from '../models';
@@ -41,6 +41,10 @@ export interface DbManager {
   deletePreset(id: string): Promise<boolean>;
   updatePreset(
     id: string,
-    update: Partial<Pick<Preset, 'name' | 'calls'>>
+    update: {
+      name?: string;
+      calls?: { productionId: string; lineId: string }[];
+      companionUrl?: string | null;
+    }
   ): Promise<Preset | undefined>;
 }

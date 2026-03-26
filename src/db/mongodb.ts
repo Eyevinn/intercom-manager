@@ -1,10 +1,10 @@
 import '../config/load-env';
 import { MongoClient } from 'mongodb';
 import {
+  Preset,
   Ingest,
   Line,
   NewIngest,
-  Preset,
   Production,
   UserSession
 } from '../models';
@@ -321,16 +321,33 @@ export class DbManagerMongoDb implements DbManager {
 
   async updatePreset(
     id: string,
-    update: Partial<Pick<Preset, 'name' | 'calls'>>
+    update: {
+      name?: string;
+      calls?: { productionId: string; lineId: string }[];
+      companionUrl?: string | null;
+    }
   ): Promise<Preset | undefined> {
     const db = this.client.db();
+    const { companionUrl, ...rest } = update;
+    const mongoUpdate: Record<string, unknown> = {};
+    if (Object.keys(rest).length > 0) {
+      mongoUpdate.$set = rest;
+    }
+    if (companionUrl !== undefined) {
+      if (companionUrl === null) {
+        mongoUpdate.$unset = { companionUrl: '' };
+      } else {
+        mongoUpdate.$set = {
+          ...((mongoUpdate.$set as object) ?? {}),
+          companionUrl
+        };
+      }
+    }
     const result = await db
       .collection('presets')
-      .findOneAndUpdate(
-        { _id: id as any },
-        { $set: update },
-        { returnDocument: 'after' }
-      );
+      .findOneAndUpdate({ _id: id as any }, mongoUpdate, {
+        returnDocument: 'after'
+      });
     return result ? (result as unknown as Preset) : undefined;
   }
 

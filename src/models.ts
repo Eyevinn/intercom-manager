@@ -403,19 +403,23 @@ export const PatchIngestResponse = Type.Omit(Ingest, ['ipAddress']);
 
 export const PresetCall = Type.Object({
   productionId: Type.String({ minLength: 1 }),
-  lineId: Type.String({ minLength: 1 })
+  lineId: Type.String({ minLength: 1 }),
+  lineUsedForProgramOutput: Type.Optional(Type.Boolean()),
+  lineName: Type.Optional(Type.String())
 });
 
 export const NewPreset = Type.Object({
   name: Type.String({ minLength: 1, maxLength: 200 }),
-  calls: Type.Array(PresetCall, { minItems: 1, maxItems: 20 })
+  calls: Type.Array(PresetCall, { minItems: 1, maxItems: 20 }),
+  companionUrl: Type.Optional(Type.String())
 });
 
 export const Preset = Type.Object({
   _id: Type.String(),
   name: Type.String(),
   calls: Type.Array(PresetCall),
-  createdAt: Type.String()
+  createdAt: Type.String(),
+  companionUrl: Type.Optional(Type.String())
 });
 
 export const PresetListResponse = Type.Object({
@@ -424,7 +428,8 @@ export const PresetListResponse = Type.Object({
 
 export const UpdatePreset = Type.Object({
   name: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
-  calls: Type.Optional(Type.Array(PresetCall, { minItems: 0, maxItems: 20 }))
+  calls: Type.Optional(Type.Array(PresetCall, { minItems: 0, maxItems: 20 })),
+  companionUrl: Type.Optional(Type.Union([Type.String(), Type.Null()]))
 });
 
 export type PresetCall = Static<typeof PresetCall>;

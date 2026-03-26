@@ -1,9 +1,9 @@
 import { Log } from '../log';
 import {
+  Preset,
   Ingest,
   Line,
   NewIngest,
-  Preset,
   Production,
   UserSession
 } from '../models';
@@ -621,12 +621,24 @@ export class DbManagerCouchDb implements DbManager {
 
   async updatePreset(
     id: string,
-    update: Partial<Pick<Preset, 'name' | 'calls'>>
+    update: {
+      name?: string;
+      calls?: { productionId: string; lineId: string }[];
+      companionUrl?: string | null;
+    }
   ): Promise<Preset | undefined> {
     await this.connect();
     try {
       const doc = (await this.withRetry(() => this.nanoDb!.get(id))) as any;
-      const updated = { ...doc, ...update };
+      const { companionUrl, ...rest } = update;
+      const updated = { ...doc, ...rest };
+      if (companionUrl !== undefined) {
+        if (companionUrl === null) {
+          delete updated.companionUrl;
+        } else {
+          updated.companionUrl = companionUrl;
+        }
+      }
       await this.withRetry(() => this.nanoDb!.insert(updated));
       return updated as Preset;
     } catch (e: any) {

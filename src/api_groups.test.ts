@@ -145,6 +145,32 @@ describe('Presets API', () => {
       );
     });
 
+    test('returns 201 and passes companionUrl to addPreset when provided', async () => {
+      const presetWithCompanion = {
+        ...mockPreset,
+        companionUrl: 'ws://companion.example.com:8080'
+      };
+      mockDbManager.addPreset.mockResolvedValue(presetWithCompanion);
+      const body = {
+        name: 'My Preset',
+        calls: [{ productionId: '1', lineId: 'line-1' }],
+        companionUrl: 'ws://companion.example.com:8080'
+      };
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/v1/preset',
+        body
+      });
+      expect(response.statusCode).toBe(201);
+      const json = JSON.parse(response.body);
+      expect(json.companionUrl).toBe('ws://companion.example.com:8080');
+      expect(mockDbManager.addPreset).toHaveBeenCalledWith(
+        expect.objectContaining({
+          companionUrl: 'ws://companion.example.com:8080'
+        })
+      );
+    });
+
     test('returns 400 when name is missing', async () => {
       const response = await server.inject({
         method: 'POST',
@@ -229,6 +255,41 @@ describe('Presets API', () => {
         body: { name: '' }
       });
       expect(response.statusCode).toBe(400);
+    });
+
+    test('returns 200 with updated companionUrl when provided', async () => {
+      const updatedPreset = {
+        ...mockPreset,
+        companionUrl: 'ws://companion.example.com:8080'
+      };
+      mockDbManager.updatePreset.mockResolvedValue(updatedPreset);
+      const response = await server.inject({
+        method: 'PATCH',
+        url: '/api/v1/preset/preset-uuid-1',
+        body: { companionUrl: 'ws://companion.example.com:8080' }
+      });
+      expect(response.statusCode).toBe(200);
+      expect(JSON.parse(response.body)).toEqual(updatedPreset);
+      expect(mockDbManager.updatePreset).toHaveBeenCalledWith('preset-uuid-1', {
+        companionUrl: 'ws://companion.example.com:8080'
+      });
+    });
+
+    test('returns 200 and passes null companionUrl to remove it', async () => {
+      const updatedPreset = { ...mockPreset };
+      delete (updatedPreset as any).companionUrl;
+      mockDbManager.updatePreset.mockResolvedValue(updatedPreset);
+      // Sending null — AJV coerces it to "" for string|null unions; the handler
+      // normalises "" back to null before calling updatePreset.
+      const response = await server.inject({
+        method: 'PATCH',
+        url: '/api/v1/preset/preset-uuid-1',
+        body: { companionUrl: null }
+      });
+      expect(response.statusCode).toBe(200);
+      expect(mockDbManager.updatePreset).toHaveBeenCalledWith('preset-uuid-1', {
+        companionUrl: null
+      });
     });
 
     test('returns 404 when preset not found', async () => {
