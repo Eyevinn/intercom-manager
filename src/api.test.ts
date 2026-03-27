@@ -38,7 +38,12 @@ const mockDbManager = {
   getSession: jest.fn().mockResolvedValue(null),
   deleteUserSession: jest.fn().mockResolvedValue(true),
   updateSession: jest.fn().mockResolvedValue(true),
-  getSessionsByQuery: jest.fn().mockResolvedValue([])
+  getSessionsByQuery: jest.fn().mockResolvedValue([]),
+  addPreset: jest.fn().mockResolvedValue({}),
+  getPreset: jest.fn().mockResolvedValue(undefined),
+  getPresets: jest.fn().mockResolvedValue([]),
+  deletePreset: jest.fn().mockResolvedValue(true),
+  updatePreset: jest.fn().mockResolvedValue(undefined)
 };
 
 const mockProductionManager = {
