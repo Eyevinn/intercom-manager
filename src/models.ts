@@ -405,6 +405,7 @@ export const PresetCall = Type.Object({
   productionId: Type.String({ minLength: 1 }),
   lineId: Type.String({ minLength: 1 }),
   lineUsedForProgramOutput: Type.Optional(Type.Boolean()),
+  isProgramUser: Type.Optional(Type.Boolean()),
   lineName: Type.Optional(Type.String())
 });
 
