@@ -22,7 +22,7 @@
     "@fastify/helmet": "^13.0.2",
     "@fastify/rate-limit": "^10.3.0",
     "@fastify/swagger": "^9.5.1",
-    "@fastify/swagger-ui": "^5.2.2",
+    "@fastify/swagger-ui": "^5.2.5",
     "@fastify/type-provider-typebox": "^5.1.0",
     "@sinclair/typebox": "^0.32.35",
     "dotenv": "^16.5.0",
