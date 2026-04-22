@@ -32,7 +32,7 @@
     "nodemon": "^3.1.10",
     "sdp-transform": "^2.15.0",
     "ts-node": "^10.9.2",
-    "uuid": "^9.0.1"
+    "uuid": "^14.0.0"
   },
   "devDependencies": {
     "@commitlint/cli": "^17.8.1",
