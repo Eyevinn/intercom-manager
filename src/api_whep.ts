@@ -141,6 +141,59 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
         const sessionId = uuidv4();
         const endpointId = uuidv4();
 
+        const offerHasVideo = sdpOffer.media.some((m) => m.type === 'video');
+
+        // Read the line's WHEP source pin (set via
+        // PATCH /production/:productionId/line/:lineId/whep-source).
+        // When set, this WHEP recipient is wired to receive only the pinned
+        // publisher's video instead of the SFU-default forward-all.
+        // Resolved at recipient-create time only; a later pin change does
+        // not retroactively reconfigure this endpoint.
+        let subscribeToVideo:
+          | { streams: any[]; ssrcs: number[]; endpointId: string }
+          | undefined;
+        try {
+          const productionIdNum = parseInt(productionId, 10);
+          if (!Number.isNaN(productionIdNum)) {
+            const production = await productionManager.getProduction(
+              productionIdNum
+            );
+            const line = production?.lines.find((l) => l.id === lineId);
+            const pinnedSessionId = line?.whepSourceSessionId ?? null;
+            if (pinnedSessionId) {
+              const sourceSession = await opts.dbManager.getSession(
+                pinnedSessionId
+              );
+              const sourceVideo: any = sourceSession?.sessionDescription?.video;
+              const sourceEndpointId = sourceSession?.endpointId;
+              const streams: any[] = Array.isArray(sourceVideo?.streams)
+                ? sourceVideo.streams
+                : [];
+              const ssrcs: number[] = Array.isArray(sourceVideo?.ssrcs)
+                ? sourceVideo.ssrcs
+                : [];
+              if (
+                sourceEndpointId &&
+                (streams.length > 0 || ssrcs.length > 0)
+              ) {
+                subscribeToVideo = {
+                  streams,
+                  ssrcs,
+                  endpointId: sourceEndpointId
+                };
+              } else {
+                Log().warn(
+                  `[whep-pin] line=${lineId} pinned sessionId=${pinnedSessionId} has no usable sessionDescription.video — falling back to forward-all`
+                );
+              }
+            }
+          }
+        } catch (pinErr) {
+          Log().warn(
+            `[whep-pin] failed to resolve pinned source, falling back to forward-all: ${pinErr}`
+          );
+        }
+
         // Create conference and endpoint in SMB
         const smbConferenceId = await coreFunctions.createConferenceForLine(
           smb,
@@ -150,7 +203,6 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
           lineId
         );
 
-        // Allocate endpoint with audio support
         const endpoint = await coreFunctions.createEndpoint(
           smb,
           smbServerUrl,
@@ -158,10 +210,16 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
           smbConferenceId,
           endpointId,
           true, // audio
+          offerHasVideo, // video
           false, // no data channel needed for WHEP
           true, // iceControlling
-          'ssrc-rewrite', // relayType
-          parseInt(opts.endpointIdleTimeout, 10)
+          'ssrc-rewrite', // audio relay type
+          parseInt(opts.endpointIdleTimeout, 10),
+          'ssrc-rewrite'
+        );
+
+        Log().debug(
+          `[whep-alloc] video.ssrcs=${JSON.stringify(endpoint.video?.ssrcs)}`
         );
 
         await coreFunctions.configureEndpointForWhipWhep(
@@ -171,7 +229,9 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
           smbServerUrl,
           smbServerApiKey,
           smbConferenceId,
-          endpointId
+          endpointId,
+          true, // receiveOnly: WHEP is receive-only
+          subscribeToVideo
         );
 
         const sdpAnswer = await coreFunctions.createWhipWhepAnswer(
@@ -215,7 +275,9 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
           lineId,
           sessionId,
           username,
-          true
+          true, // isWhip — kept for backwards compat with consumers
+          true, // isWhepReceiver — distinguishes egress recipients from WHIP publishers
+          false // hasVideo — WHEP is receive-only by spec, never publishes
         );
 
         // Update user endpoint info and store a stable smbPresenceKey
@@ -280,6 +342,11 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
           reply.code(404).send({ error: 'WHEP session not found' });
           return;
         }
+
+        // Clear the line's WHEP source pin if this session is the pinned
+        // one. Must run BEFORE deleteUserSession so we can still resolve
+        // the session's productionId/lineId via the DB.
+        await productionManager.clearWhepSourceIfPinned(sessionId);
 
         await opts.dbManager.deleteUserSession(sessionId);
         productionManager.removeUserSession(sessionId);

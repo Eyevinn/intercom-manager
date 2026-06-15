@@ -137,6 +137,8 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
 
         const sdpOffer = parse(request.body);
 
+        const offerHasVideo = sdpOffer.media.some((m) => m.type === 'video');
+
         // Create a unique session ID for this WHIP connection
         const sessionId = uuidv4();
         const endpointId = uuidv4();
@@ -150,7 +152,9 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
           lineId
         );
 
-        // Allocate endpoint with audio support
+        // Allocate endpoint with audio (and video, when the offer includes a
+        // video m= section). SMB requires video to be allocated before a
+        // configure call can send a video block
         const endpoint = await coreFunctions.createEndpoint(
           smb,
           smbServerUrl,
@@ -158,10 +162,26 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
           smbConferenceId,
           endpointId,
           true, // audio
+          offerHasVideo, // video
           false, // no data channel needed for WHIP
           true, // iceControlling
-          'ssrc-rewrite', // relayType
-          parseInt(opts.endpointIdleTimeout, 10)
+          'ssrc-rewrite', // audio relay type
+          parseInt(opts.endpointIdleTimeout, 10),
+          // Video relay type. 'ssrc-rewrite', matching every other endpoint in
+          // the system. This path originally used 'forwarder' on the grounds
+          // that keeping the publisher's original SSRCs is what makes a
+          // receiver's ssrc-whitelist meaningful — but that rationale was
+          // measured on the WHEP *egress* side, where a consumer cannot tell
+          // senders apart, and it does not carry over to a publisher, which
+          // does not consume video. Pinning a WHIP publisher works under
+          // ssrc-rewrite, so original SSRCs are not required for the
+          // whitelist. Being the sole non-ssrc-rewrite endpoint also made WHIP
+          // publishers the only ones untested by every other code path, and
+          // SMB's automatic keyframe request on a source switch lives in its
+          // rewrite send job — so a forwarder-relayed publisher may never be
+          // asked for one, leaving a receiver to wait for the publisher's next
+          // natural IDR.
+          'ssrc-rewrite'
         );
 
         await coreFunctions.configureEndpointForWhipWhep(
@@ -173,6 +193,31 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
           smbConferenceId,
           endpointId
         );
+
+        if (offerHasVideo) {
+          const videoMedia = sdpOffer.media.find((m) => m.type === 'video');
+          const fidGroup = videoMedia?.ssrcGroups?.find(
+            (g) => g.semantics === 'FID'
+          );
+          // Store BOTH main and RTX SSRCs from the FID group. Receivers
+          // pinned to this publisher use these to build their
+          // ssrc-whitelist; without the RTX SSRC, SMB drops retransmission
+          // packets and any network jitter freezes the receiver's video.
+          const ssrcs: number[] = [];
+          if (fidGroup) {
+            for (const part of fidGroup.ssrcs.split(' ')) {
+              const n = parseInt(part, 10);
+              if (Number.isFinite(n)) ssrcs.push(n);
+            }
+          } else {
+            const fallback = Number(videoMedia?.ssrcs?.[0]?.id);
+            if (Number.isFinite(fallback)) ssrcs.push(fallback);
+          }
+          if (ssrcs.length > 0) {
+            if (!endpoint.video) endpoint.video = {};
+            endpoint.video.ssrcs = ssrcs;
+          }
+        }
 
         const sdpAnswer = await coreFunctions.createWhipWhepAnswer(
           sdpOffer,
@@ -206,25 +251,41 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
         }
 
         // Create user session in production manager (await to guarantee DB state)
-        Log().info(
+        Log().debug(
           `Creating WHIP user session - username: ${username}, sessionId: ${sessionId}, production: ${productionId}, line: ${lineId}`
         );
-
+        // Defer hasVideo:true until after the endpoint (with video.ssrcs) is
+        // persisted. Setting hasVideo first makes this session match the
+        // WHEP auto-pin query `{hasVideo:true}` while video.ssrcs is not yet
+        // in the DB — receivers joining in that window resolve a pin to this
+        // publisher but get an empty whitelist and fall back to default
+        // rotation, intermittently losing video.
         await productionManager.createUserSession(
           smbConferenceId,
           productionId,
           lineId,
           sessionId,
           username,
-          true
+          true, // isWhip
+          false, // isWhepReceiver
+          false // hasVideo flipped below once video.ssrcs is persisted
         );
 
-        // Update user endpoint information
+        // Update user endpoint info and store a stable smbPresenceKey.
+        // The endpoint object now carries the publisher's video SSRCs
+        // (stamped from the offer above) so WHEP recipients pinned to
+        // this publisher can resolve them for the ssrc-whitelist.
         await productionManager.updateUserEndpoint(
           sessionId,
           endpointId,
           endpoint
         );
+
+        // Now that video.ssrcs is persisted, flip hasVideo so receivers'
+        // auto-pin lookup finds this publisher with a usable whitelist.
+        if (offerHasVideo) {
+          await productionManager.updateSessionHasVideo(sessionId, true);
+        }
 
         // Create the Location URL for the WHIP resource
         // Location URL can be relative to Request URL, so this is OK.
@@ -282,7 +343,11 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
           return;
         }
 
-        // Remove the user session
+        // Clear the line's WHEP source pin if this WHIP publisher was
+        // the pinned source. Must run BEFORE deleteUserSession so we can
+        // still resolve the session's productionId/lineId via the DB.
+        await productionManager.clearWhepSourceIfPinned(sessionId);
+
         await opts.dbManager.deleteUserSession(sessionId);
         productionManager.removeUserSession(sessionId);
         productionManager.emit('users:change');
