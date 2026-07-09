@@ -4,7 +4,11 @@ import {
   Line,
   NewIngest,
   Production,
-  UserSession
+  UserSession,
+  NewReceiver,
+  NewTransmitter,
+  Receiver,
+  Transmitter
 } from '../models';
 
 export interface DbManager {
@@ -35,6 +39,18 @@ export interface DbManager {
     updates: Partial<UserSession>
   ): Promise<boolean>;
   getSessionsByQuery(q: Partial<UserSession>): Promise<UserSession[]>;
+  addTransmitter(transmitter: NewTransmitter): Promise<Transmitter>;
+  getTransmitter(id: string): Promise<Transmitter | undefined>;
+  getTransmitters(limit: number, offset: number): Promise<Transmitter[]>;
+  getTransmittersLength(): Promise<number>;
+  updateTransmitter(transmitter: Transmitter): Promise<Transmitter | undefined>;
+  deleteTransmitter(id: string): Promise<boolean>;
+  addReceiver(receiver: NewReceiver): Promise<Receiver>;
+  getReceiver(id: string): Promise<Receiver | undefined>;
+  getReceivers(limit: number, offset: number): Promise<Receiver[]>;
+  getReceiversLength(): Promise<number>;
+  updateReceiver(receiver: Receiver): Promise<Receiver | undefined>;
+  deleteReceiver(id: string): Promise<boolean>;
   addPreset(preset: Omit<Preset, '_id'>): Promise<Preset>;
   getPreset(id: string): Promise<Preset | undefined>;
   getPresets(): Promise<Preset[]>;

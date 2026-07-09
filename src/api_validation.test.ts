@@ -44,7 +44,19 @@ const mockDbManager = {
   getPreset: jest.fn().mockResolvedValue(undefined),
   getPresets: jest.fn().mockResolvedValue([]),
   deletePreset: jest.fn().mockResolvedValue(true),
-  updatePreset: jest.fn().mockResolvedValue(undefined)
+  updatePreset: jest.fn().mockResolvedValue(undefined),
+  addTransmitter: jest.fn().mockResolvedValue(undefined),
+  getTransmitter: jest.fn().mockResolvedValue(undefined),
+  getTransmitters: jest.fn().mockResolvedValue([]),
+  getTransmittersLength: jest.fn().mockResolvedValue(0),
+  updateTransmitter: jest.fn().mockResolvedValue(undefined),
+  deleteTransmitter: jest.fn().mockResolvedValue(true),
+  addReceiver: jest.fn().mockResolvedValue(undefined),
+  getReceiver: jest.fn().mockResolvedValue(undefined),
+  getReceivers: jest.fn().mockResolvedValue([]),
+  getReceiversLength: jest.fn().mockResolvedValue(0),
+  updateReceiver: jest.fn().mockResolvedValue(undefined),
+  deleteReceiver: jest.fn().mockResolvedValue(true)
 };
 
 const mockIngestManager = {
