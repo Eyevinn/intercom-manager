@@ -3,11 +3,12 @@ import { Static, Type } from '@sinclair/typebox';
 import { FastifyPluginCallback } from 'fastify';
 import sdpTransform, { parse } from 'sdp-transform';
 import { v4 as uuidv4 } from 'uuid';
+import { promises as dns } from 'dns';
 import { CoreFunctions } from './api_productions_core_functions';
 import { Log } from './log';
 import { Line, WhipWhepRequest, WhipWhepResponse } from './models';
 import { ProductionManager } from './production_manager';
-import { ISmbProtocol, SmbProtocol } from './smb';
+import { SmbProtocol } from './smb';
 import { getIceServers } from './utils';
 import { DbManager } from './db/interface';
 
@@ -19,15 +20,49 @@ export interface ApiWhepOptions {
   productionManager: ProductionManager;
   dbManager: DbManager;
   whipAuthKey?: string;
-  smb?: ISmbProtocol;
+  whepGatewayUrl?: string;
 }
 
-export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
+export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = async (
   fastify,
-  opts,
-  next
+  opts
 ) => {
   const productionManager = opts.productionManager;
+
+  // Build allowList for rate limiting
+  const rateLimitAllowList = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
+  if (opts.whepGatewayUrl) {
+    try {
+      const gatewayHost = new URL(opts.whepGatewayUrl).hostname;
+      if (gatewayHost && !rateLimitAllowList.includes(gatewayHost)) {
+        rateLimitAllowList.push(gatewayHost);
+
+        try {
+          const addresses = await dns.resolve(gatewayHost);
+          for (const ip of addresses) {
+            if (!rateLimitAllowList.includes(ip)) {
+              rateLimitAllowList.push(ip);
+            }
+          }
+          Log().info(
+            `WHEP rate limit allowList - resolved ${gatewayHost} to IPs: ${addresses.join(
+              ', '
+            )}`
+          );
+        } catch (resolveErr) {
+          Log().warn(
+            `Failed to resolve WHEP gateway hostname ${gatewayHost}: ${resolveErr}`
+          );
+        }
+      }
+    } catch (err) {
+      Log().warn(
+        `Failed to parse WHEP gateway URL for rate limit allowList: ${err}`
+      );
+    }
+  }
+
+  Log().info(`WHEP rate limit allowList: ${rateLimitAllowList.join(', ')}`);
 
   fastify.addContentTypeParser(
     'application/sdp',
@@ -50,14 +85,14 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
     opts.smbServerBaseUrl
   ).toString();
 
-  const smb = opts.smb || new SmbProtocol();
+  const smb = new SmbProtocol();
   const smbServerApiKey = opts.smbServerApiKey || '';
   const coreFunctions = opts.coreFunctions;
   const whipAuthKey = opts.whipAuthKey?.trim();
 
   async function requireWhepAuth(request: any, reply: any): Promise<boolean> {
     if (!whipAuthKey) {
-      return true; // auth disabled
+      return true;
     }
 
     const authHeader =
@@ -91,11 +126,6 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
     {
       schema: {
         description: 'WHEP endpoint for Egress WebRTC streams',
-        params: Type.Object({
-          productionId: Type.String({ maxLength: 200 }),
-          lineId: Type.String({ maxLength: 200 }),
-          username: Type.String({ maxLength: 200 })
-        }),
         body: WhipWhepRequest,
         response: {
           201: WhipWhepResponse,
@@ -108,9 +138,15 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
       },
       config: {
         rateLimit: {
-          max: 10,
+          max: 100,
           timeWindow: '1 minute',
           hook: 'onRequest',
+          allowList: rateLimitAllowList,
+          onExceeded: (req) => {
+            Log().warn(
+              `Rate limit exceeded for WHEP endpoint - IP: ${req.ip}, URL: ${req.url}`
+            );
+          },
           errorResponseBuilder: (_req, context) => {
             return {
               statusCode: 429,
@@ -150,7 +186,6 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
           lineId
         );
 
-        // Allocate endpoint with audio support
         const endpoint = await coreFunctions.createEndpoint(
           smb,
           smbServerUrl,
@@ -226,7 +261,6 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
         );
 
         // Create the Location URL for the WHEP resource
-        // Location URL can be relative to Request URL, so this is OK.
         const locationUrl = `/api/v1/whep/${productionId}/${lineId}/${sessionId}`;
 
         // Set response headers
@@ -234,13 +268,20 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
           'Content-Type': 'application/sdp',
           Location: locationUrl,
           ETag: sessionId,
-          Link: getIceServers().join(',')
+          Link: getIceServers().join(','),
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS, PATCH',
+          'Access-Control-Allow-Headers':
+            'Content-Type, Authorization, ETag, If-Match, Link',
+          'Access-Control-Expose-Headers': 'Location, ETag, Link'
         });
 
-        reply.code(201).send(sdpAnswer);
+        await reply.code(201).send(sdpAnswer);
       } catch (err) {
         Log().error(err);
-        reply.code(500).send({ error: 'Failed to process WHEP request' });
+        reply
+          .code(500)
+          .send({ error: `Failed to process WHEP request: ${err}` });
       }
     }
   );
@@ -252,11 +293,6 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
     {
       schema: {
         description: 'Terminate a WHEP connection',
-        params: Type.Object({
-          productionId: Type.String({ maxLength: 200 }),
-          lineId: Type.String({ maxLength: 200 }),
-          sessionId: Type.String({ maxLength: 200 })
-        }),
         response: {
           200: Type.String({ description: 'OK' }),
           404: Type.Object({ error: Type.String() }),
@@ -266,8 +302,9 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
     },
     async (request, reply) => {
       if (!(await requireWhepAuth(request, reply))) return;
-      const { sessionId } = request.params;
       try {
+        const { sessionId } = request.params;
+
         Log().info(
           `Received WHEP DELETE request - sessionId: ${sessionId}, IP: ${request.ip}`
         );
@@ -289,13 +326,21 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
           `WHEP session deleted successfully - sessionId: ${sessionId}`
         );
 
+        reply.headers({
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'POST, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+        });
+
         reply.code(200).send('OK');
       } catch (err) {
         Log().error(
-          `Failed to delete WHEP session - sessionId: ${sessionId}:`,
+          `Failed to delete WHEP session - sessionId: ${request.params.sessionId}:`,
           err
         );
-        reply.code(500).send({ error: 'Failed to terminate WHEP connection' });
+        reply
+          .code(500)
+          .send({ error: `Failed to terminate WHEP connection: ${err}` });
       }
     }
   );
@@ -323,7 +368,6 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
       try {
         const { productionId, lineId } = request.params;
 
-        // Check if production and line exist
         const productionIdNum = parseInt(productionId, 10);
         if (isNaN(productionIdNum)) {
           reply.code(400).send({ error: 'Invalid production ID' });
@@ -345,18 +389,23 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
         }
 
         reply.headers({
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'POST, DELETE, OPTIONS, PATCH',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization, ETag',
+          'Access-Control-Expose-Headers': 'Location, ETag, Link',
+          'Access-Control-Max-Age': '86400',
           'Accept-Post': 'application/sdp'
         });
 
         reply.code(200).send('OK');
       } catch (err) {
         Log().error(err);
-        reply.code(500).send({ error: 'Failed to process OPTIONS request' });
+        reply
+          .code(500)
+          .send({ error: `Failed to process OPTIONS request: ${err}` });
       }
     }
   );
-
-  next();
 };
 
 export default apiWhep;

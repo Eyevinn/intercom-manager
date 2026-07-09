@@ -72,7 +72,46 @@ The `osc_eyevinn_intercom_manager` resource requires these variables:
 | `ENDPOINT_IDLE_TIMEOUT_S`   | Idle timeout in seconds for SMB endpoints (default: `60`)                                                                                                                                                                                                   |
 | `OSC_ACCESS_TOKEN`          | Personal Access Token from OSC for link sharing and reauthenticating (optional)                                                                                                                                                                             |
 | `ICE_SERVERS`               | Comma-separated list of ICE servers in the format: `turn:username:password@turn.example.com,stun:stun.example.com`. If no STUN server is provided, and WHIP endpoints are used, Google's default STUN server (`stun:stun.l.google.com:19302`) will be used. |
+| `WHIP_GATEWAY_URL`          | URL of the [SRT-WHIP Gateway](https://github.com/Eyevinn/srt-whip-gateway) for IO bridge transmitters (optional). Enables the transmitter bridge API when set                                                                                              |
+| `WHIP_GATEWAY_API_KEY`      | API key for the SRT-WHIP Gateway (optional)                                                                                                                                                                                                                 |
+| `WHEP_GATEWAY_URL`          | URL of the [WHEP-SRT Gateway](https://github.com/Eyevinn/whep-srt-gateway) for IO bridge receivers (optional). Enables the receiver bridge API when set                                                                                                    |
+| `WHEP_GATEWAY_API_KEY`      | API key for the WHEP-SRT Gateway (optional)                                                                                                                                                                                                                 |
+| `DEBUG_BRIDGE`              | Set to `true` to enable verbose logging from the bridge manager reconcile loop (optional)                                                                                                                                                                   |
 | `MONGODB_CONNECTION_STRING` | DEPRECATED: Use `DB_CONNECTION_STRING` instead                                                                                                                                                                                                              |
+
+## IO Bridge
+
+The IO bridge enables SRT-to-WebRTC and WebRTC-to-SRT bridging, allowing external SRT streams to be ingested into intercom production lines (transmitters) and intercom audio to be sent out as SRT streams (receivers).
+
+- **Transmitters** (SRT to WebRTC): An SRT source is received by the [SRT-WHIP Gateway](https://github.com/Eyevinn/srt-whip-gateway) and ingested into a production line via WHIP.
+- **Receivers** (WebRTC to SRT): Audio from a production line is received via WHEP from the [WHEP-SRT Gateway](https://github.com/Eyevinn/whep-srt-gateway) and output as an SRT stream.
+
+The bridge is enabled by setting `WHIP_GATEWAY_URL` and/or `WHEP_GATEWAY_URL`. A bridge manager runs a sync loop (1s interval) that reconciles the desired state in the database with the actual state on the gateways.
+
+The bridge API is available at `/api/v1/bridge/transmitters` and `/api/v1/bridge/receivers`, and a configuration endpoint at `/api/v1/bridge/config` reports which gateways are enabled.
+
+### Local development with gateways
+
+To run the gateways locally for development:
+
+```sh
+# SRT-WHIP Gateway (transmitters) — requires Node.js
+git clone https://github.com/Eyevinn/srt-whip-gateway.git
+cd srt-whip-gateway && npm install && npm run dev
+# Runs on port 3000
+
+# WHEP-SRT Gateway (receivers) — requires Node.js
+git clone https://github.com/Eyevinn/whep-srt-gateway.git
+cd whep-srt-gateway && npm install && npm run dev
+# Runs on port 3001
+```
+
+Then set the environment variables:
+
+```sh
+WHIP_GATEWAY_URL=http://localhost:3000
+WHEP_GATEWAY_URL=http://localhost:3001
+```
 
 ## Installation / Usage
 

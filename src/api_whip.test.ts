@@ -59,7 +59,19 @@ const mockDbManager = {
   getPreset: jest.fn().mockResolvedValue(undefined),
   getPresets: jest.fn().mockResolvedValue([]),
   deletePreset: jest.fn().mockResolvedValue(true),
-  updatePreset: jest.fn().mockResolvedValue(undefined)
+  updatePreset: jest.fn().mockResolvedValue(undefined),
+  addTransmitter: jest.fn().mockResolvedValue(undefined),
+  getTransmitter: jest.fn().mockResolvedValue(undefined),
+  getTransmitters: jest.fn().mockResolvedValue([]),
+  getTransmittersLength: jest.fn().mockResolvedValue(0),
+  updateTransmitter: jest.fn().mockResolvedValue(undefined),
+  deleteTransmitter: jest.fn().mockResolvedValue(true),
+  addReceiver: jest.fn().mockResolvedValue(undefined),
+  getReceiver: jest.fn().mockResolvedValue(undefined),
+  getReceivers: jest.fn().mockResolvedValue([]),
+  getReceiversLength: jest.fn().mockResolvedValue(0),
+  updateReceiver: jest.fn().mockResolvedValue(undefined),
+  deleteReceiver: jest.fn().mockResolvedValue(true)
 };
 
 const coreFunctions = new CoreFunctions(
@@ -202,12 +214,14 @@ describe('apiWhip', () => {
       expect(response.statusCode).toBe(415);
     });
 
-    it('should return 429 when rate limit is exceeded', async () => {
+    it('should not rate-limit requests from localhost (allowlisted)', async () => {
       const fastify = await createTestServer();
 
-      // Send 10 valid requests (these should succeed or at least not trigger 429)
-      for (let i = 0; i < 10; i++) {
-        await fastify.inject({
+      // Send more than max requests from localhost — all should succeed
+      // because 127.0.0.1 is in the rate limit allowList
+      let lastResponse;
+      for (let i = 0; i < 110; i++) {
+        lastResponse = await fastify.inject({
           method: 'POST',
           url: '/whip/prod1/line1/testuser',
           headers: {
@@ -217,22 +231,7 @@ describe('apiWhip', () => {
         });
       }
 
-      // The 11th request should exceed the rate limit
-      const response = await fastify.inject({
-        method: 'POST',
-        url: '/whip/prod1/line1/testuser',
-        headers: {
-          'content-type': 'application/sdp'
-        },
-        payload: 'v=0\r\n'
-      });
-
-      expect(response.statusCode).toBe(429);
-      expect(JSON.parse(response.body)).toEqual(
-        expect.objectContaining({
-          error: expect.stringMatching(/Too many/i)
-        })
-      );
+      expect(lastResponse!.statusCode).not.toBe(429);
     });
   });
 
