@@ -79,25 +79,117 @@ const mockIngestManager = {
   startPolling: jest.fn()
 } as any;
 
+const baseOptions = {
+  title: 'my awesome service',
+  smbServerBaseUrl: 'http://localhost',
+  endpointIdleTimeout: '60',
+  publicHost: 'https://example.com',
+  dbManager: mockDbManager,
+  productionManager: mockProductionManager,
+  ingestManager: mockIngestManager
+};
+
+const createServer = (reAuthKey?: string) =>
+  api({
+    ...baseOptions,
+    reAuthKey,
+    coreFunctions: new CoreFunctions(
+      mockProductionManager,
+      new ConnectionQueue()
+    )
+  });
+
+const mockTokenService = () => {
+  const fetchMock = jest.fn().mockResolvedValue({
+    ok: true,
+    status: 200,
+    statusText: 'OK',
+    json: async () => ({ token: 'a-new-sat-token' })
+  });
+  global.fetch = fetchMock as unknown as typeof global.fetch;
+  return fetchMock;
+};
+
 describe('reAuth api', () => {
-  test('can generate a new SAT Token for the OSC Intercom instance', async () => {
-    const server = await api({
-      title: 'my awesome service',
-      smbServerBaseUrl: 'http://localhost',
-      endpointIdleTimeout: '60',
-      publicHost: 'https://example.com',
-      dbManager: mockDbManager,
-      productionManager: mockProductionManager,
-      ingestManager: mockIngestManager,
-      coreFunctions: new CoreFunctions(
-        mockProductionManager,
-        new ConnectionQueue()
-      )
-    });
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    jest.restoreAllMocks();
+  });
+
+  test('returns 401 without credentials when a reauth key is configured', async () => {
+    const fetchMock = mockTokenService();
+    const server = await createServer('secret-123');
+
     const response = await server.inject({
       method: 'GET',
       url: '/api/v1/reauth'
     });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.headers['www-authenticate']).toContain('Bearer');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(response.headers['set-cookie']).toBeUndefined();
+  });
+
+  test('returns 401 with a wrong bearer token', async () => {
+    const fetchMock = mockTokenService();
+    const server = await createServer('secret-123');
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/api/v1/reauth',
+      headers: { authorization: 'Bearer wrong-key' }
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test('generates a new SAT token with a correct bearer token', async () => {
+    const fetchMock = mockTokenService();
+    const server = await createServer('secret-123');
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/api/v1/reauth',
+      headers: { authorization: 'Bearer secret-123' }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(response.json()).toEqual({ success: true });
+    expect(response.json().token).toBeUndefined();
+    expect(String(response.headers['set-cookie'])).toContain(
+      'eyevinn-intercom-manager.sat=Bearer%20a-new-sat-token'
+    );
+  });
+
+  test('allows unauthenticated access when no reauth key is configured', async () => {
+    const fetchMock = mockTokenService();
+    const server = await createServer(undefined);
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/api/v1/reauth'
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test('returns 500 when the token service is unavailable', async () => {
+    global.fetch = jest
+      .fn()
+      .mockRejectedValue(new Error('network down')) as unknown as typeof fetch;
+    const server = await createServer(undefined);
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/api/v1/reauth'
+    });
+
     expect(response.statusCode).toBe(500);
   });
 });

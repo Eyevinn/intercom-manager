@@ -1,5 +1,10 @@
+import { timingSafeEqual } from 'crypto';
 import { FastifyPluginCallback } from 'fastify';
 import { ErrorResponse, ReAuthResponse } from './models';
+
+export interface ApiReAuthOptions {
+  reAuthKey?: string;
+}
 
 const OSC_ACCESS_TOKEN = process.env.OSC_ACCESS_TOKEN;
 const OSC_ENVIRONMENT = process.env.OSC_ENVIRONMENT ?? 'prod';
@@ -9,7 +14,40 @@ const REAUTH_RETRY_DELAY_MS = 1000;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const apiReAuth: FastifyPluginCallback = (fastify, _, next) => {
+const apiReAuth: FastifyPluginCallback<ApiReAuthOptions> = (
+  fastify,
+  opts,
+  next
+) => {
+  const reAuthKey = opts.reAuthKey?.trim();
+
+  async function requireReAuth(request: any, reply: any): Promise<boolean> {
+    if (!reAuthKey) {
+      return true; // auth disabled
+    }
+
+    const authHeader =
+      request.headers['authorization'] || request.headers['Authorization'];
+    const prefix = 'Bearer ';
+
+    const token = authHeader?.startsWith?.(prefix)
+      ? authHeader.slice(prefix.length).trim()
+      : '';
+    const tokenBuf = Buffer.from(token);
+    const keyBuf = Buffer.from(reAuthKey);
+    const isValid =
+      tokenBuf.length === keyBuf.length && timingSafeEqual(tokenBuf, keyBuf);
+
+    if (!authHeader || typeof authHeader !== 'string' || !isValid) {
+      reply
+        .header('WWW-Authenticate', 'Bearer realm="reauth", charset="UTF-8"')
+        .code(401)
+        .send({ error: 'Unauthorized' });
+      return false;
+    }
+    return true;
+  }
+
   fastify.get(
     '/reauth',
     {
@@ -19,12 +57,16 @@ const apiReAuth: FastifyPluginCallback = (fastify, _, next) => {
         response: {
           200: ReAuthResponse,
           400: ErrorResponse,
+          401: ErrorResponse,
           405: ErrorResponse,
           500: ErrorResponse
         }
       }
     },
-    async (_, reply) => {
+    async (request, reply) => {
+      if (!(await requireReAuth(request, reply))) {
+        return;
+      }
       if (OSC_ACCESS_TOKEN) {
         const url = `https://token.svc.${OSC_ENVIRONMENT}.osaas.io/servicetoken`;
         const options = {
@@ -56,7 +98,7 @@ const apiReAuth: FastifyPluginCallback = (fastify, _, next) => {
                     maxAge: 60 * 60 * 2 // 2 hours, in seconds
                   }
                 )
-                .send({ token: json.token });
+                .send({ success: true });
               return;
             }
             lastError = new Error(

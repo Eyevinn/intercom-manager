@@ -339,7 +339,10 @@ export const ShareResponse = Type.Object({
 export type ShareResponse = Static<typeof ShareResponse>;
 
 export const ReAuthResponse = Type.Object({
-  token: Type.String({ description: 'The new OSC Service Access Token' })
+  success: Type.Boolean({
+    description:
+      'True when a new OSC Service Access Token was issued. The token itself is only returned as an httpOnly cookie.'
+  })
 });
 export type ReAuthResponse = Static<typeof ReAuthResponse>;
 

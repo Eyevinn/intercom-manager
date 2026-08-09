@@ -49,6 +49,7 @@ if (dbUrl.protocol === 'mongodb:' || dbUrl.protocol === 'mongodb+srv:') {
     smbServerApiKey: process.env.SMB_APIKEY,
     publicHost: PUBLIC_HOST,
     whipAuthKey: process.env.WHIP_AUTH_KEY,
+    reAuthKey: process.env.REAUTH_AUTH_KEY ?? process.env.WHIP_AUTH_KEY,
     dbManager: dbManager,
     productionManager: productionManager,
     ingestManager: ingestManager,
