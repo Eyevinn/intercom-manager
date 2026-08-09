@@ -154,6 +154,10 @@ export default async (opts: ApiOptions) => {
     smb: opts.smb
   });
   api.register(apiShare, { publicHost: opts.publicHost, prefix: 'api/v1' });
+  // Registered without an auth hook on purpose. intercom-manager ships no
+  // authentication layer of its own; in an OSC deployment the OSC provided auth
+  // wall sits in front of the whole API, and /reauth only renews the token that
+  // wall issued. See the block comment in ./api_re_auth.ts before adding auth.
   api.register(apiReAuth, { prefix: 'api/v1' });
   api.register(apiGroups, { prefix: 'api/v1', dbManager: opts.dbManager });
 
