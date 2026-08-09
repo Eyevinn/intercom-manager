@@ -147,6 +147,48 @@ describe('reAuth api', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  test('returns 401 with an empty bearer token', async () => {
+    const fetchMock = mockTokenService();
+    const server = await createServer('secret-123');
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/api/v1/reauth',
+      headers: { authorization: 'Bearer' }
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test('returns 401 with a malformed authorization header (no Bearer prefix)', async () => {
+    const fetchMock = mockTokenService();
+    const server = await createServer('secret-123');
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/api/v1/reauth',
+      headers: { authorization: 'secret-123' }
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test('returns 401 when the token is a proper prefix of the key', async () => {
+    const fetchMock = mockTokenService();
+    const server = await createServer('secret-123');
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/api/v1/reauth',
+      headers: { authorization: 'Bearer secret-12' }
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   test('generates a new SAT token with a correct bearer token', async () => {
     const fetchMock = mockTokenService();
     const server = await createServer('secret-123');

@@ -14,6 +14,19 @@ if (!process.env.SMB_ADDRESS) {
   Log().warn('SMB_ADDRESS environment variable not set, using defaults');
 }
 
+const REAUTH_AUTH_KEY =
+  process.env.REAUTH_AUTH_KEY ?? process.env.WHIP_AUTH_KEY;
+
+if (process.env.OSC_ACCESS_TOKEN && !REAUTH_AUTH_KEY?.trim()) {
+  const reason =
+    REAUTH_AUTH_KEY === undefined
+      ? 'no REAUTH_AUTH_KEY or WHIP_AUTH_KEY is set'
+      : 'REAUTH_AUTH_KEY/WHIP_AUTH_KEY is set but empty or whitespace only, which disables auth - this is most likely a configuration error';
+  Log().warn(
+    `SECURITY: GET /api/v1/reauth is UNAUTHENTICATED - anyone who can reach this server can obtain a valid OSC service access token. Reason: ${reason}. Set REAUTH_AUTH_KEY to a non-empty secret to require a Bearer token.`
+  );
+}
+
 const ENDPOINT_IDLE_TIMEOUT_S: string =
   process.env.ENDPOINT_IDLE_TIMEOUT_S ?? '60';
 
@@ -49,7 +62,7 @@ if (dbUrl.protocol === 'mongodb:' || dbUrl.protocol === 'mongodb+srv:') {
     smbServerApiKey: process.env.SMB_APIKEY,
     publicHost: PUBLIC_HOST,
     whipAuthKey: process.env.WHIP_AUTH_KEY,
-    reAuthKey: process.env.REAUTH_AUTH_KEY ?? process.env.WHIP_AUTH_KEY,
+    reAuthKey: REAUTH_AUTH_KEY,
     dbManager: dbManager,
     productionManager: productionManager,
     ingestManager: ingestManager,
