@@ -120,53 +120,7 @@ SMB_ADDRESS=http://<smburl>:<smbport> SMB_APIKEY=<smbapikey> npm start
 
 See [Environment Variables](#environment-variables) for a full list of environment variables you can set. The default `DB_CONNECTION_STRING` is probably what you want to use for local development unless you use a remote db server.
 
-## Terraform infrastructure
-
-Requires terraform and AWS access
-
-```sh
-cd infra
-terraform init -var-file="dev.tfvars"
-```
-
-### Development workspace
-
-Create or select workspace `dev`
-
-```sh
-cd infra
-terraform workspace new dev
-```
-
-or
-
-```sh
-cd infra
-terraform workspace select dev
-```
-
-Create resources with variables for dev environment
-
-```sh
-terraform plan -var-file="dev.tfvars"
-terraform apply -var-file="dev.tfvars"
-```
-
-### Production workspace
-
-Create or select workspace `prod`
-
-```sh
-cd infra
-terraform workspace select prod
-```
-
-```sh
-terraform plan -var-file="prod.tfvars"
-terraform apply -var-file="prod.tfvars"
-```
-
-### Contributing
+## Contributing
 
 See [CONTRIBUTING](CONTRIBUTING.md)
 
