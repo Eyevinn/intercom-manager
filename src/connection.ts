@@ -176,7 +176,25 @@ export class Connection {
     }
 
     const audio = this.endpointDescription.audio;
-    const audioPayloadType = audio['payload-type'];
+
+    // For some versions of interconnected components we may receive an array of payload-types
+    // instead of a single payload-type. We pick the one that's opus, if present, or the first,
+    // and otherwise proceed as before:
+
+    let audioPayloadType = audio['payload-type'];
+
+    if (!audioPayloadType?.id) {
+        const audioPayloadTypes = audio['payload-types'];
+        if (!Array.isArray(audioPayloadTypes) || audioPayloadTypes.length === 0) {
+            throw new Error(
+              `endpointDescription.audio.payload-types missing/empty: ${JSON.stringify(audio)}`
+            );
+        }
+
+        // Prefer opus if present, else first
+        audioPayloadType =
+            audioPayloadTypes.find((pt: { name?: string }) => pt?.name?.toLowerCase() === 'opus');
+    }
 
     for (const element of this.mediaStreams.audio.ssrcs) {
       const audioDescription = this.makeMediaDescription('audio');
