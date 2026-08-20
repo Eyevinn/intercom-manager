@@ -1,5 +1,4 @@
 import { Type } from '@sinclair/typebox';
-import dotenv from 'dotenv';
 import { FastifyPluginCallback } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import { CoreFunctions } from './api_productions_core_functions';
@@ -26,7 +25,6 @@ import {
 } from './models';
 import { ProductionManager } from './production_manager';
 import { ISmbProtocol, SmbProtocol } from './smb';
-dotenv.config();
 
 export interface ApiProductionsOptions {
   smbServerBaseUrl: string;
