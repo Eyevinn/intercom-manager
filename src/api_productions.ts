@@ -733,8 +733,8 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
             .send({ sessionId, sdp: sdpOffer });
         } else {
           reply.code(400).send({
-            message: 'Could not establish a media connection',
-            stackTrace: 'Failed to generate sdp offer for endpoint'
+            message:
+              'Could not establish a media connection: failed to generate sdp offer for endpoint'
           });
           return;
         }
