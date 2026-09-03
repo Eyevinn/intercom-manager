@@ -92,9 +92,12 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
       schema: {
         description: 'WHIP endpoint for ingesting WebRTC streams',
         params: Type.Object({
-          productionId: Type.String({ maxLength: 200 }),
-          lineId: Type.String({ maxLength: 200 }),
-          username: Type.String({ maxLength: 200 })
+          productionId: Type.String({ minLength: 1, pattern: '^[0-9]+$' }),
+          lineId: Type.String({ minLength: 1, pattern: '^[0-9]+$' }),
+          username: Type.String({
+            maxLength: 200,
+            pattern: '^[\\w .-]{1,200}$'
+          })
         }),
         body: WhipWhepRequest,
         response: {
