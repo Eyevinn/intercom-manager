@@ -43,6 +43,10 @@ export class ProductionManager extends EventEmitter {
 
   constructor(dbManager: DbManager) {
     super();
+    // Long-poll endpoints register a transient 'users:change' listener per
+    // request, so concurrent pollers can exceed the default maxListeners (10)
+    // and emit spurious MaxListenersExceededWarning. Disable the limit.
+    this.setMaxListeners(0);
     this.dbManager = dbManager;
     this.userSessions = {};
   }

@@ -918,19 +918,29 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       try {
         const timeoutMs = 25_000;
 
-        // Wait until either users:change fires or timeout expires
+        // Wait until users:change fires, the timeout expires, or the client
+        // disconnects. Cleanup runs once in every exit path so the listener and
+        // timer are always released and resolve is never called twice.
         await new Promise<void>((resolve) => {
-          const onChange = () => {
+          let settled = false;
+
+          const cleanup = () => {
+            if (settled) {
+              return;
+            }
+            settled = true;
             clearTimeout(timer);
+            productionManager.off('users:change', onChange);
+            request.raw.off('close', cleanup);
             resolve();
           };
 
-          const timer = setTimeout(() => {
-            productionManager.off('users:change', onChange);
-            resolve();
-          }, timeoutMs);
+          const onChange = () => cleanup();
+
+          const timer = setTimeout(cleanup, timeoutMs);
 
           productionManager.once('users:change', onChange);
+          request.raw.on('close', cleanup);
         });
 
         const { productionId, lineId } = request.params;
