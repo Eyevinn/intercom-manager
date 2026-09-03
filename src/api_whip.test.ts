@@ -145,7 +145,7 @@ describe('apiWhip', () => {
 
       const response = await fastify.inject({
         method: 'POST',
-        url: '/whip/prod1/line1/testuser',
+        url: '/whip/123/456/testuser',
         headers: {
           'content-type': 'application/sdp'
         },
@@ -156,7 +156,7 @@ describe('apiWhip', () => {
       expect(response.statusCode).toBe(201);
       expect(response.headers['content-type']).toBe('application/sdp');
       expect(response.headers['location']).toContain(
-        '/whip/prod1/line1/mock-session-id'
+        '/whip/123/456/mock-session-id'
       );
       expect(response.payload).toContain('v=0');
     });
@@ -170,7 +170,7 @@ describe('apiWhip', () => {
 
       const response = await fastify.inject({
         method: 'POST',
-        url: '/whip/prod1/line1/testuser',
+        url: '/whip/123/456/testuser',
         headers: {
           'content-type': 'application/sdp'
         },
@@ -192,7 +192,7 @@ describe('apiWhip', () => {
 
       const response = await fastify.inject({
         method: 'POST',
-        url: '/whip/prod1/line1/testuser',
+        url: '/whip/123/456/testuser',
         headers: {
           'content-type': 'application/json'
         },
@@ -202,6 +202,36 @@ describe('apiWhip', () => {
       expect(response.statusCode).toBe(415);
     });
 
+    it('should return 400 when username contains control chars (log injection)', async () => {
+      const fastify = await createTestServer();
+
+      const response = await fastify.inject({
+        method: 'POST',
+        url: '/whip/123/456/' + encodeURIComponent('evil\ninjected'),
+        headers: {
+          'content-type': 'application/sdp'
+        },
+        payload: 'v=0\r\n'
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('should return 400 when productionId is not numeric', async () => {
+      const fastify = await createTestServer();
+
+      const response = await fastify.inject({
+        method: 'POST',
+        url: '/whip/abc/456/testuser',
+        headers: {
+          'content-type': 'application/sdp'
+        },
+        payload: 'v=0\r\n'
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
     it('should return 429 when rate limit is exceeded', async () => {
       const fastify = await createTestServer();
 
@@ -209,7 +239,7 @@ describe('apiWhip', () => {
       for (let i = 0; i < 10; i++) {
         await fastify.inject({
           method: 'POST',
-          url: '/whip/prod1/line1/testuser',
+          url: '/whip/123/456/testuser',
           headers: {
             'content-type': 'application/sdp'
           },
@@ -220,7 +250,7 @@ describe('apiWhip', () => {
       // The 11th request should exceed the rate limit
       const response = await fastify.inject({
         method: 'POST',
-        url: '/whip/prod1/line1/testuser',
+        url: '/whip/123/456/testuser',
         headers: {
           'content-type': 'application/sdp'
         },
@@ -241,7 +271,7 @@ describe('apiWhip', () => {
       const fastify = await createAuthServer();
       const res = await fastify.inject({
         method: 'POST',
-        url: '/whip/prod1/line1/testuser',
+        url: '/whip/123/456/testuser',
         headers: { 'content-type': 'application/sdp' },
         payload: 'v=0\r\n'
       });
@@ -253,7 +283,7 @@ describe('apiWhip', () => {
       const fastify = await createAuthServer();
       const res = await fastify.inject({
         method: 'POST',
-        url: '/whip/prod1/line1/testuser',
+        url: '/whip/123/456/testuser',
         headers: {
           'content-type': 'application/sdp',
           authorization: 'Bearer wrong'
@@ -268,7 +298,7 @@ describe('apiWhip', () => {
       const fastify = await createAuthServer();
       const res = await fastify.inject({
         method: 'POST',
-        url: '/whip/prod1/line1/testuser',
+        url: '/whip/123/456/testuser',
         headers: {
           'content-type': 'application/sdp',
           authorization: 'Bearer secret-123'
@@ -285,7 +315,7 @@ describe('apiWhip', () => {
       const fastify = await createAuthServer();
       const res = await fastify.inject({
         method: 'DELETE',
-        url: '/whip/prod1/line1/mock-session-id'
+        url: '/whip/123/456/mock-session-id'
       });
       expect(res.statusCode).toBe(401);
     });
@@ -294,7 +324,7 @@ describe('apiWhip', () => {
       const fastify = await createAuthServer();
       const res = await fastify.inject({
         method: 'DELETE',
-        url: '/whip/prod1/line1/mock-session-id',
+        url: '/whip/123/456/mock-session-id',
         headers: { authorization: 'Bearer secret-123' }
       });
       expect(res.statusCode).toBe(200);
@@ -309,7 +339,7 @@ describe('apiWhip', () => {
 
       const response = await fastify.inject({
         method: 'DELETE',
-        url: '/whip/prod1/line1/mock-session-id'
+        url: '/whip/123/456/mock-session-id'
       });
 
       expect(response.statusCode).toBe(200);
@@ -322,7 +352,7 @@ describe('apiWhip', () => {
 
       const response = await fastify.inject({
         method: 'DELETE',
-        url: '/whip/prod1/line1/nonexistent-session'
+        url: '/whip/123/456/nonexistent-session'
       });
 
       expect(response.statusCode).toBe(404);
@@ -378,7 +408,7 @@ describe('apiWhip', () => {
 
       const response = await fastify.inject({
         method: 'PATCH',
-        url: '/whip/prod1/line1/mock-session-id',
+        url: '/whip/123/456/mock-session-id',
         headers: { 'content-type': 'application/trickle-ice-sdpfrag' },
         payload: 'a=candidate:1 1 UDP 12345 192.168.1.2 54321 typ host'
       });
