@@ -328,7 +328,7 @@ export const ShareRequest = Type.Object({
   path: Type.String({
     description: 'The application path to share',
     maxLength: 500,
-    pattern: '^/'
+    pattern: '^/(?![/\\\\]).*'
   })
 });
 export type ShareRequest = Static<typeof ShareRequest>;

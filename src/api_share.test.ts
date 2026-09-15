@@ -83,4 +83,35 @@ describe('share api', () => {
       url: 'https://example.com/mypath/to/share'
     });
   });
+
+  test.each([
+    '//evil.com/x',
+    '/\\evil.com',
+    '\\\\evil.com',
+    'https://evil.com',
+    'no-leading-slash'
+  ])('rejects scheme-relative or malformed share path %s', async (path) => {
+    const server = await api({
+      title: 'my awesome service',
+      smbServerBaseUrl: 'http://localhost',
+      endpointIdleTimeout: '60',
+      publicHost: 'https://example.com',
+      dbManager: mockDbManager,
+      productionManager: mockProductionManager,
+      ingestManager: mockIngestManager,
+      coreFunctions: new CoreFunctions(
+        mockProductionManager,
+        new ConnectionQueue()
+      )
+    });
+    const response = await server.inject({
+      method: 'POST',
+      url: '/api/v1/share',
+      body: {
+        path
+      }
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().url).toBeUndefined();
+  });
 });
