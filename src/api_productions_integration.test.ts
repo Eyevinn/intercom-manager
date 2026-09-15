@@ -186,6 +186,7 @@ describe('MockSmbProtocol Integration with CoreFunctions', () => {
         conferenceId,
         'ep-001',
         true, // audio
+        false, // video
         false, // data
         true, // iceControlling
         'ssrc-rewrite',
@@ -213,6 +214,7 @@ describe('MockSmbProtocol Integration with CoreFunctions', () => {
         conferenceId,
         'ep-002',
         false, // audio
+        false, // video
         true, // data
         false,
         'forwarder',
@@ -232,6 +234,7 @@ describe('MockSmbProtocol Integration with CoreFunctions', () => {
           'nonexistent-conf',
           'ep-003',
           true,
+          false,
           false,
           true,
           'ssrc-rewrite',
@@ -262,6 +265,7 @@ describe('MockSmbProtocol Integration with CoreFunctions', () => {
         conferenceId,
         endpointId,
         true,
+        false,
         true,
         true,
         'ssrc-rewrite',
@@ -314,6 +318,7 @@ describe('MockSmbProtocol Integration with CoreFunctions', () => {
         'ep-a',
         true,
         false,
+        false,
         true,
         'ssrc-rewrite',
         60
@@ -326,6 +331,7 @@ describe('MockSmbProtocol Integration with CoreFunctions', () => {
         conferenceId,
         'ep-b',
         true,
+        false,
         false,
         true,
         'ssrc-rewrite',
@@ -363,6 +369,7 @@ describe('MockSmbProtocol Integration with CoreFunctions', () => {
         'ep-1',
         true,
         false,
+        false,
         true,
         'ssrc-rewrite',
         60,
@@ -373,6 +380,7 @@ describe('MockSmbProtocol Integration with CoreFunctions', () => {
         confId,
         'ep-2',
         true,
+        false,
         false,
         true,
         'ssrc-rewrite',
@@ -395,6 +403,7 @@ describe('MockSmbProtocol Integration with CoreFunctions', () => {
         'ep-1',
         true,
         false,
+        false,
         true,
         'ssrc-rewrite',
         60,
@@ -415,6 +424,7 @@ describe('MockSmbProtocol Integration with CoreFunctions', () => {
         confId,
         'ep-1',
         true,
+        false,
         false,
         true,
         'ssrc-rewrite',

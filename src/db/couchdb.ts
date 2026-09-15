@@ -13,6 +13,39 @@ import nano from 'nano';
 import { v4 as uuidv4 } from 'uuid';
 
 const SESSION_PRUNE_SECONDS = 7_200;
+
+// CouchDB keeps every document type in one database, so a session document's
+// id carries a `session_` prefix that separates it from productions, counters
+// and presets (see the filters in the getProductions* methods). That prefix is
+// a storage detail and must not escape this driver: callers pass, store and
+// compare the bare session id, exactly as the MongoDB driver returns it.
+//
+// Keeping the two apart matters. A prefix that leaks into a returned `_id`
+// makes the same session compare unequal to itself across two APIs — the id
+// handed out on join is bare, so any `!==` self-exclusion against a listed
+// participant silently never matches.
+const SESSION_DOC_PREFIX = 'session_';
+
+// Tolerates an already-prefixed id so a caller still holding one from an
+// earlier read cannot produce `session_session_…`.
+const toSessionDocId = (sessionId: string): string =>
+  sessionId.startsWith(SESSION_DOC_PREFIX)
+    ? sessionId
+    : `${SESSION_DOC_PREFIX}${sessionId}`;
+
+// Normalizes a stored document back to the domain shape: the bare session id
+// in `_id`. Applies to documents written before this normalization existed,
+// so no migration or dual-form handling is needed further up.
+const toUserSession = (doc: unknown): UserSession => {
+  const raw = doc as { _id?: unknown };
+  const docId = String(raw?._id ?? '');
+  return {
+    ...(doc as object),
+    _id: docId.startsWith(SESSION_DOC_PREFIX)
+      ? docId.slice(SESSION_DOC_PREFIX.length)
+      : docId
+  } as UserSession;
+};
 export class DbManagerCouchDb implements DbManager {
   private client;
   private nanoDb: nano.DocumentScope<unknown> | undefined;
@@ -463,28 +496,28 @@ export class DbManagerCouchDb implements DbManager {
       throw new Error('Database not connected');
     }
 
-    if (!sessionId.startsWith('session')) {
-      sessionId = `session_${sessionId}`;
-    }
+    const sessionDocId = toSessionDocId(sessionId);
 
     let existingDoc: any;
 
     // Check if document exists, if not creates new session
     try {
-      existingDoc = await this.withRetry(() => this.nanoDb!.get(sessionId));
+      existingDoc = await this.withRetry(() => this.nanoDb!.get(sessionDocId));
     } catch (error: any) {
       if (error.statusCode === 404) {
-        existingDoc = { _id: sessionId };
+        existingDoc = { _id: sessionDocId };
       } else {
         throw error;
       }
     }
     const now = new Date();
+    // `_id` last on purpose: userSession may be a normalized session carrying a
+    // bare `_id`, which must not become the document id.
     const updatedSession = {
       ...existingDoc,
       ...userSession,
       lastSeenAt: now.toISOString(),
-      _id: sessionId
+      _id: sessionDocId
     };
     // Set createdAt only on first insert (like MongoDB's $setOnInsert)
     if (!existingDoc.createdAt) {
@@ -498,10 +531,8 @@ export class DbManagerCouchDb implements DbManager {
     if (!this.nanoDb) {
       throw new Error('Database not connected');
     }
-    if (!sessionId.startsWith('session')) {
-      sessionId = `session_${sessionId}`;
-    }
-    const session = await this.withRetry(() => this.nanoDb!.get(sessionId));
+    const sessionDocId = toSessionDocId(sessionId);
+    const session = await this.withRetry(() => this.nanoDb!.get(sessionDocId));
     const response = await this.withRetry(() =>
       this.nanoDb!.destroy(session._id, session._rev)
     );
@@ -514,11 +545,9 @@ export class DbManagerCouchDb implements DbManager {
       throw new Error('Database not connected');
     }
 
-    if (!sessionId.startsWith('session')) {
-      sessionId = `session_${sessionId}`;
-    }
-    const session = await this.withRetry(() => this.nanoDb!.get(sessionId));
-    return session as any as UserSession;
+    const sessionDocId = toSessionDocId(sessionId);
+    const session = await this.withRetry(() => this.nanoDb!.get(sessionDocId));
+    return toUserSession(session);
   }
 
   async updateSession(
@@ -530,13 +559,11 @@ export class DbManagerCouchDb implements DbManager {
     if (!this.nanoDb) {
       throw new Error('Database not connected');
     }
-    if (!sessionId.startsWith('session')) {
-      sessionId = `session_${sessionId}`;
-    }
+    const sessionDocId = toSessionDocId(sessionId);
 
     let doc: any;
     try {
-      doc = await this.withRetry(() => this.nanoDb!.get(sessionId));
+      doc = await this.withRetry(() => this.nanoDb!.get(sessionDocId));
     } catch (error: any) {
       if (error.statusCode === 404) {
         return false;
@@ -572,7 +599,7 @@ export class DbManagerCouchDb implements DbManager {
     const response = await this.withRetry(() =>
       this.nanoDb!.find({ selector, limit: 10000 })
     );
-    return response.docs as unknown as UserSession[]; // could also expand type UserSession to avoid unknown
+    return response.docs.map(toUserSession);
   }
 
   async addPreset(preset: Omit<Preset, '_id'>): Promise<Preset> {

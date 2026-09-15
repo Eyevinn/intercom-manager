@@ -168,6 +168,12 @@ const mockProductionManager = {
     .mockImplementation((lines: any[], id: string) =>
       lines.find((l) => l.id === id)
     ),
+  requireLine: jest.fn().mockImplementation((lines: any[], id: string) => {
+    const found = lines.find((l) => l.id === id);
+    if (!found) throw new Error(`Line ${id} not found`);
+    return found;
+  }),
+  clearWhepSourceIfPinned: jest.fn().mockResolvedValue(undefined),
   updateUserLastSeen: jest
     .fn()
     .mockImplementation((sessionId: string) => sessionId === 'alive-session'),
@@ -176,6 +182,7 @@ const mockProductionManager = {
   removeUserSession: jest
     .fn()
     .mockImplementation((sessionId: string) => sessionId),
+  emit: jest.fn(),
   createUserSession: jest.fn().mockResolvedValue(undefined),
   getActiveUsers: jest.fn().mockResolvedValue([])
 } as any;
