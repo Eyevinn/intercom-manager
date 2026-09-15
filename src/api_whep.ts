@@ -314,6 +314,10 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
     {
       schema: {
         description: 'CORS preflight and WHEP discovery endpoint',
+        params: Type.Object({
+          productionId: Type.String({ minLength: 1, maxLength: 200 }),
+          lineId: Type.String({ minLength: 1, maxLength: 200 })
+        }),
         response: {
           200: Type.String({ description: 'OK' })
         }
