@@ -447,4 +447,53 @@ describe('Input Validation', () => {
       expect(response.statusCode).toBe(410);
     });
   });
+
+  // ── Ingest :ingestId param validation (regression for #257) ────
+  // Routes are 501-gated by a preHandler, but Fastify runs schema
+  // validation before preHandler, so a bad ingestId is rejected with
+  // 400 while a valid numeric id falls through to the 501 stub.
+
+  describe('Ingest :ingestId param validation', () => {
+    test.each([
+      ['non-numeric', 'abc'],
+      ['empty-ish', ' '],
+      ['float', '1.5'],
+      ['negative', '-1'],
+      ['special characters', 'id!@#']
+    ])(
+      'GET /ingest/:ingestId rejects %s ingestId with 400',
+      async (_label, badId) => {
+        const response = await server.inject({
+          method: 'GET',
+          url: `/api/v1/ingest/${encodeURIComponent(badId)}`
+        });
+        expect(response.statusCode).toBe(400);
+      }
+    );
+
+    test('PATCH /ingest/:ingestId rejects non-numeric ingestId with 400', async () => {
+      const response = await server.inject({
+        method: 'PATCH',
+        url: '/api/v1/ingest/abc',
+        body: { label: 'valid-label' }
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
+    test('DELETE /ingest/:ingestId rejects non-numeric ingestId with 400', async () => {
+      const response = await server.inject({
+        method: 'DELETE',
+        url: '/api/v1/ingest/abc'
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
+    test('GET /ingest/:ingestId with a valid numeric id passes validation (501, not 400)', async () => {
+      const response = await server.inject({
+        method: 'GET',
+        url: '/api/v1/ingest/123'
+      });
+      expect(response.statusCode).toBe(501);
+    });
+  });
 });
