@@ -143,12 +143,6 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
 
         const offerHasVideo = sdpOffer.media.some((m) => m.type === 'video');
 
-        // Read the line's WHEP source pin (set via
-        // PATCH /production/:productionId/line/:lineId/whep-source).
-        // When set, this WHEP recipient is wired to receive only the pinned
-        // publisher's video instead of the SFU-default forward-all.
-        // Resolved at recipient-create time only; a later pin change does
-        // not retroactively reconfigure this endpoint.
         let subscribeToVideo:
           | { streams: any[]; ssrcs: number[]; endpointId: string }
           | undefined;
@@ -343,9 +337,6 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
           return;
         }
 
-        // Clear the line's WHEP source pin if this session is the pinned
-        // one. Must run BEFORE deleteUserSession so we can still resolve
-        // the session's productionId/lineId via the DB.
         await productionManager.clearWhepSourceIfPinned(sessionId);
 
         await opts.dbManager.deleteUserSession(sessionId);

@@ -10,11 +10,6 @@ interface AllocateConferenceResponse {
   id: string;
 }
 
-/**
- * Thrown when SMB rejects a configure/reconfigure action. Carries the HTTP
- * status and raw response body so callers can tell a transient race apart from
- * a real failure without parsing the message string.
- */
 export class SmbEndpointActionError extends Error {
   constructor(
     readonly action: 'configure' | 'reconfigure',
@@ -25,14 +20,6 @@ export class SmbEndpointActionError extends Error {
     this.name = 'SmbEndpointActionError';
   }
 
-  /**
-   * True when SMB refused a reconfigure because the endpoint exists but has
-   * never been configured. An endpoint is allocated first and configured only
-   * once the client's SDP answer arrives, so anything that reconfigures it in
-   * between — pinning a video source, for instance — loses a race it can win
-   * by retrying. Transient by nature: the caller should tell the client to
-   * retry rather than report a failure.
-   */
   get isEndpointNotConfiguredYet(): boolean {
     return (
       this.status === 400 && /not configured in first place/i.test(this.body)
@@ -326,29 +313,6 @@ export class SmbProtocol implements ISmbProtocol {
     );
   }
 
-  /**
-   * Force a fresh keyframe (IDR) to be delivered to a receiver's egress slot.
-   *
-   * This SMB version exposes no dedicated "request keyframe" / FIR action in
-   * its REST surface (only allocate / configure / reconfigure / expire — see
-   * SymphonyMediaBridge doc/api/READMEapi.md). A keyframe is only ever
-   * solicited internally by `VideoForwarderReceiveJob`, which sends a PLI to a
-   * publisher when forwarding for an inbound SSRC (re)initializes and the first
-   * forwarded packet is not a keyframe.
-   *
-   * Swapping the receiver's `ssrc-whitelist` in place (the pin-change path)
-   * does NOT re-init that forwarding context, so the decoder freezes on the
-   * previous publisher's last frame until the new source emits its next
-   * natural keyframe.
-   *
-   * The viable mechanism with this SMB version is a whitelist remove -> re-add
-   * cycle on the receiver's own egress endpoint: clearing then re-applying the
-   * whitelist forces SMB to tear down and re-establish the outbound forwarding
-   * context for the newly pinned SSRC, which re-engages the
-   * "first forwarded packet not a keyframe -> send PLI to publisher" path and
-   * yields a fresh IDR. Both steps are plain `reconfigure` PUTs, so this stays
-   * consistent with the existing SMB client patterns.
-   */
   async requestKeyframe(
     smbUrl: string,
     conferenceId: string,

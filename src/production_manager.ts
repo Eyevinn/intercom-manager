@@ -322,26 +322,12 @@ export class ProductionManager extends EventEmitter {
       line.whepSourceSessionId = null;
       await this.dbManager.updateProduction(production);
     } catch (err) {
-      // Don't let cleanup failures block the session-delete flow itself —
-      // worst case a stale pin survives until next time, and the WHEP
-      // creation path's "no usable sessionDescription.video" guard
-      // already handles that gracefully.
       Log().warn(
         `[whep-pin] clearWhepSourceIfPinned for ${sessionId} failed: ${err}`
       );
     }
   }
 
-  /**
-   * Find the active receiver sessions on the same line that pinned the
-   * given (leaving) session as their per-session video source. A receiver's
-   * `ssrc-whitelist` is built from the source's video SSRCs, so when the
-   * source leaves those SSRCs go dead. SMB's whitelist filter runs *before*
-   * its keyframe logic, so a dangling whitelist drops all video to the
-   * receiver (frozen/black tile) and never self-heals on the bridge — the
-   * caller must reconfigure these receivers. Returns [] when the leaver
-   * isn't known or nobody pinned it.
-   */
   async getReceiversPinnedToSession(
     leaverSessionId: string
   ): Promise<UserSession[]> {
@@ -359,10 +345,6 @@ export class ProductionManager extends EventEmitter {
     );
   }
 
-  /**
-   * Pin a single participant's video as the only stream forwarded to WHEP
-   * egress recipients on this line, or pass `null` to clear the pin.
-   */
   async setLineWhepSource(
     production: Production,
     lineId: string,
@@ -370,10 +352,6 @@ export class ProductionManager extends EventEmitter {
   ): Promise<Production | undefined> {
     const line = production.lines.find((l) => l.id === lineId);
     if (!line) return undefined;
-    // No-op fast path: skip the db write when the value is already what
-    // the caller asked for. Without this, MongoDB's $set returns
-    // modifiedCount=0 on identical-value writes and dbManager.updateProduction
-    // turns that into `undefined`, which the route surfaces as a 500.
     const current = line.whepSourceSessionId ?? null;
     const next = sessionId ?? null;
     if (current === next) return production;
@@ -516,16 +494,7 @@ export class ProductionManager extends EventEmitter {
     return ok;
   }
 
-  // Update user session in database. Writes DB unconditionally so it
-  // works across intercom-manager replicas: the session may have been
-  // created on a different replica (POST /session lands on A, PATCH
-  // /session/:id with the SDP answer lands on B) and B's userSessions
-  // cache doesn't hold it. Previously this method early-returned false
-  // when the cache lookup missed, silently dropping the
-  // sessionDescription/endpointId write — receivers later resolving
-  // pins from this session got stale video.ssrcs and the whitelist was
-  // wrong, producing the multi-replica "pinning sometimes doesn't work"
-  // symptom.
+  // Update user session in database
   async updateUserEndpoint(
     sessionId: string,
     endpointId: string,
@@ -553,10 +522,6 @@ export class ProductionManager extends EventEmitter {
     return ok;
   }
 
-  // Flips the hasVideo flag for a session. Writes the DB unconditionally
-  // so the auto-pin candidate query sees the change regardless of which
-  // replica owns the session in memory; updates the in-process cache
-  // opportunistically. Same multi-replica safety as updateSessionVideoPin.
   async updateSessionHasVideo(
     sessionId: string,
     hasVideo: boolean
@@ -574,12 +539,6 @@ export class ProductionManager extends EventEmitter {
     return ok;
   }
 
-  // Persists a refreshed sessionDescription (e.g. with updated
-  // ssrc-whitelist) and the pin reference for the receiver. Writes the DB
-  // unconditionally so it works even when the session lives on another
-  // intercom-manager replica (the in-process cache mutation then no-ops
-  // gracefully). Emits users:change so local listeners see the update.
-  // Returns the DB write result.
   async updateSessionVideoPin(
     sessionId: string,
     sessionDescription: SmbEndpointDescription,

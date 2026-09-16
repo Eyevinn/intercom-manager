@@ -433,12 +433,6 @@ describe('CoreFunctions SDP Tests', () => {
       expect(endpoint['bundle-transport']!.ice!.ufrag).toBe(originalUfrag);
     });
 
-    // A WHIP publisher builds no video receive path, so any video SMB forwards
-    // to it lands on an unlinked webrtcbin transport and kills the whole
-    // pipeline (GST_FLOW_NOT_LINKED) — taking the publisher's own outbound
-    // video with it. An empty-but-present ssrc-whitelist is the only value SMB
-    // reads as "forward nothing"; deleting the key means last-N, i.e. forward
-    // everything.
     test('blocks video egress to a WHIP publisher with an empty ssrc-whitelist', async () => {
       const confId = await mockSmb.allocateConference(smbUrl, smbKey);
       const endpoint = createMockEndpointDescription();

@@ -82,7 +82,6 @@ export interface SfuEndpointDescription {
     'rtp-hdrexts': SfuRtpHeaderExtension[];
   };
   video?: {
-    // SMB allocate response uses 'payload-types' (array); internal format uses 'payload-type' (singular)
     'payload-type'?: VideoSmbPayloadType;
     'payload-types'?: VideoSmbPayloadType[];
     'rtp-hdrexts'?: SfuRtpHeaderExtension[];

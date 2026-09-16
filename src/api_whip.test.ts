@@ -147,8 +147,6 @@ describe('apiWhip', () => {
    * consumers that never applied to a publisher.
    */
   describe('video relay type', () => {
-    // createEndpoint(smb, url, key, confId, endpointId, audio, video, data,
-    //                iceControlling, audioRelayType, idleTimeout, videoRelayType)
     const videoRelayArg = () =>
       (coreFunctions.createEndpoint as jest.Mock).mock.calls[0][11];
 

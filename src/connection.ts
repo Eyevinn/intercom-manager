@@ -181,9 +181,6 @@ export class Connection {
 
     const video = this.endpointDescription.video;
 
-    // SMB allocate response uses 'payload-types' (array).
-    // The internal/WHIP path normalises to 'payload-type' (singular).
-    // Accept both.
     const rawPayloadTypes: VideoSmbPayloadType[] =
       video['payload-types'] ??
       (video['payload-type'] ? [video['payload-type']] : []);
@@ -202,16 +199,10 @@ export class Connection {
     const preferredCodec = h264Raw ?? vp8Raw;
     if (!preferredCodec) return;
 
-    // Don't filter RTX by apt — SMB may return an incorrect apt value.
-    // We correct it below when building payloadTypes.
     const rtxRaw = rawPayloadTypes.find(
       (pt) => pt.name.toLowerCase() === 'rtx'
     );
 
-    // Normalize to stable PT numbers so the SDP offer, browser answer, and
-    // SMB configure body all agree. Both H264 and VP8 use the same main/RTX
-    // PTs — they are mutually exclusive (global SMB config selects one
-    // codec). See sfu/constants.ts for rationale.
     const mainPt = NORMALIZED_VIDEO_PT_MAIN;
     const rtxPt = NORMALIZED_VIDEO_PT_RTX;
 
@@ -277,10 +268,6 @@ export class Connection {
       return;
     }
 
-    // One video m-line per pre-allocated SSRC — mirrors the audio fan-out
-    // in addIngestMids. Each m-line carries exactly one SSRC's identity
-    // attributes so the browser can demux remote video sources onto
-    // separate RTCRtpReceivers (ontrack fires per m-line).
     for (const element of videoSsrcs) {
       const md = buildVideoDescription();
       md.ssrcs.push({

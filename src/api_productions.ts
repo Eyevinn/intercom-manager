@@ -611,9 +611,6 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     }
   );
 
-  // Pin (or clear) which participant's video is forwarded to WHEP egress
-  // recipients on this line. The pin is read at WHEP creation time only —
-  // it does NOT retroactively reconfigure already-connected WHEP recipients.
   fastify.patch<{
     Params: { productionId: string; lineId: string };
     Body: Static<typeof SetLineWhepSourceRequest>;
@@ -677,10 +674,6 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     }
   );
 
-  // Per-session video source pin for browser users. Updates the SMB
-  // egress filter (`ssrc-whitelist` on this user's video) live via the
-  // SMB `reconfigure` action — no client SDP renegotiation. Pass
-  // `null` to clear the pin and restore default rotation.
   fastify.patch<{
     Params: { sessionId: string };
     Body: Static<typeof SetSessionVideoSourceRequest>;
@@ -782,13 +775,6 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
             smbServerApiKey
           );
         } catch (err) {
-          // This session's endpoint is allocated but not configured yet: its
-          // SDP answer has not come back, so SMB has nothing to reconfigure.
-          // A client that pins as soon as a publisher appears can arrive
-          // inside that window. Transient, so answer 425 like the
-          // no-SSRCs-yet case above rather than letting it reach the 500
-          // catch-all — a 500 reads as a real failure and clients do not
-          // retry it. Any other SMB rejection still propagates.
           if (
             err instanceof SmbEndpointActionError &&
             err.isEndpointNotConfiguredYet
@@ -803,14 +789,6 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           throw err;
         }
 
-        // The whitelist swap above changes the receiver's egress source in
-        // place but does NOT cause SMB to re-init the outbound forwarding
-        // context, so the decoder freezes on the previous publisher's last
-        // frame until the new source emits its next natural keyframe (which
-        // may never come). Force a fresh keyframe for the newly pinned source
-        // so the decoder recovers immediately. Only needed when a source is
-        // pinned and the pin actually changed (clearing the pin or a no-op
-        // re-pin needs no refresh).
         const pinChanged =
           pinnedSessionId !== null &&
           pinnedSessionId !== (userSession.pinnedVideoSessionId ?? null);
@@ -1080,16 +1058,6 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
             const lineForPin = production?.lines.find(
               (l) => l.id === userSession.lineId
             );
-            // Honor the documented contract: null whepSourceSessionId means
-            // 'no line-level pin'. We do NOT auto-pick from arbitrary
-            // hasVideo sessions — that was non-deterministic across
-            // replicas. As a deterministic narrow exception
-            // we DO auto-pick when there is exactly one active WHIP
-            // publisher with video on the line: all replicas see the
-            // same single candidate, and it bridges the gap between SDP
-            // negotiation and the frontend's per-session pin landing —
-            // otherwise WHIP receivers can come up on default SMB
-            // rotation and never reach the WHIP if it isn't in last-N.
             let pinnedSessionId: string | null =
               lineForPin?.whepSourceSessionId ?? null;
 
@@ -1143,17 +1111,6 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         );
 
         try {
-          // hasVideo must mean "this session publishes video others can pin"
-          // — i.e. it has sending video SSRCs persisted. Deriving it from the
-          // answer m-line direction (sendrecv/sendonly, or no direction =
-          // implicitly sendrecv per RFC 8829 §5.3.2 / RFC 3264 §6.1) is wrong:
-          // a browser can negotiate bidirectional video yet emit no a=ssrc
-          // lines (no camera track attached at answer time), stamping
-          // hasVideo:true with an empty video.ssrcs. The WHEP auto-pin query
-          // {hasVideo:true} then resolves this session as a source, but the
-          // pin handler finds no SSRCs -> 425 forever, leaving the receiver
-          // stuck on its self-preview. Bind hasVideo to the SSRCs extracted by
-          // handleAnswerRequest above (same rule the WHIP path uses).
           const sendingSsrcs = connectionEndpointDescription.video?.ssrcs ?? [];
           await productionManager.updateSessionHasVideo(
             sessionId,
@@ -1227,21 +1184,8 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     async (request, reply) => {
       const sessionId = request.params.sessionId;
       try {
-        // Clear the line's WHEP source pin if this session is the pinned
-        // one. Must run BEFORE deleteUserSession so we can still resolve
-        // the session's productionId/lineId via the DB.
         await productionManager.clearWhepSourceIfPinned(sessionId);
 
-        // Reconcile per-session video pins: any browser receiver that pinned
-        // THIS leaving publisher has an `ssrc-whitelist` naming SSRCs that are
-        // about to go dead. SMB's whitelist filter runs before its keyframe
-        // logic, so the dangling whitelist drops all video to that receiver
-        // (frozen/black tile) and never recovers on the bridge. Clear the
-        // whitelist (delete the key -> last-N fallback, NOT an empty-but-
-        // enabled whitelist which SMB treats as "block everything") and the
-        // stored pin, so the receiver immediately falls back to live video;
-        // the client's auto-pin effect then re-pins to a current source.
-        // Must also run BEFORE deleteUserSession (needs the leaver in the DB).
         try {
           const affected = await productionManager.getReceiversPinnedToSession(
             sessionId
@@ -1291,10 +1235,6 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         if (!ok) {
           throw new Error(`Could not delete connection ${sessionId}`);
         }
-        // Mirror the WHIP delete path: drop the in-memory cache entry and
-        // notify listeners. Without this the session lingers in
-        // ProductionManager.userSessions after its DB row is gone, and the
-        // 'users:change' event never fires on a browser leave.
         productionManager.removeUserSession(sessionId);
         productionManager.emit('users:change');
         reply.code(200).send(`Deleted connection ${sessionId}`);

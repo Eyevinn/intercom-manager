@@ -14,28 +14,13 @@ import { v4 as uuidv4 } from 'uuid';
 
 const SESSION_PRUNE_SECONDS = 7_200;
 
-// CouchDB keeps every document type in one database, so a session document's
-// id carries a `session_` prefix that separates it from productions, counters
-// and presets (see the filters in the getProductions* methods). That prefix is
-// a storage detail and must not escape this driver: callers pass, store and
-// compare the bare session id, exactly as the MongoDB driver returns it.
-//
-// Keeping the two apart matters. A prefix that leaks into a returned `_id`
-// makes the same session compare unequal to itself across two APIs — the id
-// handed out on join is bare, so any `!==` self-exclusion against a listed
-// participant silently never matches.
 const SESSION_DOC_PREFIX = 'session_';
 
-// Tolerates an already-prefixed id so a caller still holding one from an
-// earlier read cannot produce `session_session_…`.
 const toSessionDocId = (sessionId: string): string =>
   sessionId.startsWith(SESSION_DOC_PREFIX)
     ? sessionId
     : `${SESSION_DOC_PREFIX}${sessionId}`;
 
-// Normalizes a stored document back to the domain shape: the bare session id
-// in `_id`. Applies to documents written before this normalization existed,
-// so no migration or dual-form handling is needed further up.
 const toUserSession = (doc: unknown): UserSession => {
   const raw = doc as { _id?: unknown };
   const docId = String(raw?._id ?? '');

@@ -153,10 +153,6 @@ const SmbRtpHeaderExtension = Type.Object({
   uri: Type.String()
 });
 
-// Allow arbitrary string→string entries. Codec parameters include
-// x-google-* bitrate hints for VP8, profile-level-id/packetization-mode
-// for H264, apt for RTX, and other codec-specific fmtp values. Mirrors
-// SfuEndpointDescription.VideoSmbPayloadType.parameters in sfu/interface.ts.
 const VideoSmbPayloadParameters = Type.Record(Type.String(), Type.String());
 
 const VideoSmbPayloadType = Type.Object({
@@ -191,18 +187,13 @@ export const SmbEndpointDescription = Type.Object({
     'payload-type': AudioSmbPayloadType,
     'rtp-hdrexts': Type.Array(SmbRtpHeaderExtension)
   }),
-  // Mirror SfuEndpointDescription in sfu/interface.ts: video is absent
-  // for no-video sessions; when present, SMB's allocate response uses
-  // plural 'payload-types' while our internal/configure format uses
-  // singular 'payload-type'.
+
   video: Type.Optional(
     Type.Object({
       ssrcs: Type.Optional(Type.Array(Type.Number())),
       'payload-type': Type.Optional(VideoSmbPayloadType),
       'payload-types': Type.Optional(Type.Array(VideoSmbPayloadType)),
       'rtp-hdrexts': Type.Optional(Type.Array(SmbRtpHeaderExtension)),
-      // SMB-specific egress fields. Declaring them on the
-      // schema lets call sites drop `(... as any)` casts.
       streams: Type.Optional(
         Type.Array(
           Type.Object({
@@ -254,11 +245,7 @@ export const UserResponse = Type.Object({
   endpointId: Type.Optional(Type.String()),
   isActive: Type.Boolean(),
   isWhip: Type.Boolean(),
-  // Distinguishes WHEP egress recipients from WHIP publishers within the
-  // `isWhip: true` set. Both currently set isWhip=true (legacy), but only
-  // WHIP publishers actually transmit video into the conference.
   isWhepReceiver: Type.Optional(Type.Boolean()),
-  // True if this session has a sendable video track right now.
   hasVideo: Type.Boolean()
 });
 
@@ -283,9 +270,6 @@ export const UserSession = Type.Object({
   iceCandidates: Type.Optional(Type.Array(IceCandidate)),
   isWhip: Type.Boolean(),
   isWhepReceiver: Type.Optional(Type.Boolean()),
-  // Required to match UserResponse. createUserSession defaults it to
-  // false and every write site supplies a boolean, so the on-write
-  // normalization is already in place; this documents the contract.
   hasVideo: Type.Boolean(),
   pinnedVideoSessionId: Type.Optional(Type.String())
 });
@@ -327,11 +311,6 @@ export const SetLineWhepSourceResponse = Type.Object({
   pinnedSessionId: Type.Union([Type.String(), Type.Null()])
 });
 
-// Per-session video source pin. The receiver tells the backend which
-// publisher's video they want to see; the backend resolves that user's
-// stored ssrcs and reconfigures the receiver's SMB endpoint with a new
-// `ssrc-whitelist` so the egress filter swaps without a client SDP
-// renegotiation.
 export const SetSessionVideoSourceRequest = Type.Object({
   pinnedSessionId: Type.Union([Type.String(), Type.Null()])
 });
