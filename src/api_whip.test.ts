@@ -415,11 +415,8 @@ describe('apiWhip', () => {
 });
 
 /**
- * hasVideo advertises a session as a pin source. It must mean "has sending
- * video SSRCs persisted", not "the offer had a video m-line" -- see the
- * comment at the flip site in api_whip.ts. A publisher marked hasVideo with no
- * SSRCs is offered in the UI but every pin to it resolves to an empty
- * ssrc-whitelist and 425s forever.
+ * hasVideo advertises a session as a pin source, so it must mean "has sending
+ * video SSRCs persisted", not "the offer had a video m-line".
  */
 describe('apiWhip hasVideo', () => {
   const sdp = (lines: string[]) =>

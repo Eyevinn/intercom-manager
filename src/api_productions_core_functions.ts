@@ -23,20 +23,12 @@ import {
 } from './sfu/constants';
 import { ISmbProtocol } from './smb';
 
-/**
- * Video codecs this pipeline fully supports, in preference order. Only H264
- * and VP8 have the codec normalization, profile-level-id pinning and FID/RTX
- * handling that the rest of the pipeline assumes.
- */
+/** Video codecs supported through the pipeline, in preference order. */
 const SUPPORTED_VIDEO_CODECS = ['H264', 'VP8'];
 
 /**
- * The video codec names SMB advertised for this endpoint (RTX excluded).
- *
- * This is the authority on what the bridge can actually carry: SMB reports it
- * from its own configuration, so a bridge left on the compiled default
- * advertises VP8 only. Returns [] when the allocation carried no video
- * `payload-types`, in which case callers must not narrow the negotiation.
+ * The video codec names SMB advertised for this endpoint, RTX excluded.
+ * Empty when the allocation carried no video payload-types.
  */
 export function smbAdvertisedVideoCodecs(
   endpoint: SmbEndpointDescription
@@ -47,17 +39,9 @@ export function smbAdvertisedVideoCodecs(
 }
 
 /**
- * Pick the video codec to negotiate: the most preferred codec that BOTH the
- * client offered AND SMB advertised.
- *
- * Selecting purely from the offer is a silent trap. Every browser, OBS and
- * whip-mpegts offers H264, so an offer-only preference answers H264 even to a
- * VP8-only bridge. The publisher then encodes H264 that SMB cannot forward,
- * and every receiver gets working audio with permanently black video — no
- * error on any code path, because each side is individually self-consistent.
- *
- * When SMB advertised nothing (`smbCodecs` empty) the pipeline preference
- * order is used unchanged; there is no capability information to narrow by.
+ * The most preferred video codec present in both the offer and SMB's
+ * advertised codecs. Falls back to the pipeline preference order when SMB
+ * advertised none. Undefined when the two share no supported codec.
  */
 export function selectVideoCodec(
   offered: RtpCodec[],
@@ -466,13 +450,9 @@ export class CoreFunctions {
 
         endpoint.video = endpoint.video || {};
 
-        // Negotiate a codec BOTH the client offered and SMB advertised.
-        // Preferring H264 straight off the offer (what this used to do) hands
-        // an H264 answer to any H264-capable publisher even when the bridge
-        // only speaks VP8 — SMB then cannot forward what the publisher sends
-        // and every receiver gets audio with permanently black video. Reject
-        // explicitly when there is no overlap rather than letting an
-        // unsupported codec proceed misconfigured.
+        // Negotiate a codec both the client offered and SMB advertised. A
+        // codec the bridge cannot carry leaves receivers with audio and no
+        // video, so reject explicitly when there is no overlap.
         const smbCodecs = smbAdvertisedVideoCodecs(endpoint);
         const selectedCodec = selectVideoCodec(media.rtp, smbCodecs);
 
@@ -486,9 +466,7 @@ export class CoreFunctions {
           );
         }
 
-        // Log both sides of the negotiation. A codec mismatch across the
-        // bridge is otherwise invisible: the pin, whitelist and keyframe paths
-        // all succeed and only the video is missing.
+        // Log both sides; a codec mismatch is otherwise silent.
         Log().info(
           `[video-codec] endpoint=${endpointId} ` +
             `selected=${selectedCodec.codec}@${selectedCodec.payload} ` +
@@ -745,11 +723,9 @@ export class CoreFunctions {
 
         media.ext = audioExts.map((ext) => ({ value: ext.id, uri: ext.uri }));
       } else if (media.type === 'video') {
-        // Same rule as configureEndpointForWhipWhep: the codec must be one
-        // SMB advertised, not merely one the client offered. These two sites
-        // must agree — the answer decides what the publisher encodes, the
-        // configure decides what SMB expects, and a divergence between them is
-        // exactly the silent black-video failure.
+        // Same rule as configureEndpointForWhipWhep: the answer decides what
+        // the publisher encodes and the configure what SMB expects, so the two
+        // must agree.
         const primaryCodec = selectVideoCodec(
           media.rtp,
           smbAdvertisedVideoCodecs(endpoint)

@@ -23,13 +23,9 @@ import {
   createMockEndpointDescription
 } from './test-fixtures/sdp-fixtures';
 
-// The video codec a bridge can carry is SMB's to decide, not the client's.
-// SMB's compiled default is VP8, so any deployment that does not explicitly
-// set codec.videoCodec advertises VP8 only — while every browser, OBS and
-// whip-mpegts offers H264. Negotiating from the offer alone therefore answers
-// H264 to a VP8-only bridge: the publisher encodes H264, SMB cannot forward
-// it, and every receiver gets working audio with permanently black video and
-// no error on any code path.
+// A codec must be one SMB advertised, not merely one the client offered:
+// SMB's default is VP8 while every browser and whip-mpegts offers H264, so
+// negotiating from the offer alone leaves receivers with audio and no video.
 
 const smbUrl = 'http://smb.test';
 const smbKey = 'key';
