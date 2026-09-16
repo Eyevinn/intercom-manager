@@ -31,6 +31,7 @@ const mockProductionManager = {
   getUser: jest.fn().mockResolvedValue(undefined),
   requireLine: jest.fn().mockResolvedValue({}),
   clearWhepSourceIfPinned: jest.fn().mockResolvedValue(undefined),
+  updateSessionHasVideo: jest.fn().mockResolvedValue(undefined),
   setLineWhepSource: jest.fn().mockResolvedValue(undefined),
   once: jest.fn(),
   emit: jest.fn()
@@ -410,5 +411,108 @@ describe('apiWhip', () => {
       expect(response.statusCode).toBe(405);
       expect(response.payload).toBe('Method not allowed');
     });
+  });
+});
+
+/**
+ * hasVideo advertises a session as a pin source. It must mean "has sending
+ * video SSRCs persisted", not "the offer had a video m-line" -- see the
+ * comment at the flip site in api_whip.ts. A publisher marked hasVideo with no
+ * SSRCs is offered in the UI but every pin to it resolves to an empty
+ * ssrc-whitelist and 425s forever.
+ */
+describe('apiWhip hasVideo', () => {
+  const sdp = (lines: string[]) =>
+    ['v=0', 'o=- 0 0 IN IP4 127.0.0.1', ...lines].join('\r\n') + '\r\n';
+
+  const AUDIO = ['m=audio 9 RTP/AVP 111', 'a=mid:0'];
+
+  const post = async (payload: string) => {
+    const fastify = await createTestServer();
+    return fastify.inject({
+      method: 'POST',
+      url: '/whip/prod1/line1/testuser',
+      headers: { 'content-type': 'application/sdp' },
+      payload
+    });
+  };
+
+  const hasVideoCalls = () =>
+    (mockProductionManager.updateSessionHasVideo as jest.Mock).mock.calls;
+  const storedEndpoint = () =>
+    (mockProductionManager.updateUserEndpoint as jest.Mock).mock.calls[0]?.[2];
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    // A fresh endpoint per call: the shared mock otherwise hands every test
+    // the same object, so SSRCs stamped by one test leak into the next.
+    (coreFunctions.createEndpoint as jest.Mock).mockImplementation(
+      async () => ({
+        'bundle-transport': {
+          'rtcp-mux': true,
+          ice: { ufrag: 'test-ufrag', pwd: 'test-pwd', candidates: [] },
+          dtls: { fingerprint: 'sha-256 FAKEFINGERPRINT', setup: 'actpass' }
+        }
+      })
+    );
+    // Echo the offer's mids: the route 406s when a mid is missing from the
+    // answer, and the shared mock answers audio-only.
+    (coreFunctions.createWhipWhepAnswer as jest.Mock).mockImplementation(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      async (offer: any) =>
+        [
+          'v=0',
+          'o=- 0 0 IN IP4 127.0.0.1',
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ...offer.media.map(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (m: any) => `m=${m.type} 9 RTP/AVP 96\r\na=mid:${m.mid}`
+          )
+        ].join('\r\n') + '\r\n'
+    );
+  });
+
+  it('advertises a publisher whose offer carries an FID group', async () => {
+    await post(
+      sdp([
+        ...AUDIO,
+        'm=video 9 RTP/AVP 96',
+        'a=mid:1',
+        'a=ssrc-group:FID 111111 222222',
+        'a=ssrc:111111 cname:probe',
+        'a=ssrc:222222 cname:probe'
+      ])
+    );
+
+    expect(hasVideoCalls()).toEqual([['mock-session-id', true]]);
+    // Both main and RTX: without the RTX SSRC SMB drops retransmissions.
+    expect(storedEndpoint()?.video?.ssrcs).toEqual([111111, 222222]);
+  });
+
+  it('advertises a publisher offering a bare a=ssrc with no FID group', async () => {
+    await post(
+      sdp([
+        ...AUDIO,
+        'm=video 9 RTP/AVP 96',
+        'a=mid:1',
+        'a=ssrc:333333 cname:probe'
+      ])
+    );
+
+    expect(hasVideoCalls()).toEqual([['mock-session-id', true]]);
+    expect(storedEndpoint()?.video?.ssrcs).toEqual([333333]);
+  });
+
+  it('does NOT advertise a video m-line whose SSRCs cannot be parsed', async () => {
+    await post(sdp([...AUDIO, 'm=video 9 RTP/AVP 96', 'a=mid:1']));
+
+    expect(hasVideoCalls()).toEqual([]);
+    expect(storedEndpoint()?.video?.ssrcs).toBeUndefined();
+  });
+
+  it('does NOT advertise an audio-only publisher', async () => {
+    await post(sdp(AUDIO));
+
+    expect(hasVideoCalls()).toEqual([]);
   });
 });

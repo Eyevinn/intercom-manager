@@ -255,8 +255,24 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
 
         // Now that video.ssrcs is persisted, flip hasVideo so receivers'
         // auto-pin lookup finds this publisher with a usable whitelist.
-        if (offerHasVideo) {
+        //
+        // hasVideo must mean "this session publishes video others can pin",
+        // i.e. it has sending video SSRCs persisted -- the same rule the
+        // browser path uses (api_productions.ts). Deriving it from the mere
+        // presence of a video m-line is wrong: an offer whose SSRCs do not
+        // parse (no FID group and no usable a=ssrc) leaves video.ssrcs empty
+        // while still advertising this session as a pin source, and every pin
+        // to it then resolves to an empty ssrc-whitelist -- 425 forever, with
+        // the receiver left on whatever it was showing before.
+        const publishedVideoSsrcs = endpoint.video?.ssrcs ?? [];
+        if (publishedVideoSsrcs.length > 0) {
           await productionManager.updateSessionHasVideo(sessionId, true);
+        } else if (offerHasVideo) {
+          Log().warn(
+            `WHIP offer for session=${sessionId} has a video m-line but no ` +
+              `usable SSRCs (no FID group, no a=ssrc): not advertising it as ` +
+              `a pin source, so its video cannot be pinned by receivers.`
+          );
         }
 
         // Create the Location URL for the WHIP resource
