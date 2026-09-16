@@ -23,6 +23,60 @@ import {
 } from './sfu/constants';
 import { ISmbProtocol } from './smb';
 
+/**
+ * Video codecs this pipeline fully supports, in preference order. Only H264
+ * and VP8 have the codec normalization, profile-level-id pinning and FID/RTX
+ * handling that the rest of the pipeline assumes.
+ */
+const SUPPORTED_VIDEO_CODECS = ['H264', 'VP8'];
+
+/**
+ * The video codec names SMB advertised for this endpoint (RTX excluded).
+ *
+ * This is the authority on what the bridge can actually carry: SMB reports it
+ * from its own configuration, so a bridge left on the compiled default
+ * advertises VP8 only. Returns [] when the allocation carried no video
+ * `payload-types`, in which case callers must not narrow the negotiation.
+ */
+export function smbAdvertisedVideoCodecs(
+  endpoint: SmbEndpointDescription
+): string[] {
+  return (endpoint.video?.['payload-types'] ?? [])
+    .map((pt) => pt.name?.toUpperCase())
+    .filter((name): name is string => !!name && name !== 'RTX');
+}
+
+/**
+ * Pick the video codec to negotiate: the most preferred codec that BOTH the
+ * client offered AND SMB advertised.
+ *
+ * Selecting purely from the offer is a silent trap. Every browser, OBS and
+ * whip-mpegts offers H264, so an offer-only preference answers H264 even to a
+ * VP8-only bridge. The publisher then encodes H264 that SMB cannot forward,
+ * and every receiver gets working audio with permanently black video — no
+ * error on any code path, because each side is individually self-consistent.
+ *
+ * When SMB advertised nothing (`smbCodecs` empty) the pipeline preference
+ * order is used unchanged; there is no capability information to narrow by.
+ */
+export function selectVideoCodec(
+  offered: RtpCodec[],
+  smbCodecs: string[]
+): RtpCodec | undefined {
+  const allowed =
+    smbCodecs.length > 0
+      ? SUPPORTED_VIDEO_CODECS.filter((codec) => smbCodecs.includes(codec))
+      : SUPPORTED_VIDEO_CODECS;
+
+  for (const name of allowed) {
+    const match = offered.find(
+      (rtp: RtpCodec) => rtp.codec.toUpperCase() === name
+    );
+    if (match) return match;
+  }
+  return undefined;
+}
+
 export class CoreFunctions {
   private productionManager: ProductionManager;
   private connectionQueue: ConnectionQueue;
@@ -412,21 +466,35 @@ export class CoreFunctions {
 
         endpoint.video = endpoint.video || {};
 
-        // Prefer H264; fall back to VP8 for older SMB deployments. Reject
-        // explicitly if neither is offered — falling back to media.rtp[0]
-        // would let an unsupported codec proceed misconfigured.
-        const selectedCodec =
-          media.rtp.find(
-            (rtp: RtpCodec) => rtp.codec.toUpperCase() === 'H264'
-          ) ??
-          media.rtp.find((rtp: RtpCodec) => rtp.codec.toUpperCase() === 'VP8');
+        // Negotiate a codec BOTH the client offered and SMB advertised.
+        // Preferring H264 straight off the offer (what this used to do) hands
+        // an H264 answer to any H264-capable publisher even when the bridge
+        // only speaks VP8 — SMB then cannot forward what the publisher sends
+        // and every receiver gets audio with permanently black video. Reject
+        // explicitly when there is no overlap rather than letting an
+        // unsupported codec proceed misconfigured.
+        const smbCodecs = smbAdvertisedVideoCodecs(endpoint);
+        const selectedCodec = selectVideoCodec(media.rtp, smbCodecs);
 
         if (!selectedCodec) {
           throw new Error(
-            `Offer video m-line has no supported codec (H264 or VP8). ` +
-              `Offered: ${media.rtp.map((r) => r.codec).join(', ')}`
+            `No video codec in common between the offer and SMB. ` +
+              `Offered: ${
+                media.rtp.map((r) => r.codec).join(', ') || '(none)'
+              }. ` +
+              `SMB advertises: ${smbCodecs.join(', ') || '(none)'}.`
           );
         }
+
+        // Log both sides of the negotiation. A codec mismatch across the
+        // bridge is otherwise invisible: the pin, whitelist and keyframe paths
+        // all succeed and only the video is missing.
+        Log().info(
+          `[video-codec] endpoint=${endpointId} ` +
+            `selected=${selectedCodec.codec}@${selectedCodec.payload} ` +
+            `offered=[${media.rtp.map((r) => r.codec).join(', ')}] ` +
+            `smb=[${smbCodecs.join(', ') || 'unadvertised'}]`
+        );
 
         if (typeof selectedCodec.rate !== 'number') {
           throw new Error('Selected video codec is missing a valid clockrate');
@@ -677,15 +745,15 @@ export class CoreFunctions {
 
         media.ext = audioExts.map((ext) => ({ value: ext.id, uri: ext.uri }));
       } else if (media.type === 'video') {
-        // Prefer H264; fall back to VP8 — mirrors the codec preference in
-        // addVideoMid and configureEndpointForWhipWhep.
-        const h264Codec = media.rtp.find(
-          (rtp: RtpCodec) => rtp.codec.toUpperCase() === 'H264'
+        // Same rule as configureEndpointForWhipWhep: the codec must be one
+        // SMB advertised, not merely one the client offered. These two sites
+        // must agree — the answer decides what the publisher encodes, the
+        // configure decides what SMB expects, and a divergence between them is
+        // exactly the silent black-video failure.
+        const primaryCodec = selectVideoCodec(
+          media.rtp,
+          smbAdvertisedVideoCodecs(endpoint)
         );
-        const vp8Codec = media.rtp.find(
-          (rtp: RtpCodec) => rtp.codec.toUpperCase() === 'VP8'
-        );
-        const primaryCodec = h264Codec ?? vp8Codec;
 
         if (primaryCodec) {
           const primaryPt = primaryCodec.payload;
