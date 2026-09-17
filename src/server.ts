@@ -1,7 +1,9 @@
 import api from './api';
 import { CoreFunctions } from './api_productions_core_functions';
 import { BridgeManager } from './bridge_manager';
+import { BridgeDriver } from './bridge/driver';
 import { GatewayBridgeDriver } from './bridge/gateway_driver';
+import { StromBridgeDriver } from './bridge/strom_driver';
 import { ConnectionQueue } from './connection_queue';
 import { DbManagerCouchDb } from './db/couchdb';
 import { DbManagerMongoDb } from './db/mongodb';
@@ -13,6 +15,7 @@ const SMB_ADDRESS: string = process.env.SMB_ADDRESS ?? 'http://localhost:8080';
 const PUBLIC_HOST: string = process.env.PUBLIC_HOST ?? 'http://localhost:8000';
 const WHIP_GATEWAY_URL: string | undefined = process.env.WHIP_GATEWAY_URL;
 const WHEP_GATEWAY_URL: string | undefined = process.env.WHEP_GATEWAY_URL;
+const STROM_URL: string | undefined = process.env.STROM_URL;
 
 if (!process.env.SMB_ADDRESS) {
   Log().warn('SMB_ADDRESS environment variable not set, using defaults');
@@ -46,12 +49,22 @@ if (dbUrl.protocol === 'mongodb:' || dbUrl.protocol === 'mongodb+srv:') {
   const ingestManager = new IngestManager(dbManager);
   await ingestManager.load();
 
-  const bridgeDriver = new GatewayBridgeDriver({
-    whipGatewayUrl: WHIP_GATEWAY_URL,
-    whipGatewayApiKey: process.env.WHIP_GATEWAY_API_KEY,
-    whepGatewayUrl: WHEP_GATEWAY_URL,
-    whepGatewayApiKey: process.env.WHEP_GATEWAY_API_KEY
-  });
+  const bridgeDriver: BridgeDriver = STROM_URL
+    ? new StromBridgeDriver({
+        stromUrl: STROM_URL,
+        stromApiKey: process.env.STROM_API_KEY,
+        whipImplementation: process.env.STROM_WHIP_IMPLEMENTATION,
+        whepImplementation: process.env.STROM_WHEP_IMPLEMENTATION,
+        srtLatencyMs: process.env.STROM_SRT_LATENCY_MS
+          ? Number(process.env.STROM_SRT_LATENCY_MS)
+          : undefined
+      })
+    : new GatewayBridgeDriver({
+        whipGatewayUrl: WHIP_GATEWAY_URL,
+        whipGatewayApiKey: process.env.WHIP_GATEWAY_API_KEY,
+        whepGatewayUrl: WHEP_GATEWAY_URL,
+        whepGatewayApiKey: process.env.WHEP_GATEWAY_API_KEY
+      });
   let bridgeManager: BridgeManager | null = null;
   if (bridgeDriver.transmittersEnabled || bridgeDriver.receiversEnabled) {
     bridgeManager = new BridgeManager(dbManager, bridgeDriver);
