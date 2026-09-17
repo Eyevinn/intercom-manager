@@ -9,7 +9,7 @@ const TX_PREFIX = 'tx-';
 const RX_PREFIX = 'rx-';
 
 const DEFAULT_WHIP_IMPLEMENTATION = 'whipsink';
-const DEFAULT_WHEP_IMPLEMENTATION = 'whepsrc';
+const DEFAULT_WHEP_IMPLEMENTATION = 'whepclientsrc';
 const DEFAULT_SRT_LATENCY_MS = 125;
 
 export interface StromBridgeDriverOptions {
