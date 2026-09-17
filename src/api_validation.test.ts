@@ -93,6 +93,11 @@ const mockProductionManager = {
     .mockImplementation((lines: any[], id: string) =>
       lines.find((l: any) => l.id === id)
     ),
+  requireLine: jest.fn().mockImplementation((lines: any[], id: string) => {
+    const found = lines.find((l: any) => l.id === id);
+    if (!found) throw new Error(`Line ${id} not found`);
+    return found;
+  }),
   updateUserLastSeen: jest.fn().mockReturnValue(true),
   deleteProductionLine: jest.fn().mockResolvedValue(undefined),
   deleteProduction: jest.fn().mockResolvedValue(true),
@@ -232,6 +237,25 @@ describe('Input Validation', () => {
       });
       // Should not be 400 — it will fail deeper (no session found), but param is valid
       expect(response.statusCode).not.toBe(400);
+    });
+
+    test('PATCH /session/:sessionId returns 204 with empty body on success', async () => {
+      mockDbManager.getSession.mockResolvedValueOnce({
+        productionId: '1',
+        lineId: 'lid-1',
+        endpointId: 'endpoint-1',
+        sessionDescription: { audio: {} }
+      });
+      mockCoreFunctions.handleAnswerRequest = jest
+        .fn()
+        .mockResolvedValue(undefined);
+      const response = await server.inject({
+        method: 'PATCH',
+        url: '/api/v1/session/valid-session-id',
+        body: { sdpAnswer: 'v=0\r\n' }
+      });
+      expect(response.statusCode).toBe(204);
+      expect(response.body).toBe('');
     });
 
     test('DELETE /session/:sessionId accepts non-empty sessionId', async () => {
