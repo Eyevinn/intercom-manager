@@ -98,7 +98,7 @@ The API docs is then available on `http://localhost:8000/api/docs/`
 
 ## Development
 
-Requires Node JS engine >= v18 and [MongoDB](https://www.mongodb.com/docs/manual/administration/install-community/) (tested with MongoDB v7) or [CouchDB](https://docs.couchdb.org/en/stable/index.html).
+Requires Node JS engine >= v22 (as enforced by the `engines` field in `package.json`) and [MongoDB](https://www.mongodb.com/docs/manual/administration/install-community/) (tested with MongoDB v7) or [CouchDB](https://docs.couchdb.org/en/stable/index.html).
 
 Install dependencies
 
