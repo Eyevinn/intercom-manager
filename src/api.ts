@@ -17,6 +17,7 @@ import apiWhep, { ApiWhepOptions } from './api_whep';
 import apiBridgeTx, { ApiBridgeTxOptions } from './api_bridge_tx';
 import apiBridgeRx, { ApiBridgeRxOptions } from './api_bridge_rx';
 import { DbManager } from './db/interface';
+import { BridgeDriver } from './bridge/driver';
 import { IngestManager } from './ingest_manager';
 import { ProductionManager } from './production_manager';
 
@@ -64,14 +65,13 @@ export interface ApiGeneralOptions {
   whipGatewayApiKey?: string;
   whepGatewayUrl?: string;
   whepGatewayApiKey?: string;
+  bridgeDriver?: BridgeDriver;
 }
 
 export type ApiOptions = ApiGeneralOptions &
   ApiProductionsOptions &
   ApiWhipOptions &
-  ApiWhepOptions &
-  ApiBridgeTxOptions &
-  ApiBridgeRxOptions;
+  ApiWhepOptions;
 
 export default async (opts: ApiOptions) => {
   const api = fastify({
@@ -174,15 +174,15 @@ export default async (opts: ApiOptions) => {
 
   // Bridge configuration endpoint
   const BridgeConfig = Type.Object({
-    whipGatewayEnabled: Type.Boolean(),
-    whepGatewayEnabled: Type.Boolean()
+    transmittersEnabled: Type.Boolean(),
+    receiversEnabled: Type.Boolean()
   });
 
   api.get<{ Reply: Static<typeof BridgeConfig> }>(
     '/api/v1/bridge/config',
     {
       schema: {
-        description: 'Get bridge gateway configuration',
+        description: 'Get bridge configuration',
         response: {
           200: BridgeConfig
         }
@@ -190,27 +190,25 @@ export default async (opts: ApiOptions) => {
     },
     async (_, reply) => {
       reply.send({
-        whipGatewayEnabled: !!opts.whipGatewayUrl,
-        whepGatewayEnabled: !!opts.whepGatewayUrl
+        transmittersEnabled: !!opts.bridgeDriver?.transmittersEnabled,
+        receiversEnabled: !!opts.bridgeDriver?.receiversEnabled
       });
     }
   );
 
   // Register bridge IO endpoints (only if gateways are configured)
-  if (opts.whipGatewayUrl) {
+  if (opts.bridgeDriver?.transmittersEnabled) {
     api.register(apiBridgeTx, {
       prefix: 'api/v1',
       dbManager: opts.dbManager,
-      whipGatewayUrl: opts.whipGatewayUrl,
-      whipGatewayApiKey: opts.whipGatewayApiKey
+      bridgeDriver: opts.bridgeDriver
     });
   }
-  if (opts.whepGatewayUrl) {
+  if (opts.bridgeDriver?.receiversEnabled) {
     api.register(apiBridgeRx, {
       prefix: 'api/v1',
       dbManager: opts.dbManager,
-      whepGatewayUrl: opts.whepGatewayUrl,
-      whepGatewayApiKey: opts.whepGatewayApiKey
+      bridgeDriver: opts.bridgeDriver
     });
   }
 

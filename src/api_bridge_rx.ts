@@ -10,12 +10,12 @@ import {
   BridgeStatus
 } from './models';
 import { Log } from './log';
+import { BridgeDriver } from './bridge/driver';
 import { encodeSrtStreamId } from './utils';
 
 export interface ApiBridgeRxOptions {
   dbManager: DbManager;
-  whepGatewayUrl?: string;
-  whepGatewayApiKey?: string;
+  bridgeDriver: BridgeDriver;
 }
 
 const ParamsId = Type.Object({
@@ -29,62 +29,8 @@ const apiBridgeRx: FastifyPluginCallback<ApiBridgeRxOptions> = (
   opts,
   next
 ) => {
-  const { dbManager, whepGatewayUrl, whepGatewayApiKey } = opts;
+  const { dbManager } = opts;
 
-  // Helper function to call gateway API
-  const callGateway = async (
-    method: string,
-    path: string,
-    body?: any
-  ): Promise<any> => {
-    const url = `${whepGatewayUrl}${path}`;
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json'
-    };
-    if (whepGatewayApiKey) {
-      headers['x-api-key'] = whepGatewayApiKey;
-    }
-
-    const options: RequestInit = {
-      method,
-      headers
-    };
-
-    if (body) {
-      options.body = JSON.stringify(body);
-    }
-
-    const response = await fetch(url, options);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(
-        `Gateway request failed: ${response.status} ${errorText}`
-      );
-    }
-
-    if (response.status === 204) {
-      return null;
-    }
-
-    const text = await response.text();
-    if (!text) {
-      return null;
-    }
-
-    // Try to parse as JSON, if it fails, return the text as-is
-    try {
-      return JSON.parse(text);
-    } catch (e) {
-      // If it's a plain boolean string, convert it
-      if (text.toLowerCase() === 'true') return true;
-      if (text.toLowerCase() === 'false') return false;
-      // Otherwise return the text
-      return text;
-    }
-  };
-
-  // List all receivers
   fastify.get<{
     Querystring: { limit?: string; offset?: string };
     Reply: ReceiverListResponse | { error: string };
@@ -190,12 +136,7 @@ const apiBridgeRx: FastifyPluginCallback<ApiBridgeRxOptions> = (
 
         // Try to create on gateway
         try {
-          await callGateway('POST', '/api/v1/rx', {
-            id: receiver._id,
-            whepUrl: receiver.whepUrl,
-            srtUrl: encodeSrtStreamId(receiver.srtUrl),
-            status: BridgeStatus.IDLE
-          });
+          await opts.bridgeDriver.createReceiver(receiver, BridgeStatus.IDLE);
 
           // Update status to idle (gateway created successfully)
           receiver.status = BridgeStatus.IDLE;
@@ -249,9 +190,10 @@ const apiBridgeRx: FastifyPluginCallback<ApiBridgeRxOptions> = (
 
         // Update gateway state
         try {
-          await callGateway('PUT', `/api/v1/rx/${request.params.id}/state`, {
-            desired: request.body.desired
-          });
+          await opts.bridgeDriver.setReceiverState(
+            request.params.id,
+            request.body.desired
+          );
 
           // Update actual status
           receiver.status = request.body.desired;
@@ -359,12 +301,9 @@ const apiBridgeRx: FastifyPluginCallback<ApiBridgeRxOptions> = (
           try {
             // Stop the gateway first before deleting
             try {
-              await callGateway(
-                'PUT',
-                `/api/v1/rx/${request.params.id}/state`,
-                {
-                  desired: BridgeStatus.STOPPED
-                }
+              await opts.bridgeDriver.setReceiverState(
+                request.params.id,
+                BridgeStatus.STOPPED
               );
             } catch (stopError) {
               Log().warn('Failed to stop receiver before deletion:', stopError);
@@ -372,7 +311,7 @@ const apiBridgeRx: FastifyPluginCallback<ApiBridgeRxOptions> = (
 
             // Delete from gateway
             try {
-              await callGateway('DELETE', `/api/v1/rx/${request.params.id}`);
+              await opts.bridgeDriver.deleteReceiver(request.params.id);
             } catch (deleteError) {
               Log().warn(
                 'Failed to delete receiver from gateway:',
@@ -381,12 +320,7 @@ const apiBridgeRx: FastifyPluginCallback<ApiBridgeRxOptions> = (
             }
 
             // Create new gateway object with updated URL (gateway requires initial status)
-            await callGateway('POST', '/api/v1/rx', {
-              id: receiver._id,
-              whepUrl: receiver.whepUrl,
-              srtUrl: encodeSrtStreamId(receiver.srtUrl),
-              status: BridgeStatus.IDLE
-            });
+            await opts.bridgeDriver.createReceiver(receiver, BridgeStatus.IDLE);
 
             // Restore previous state if it was running
             if (
@@ -394,12 +328,9 @@ const apiBridgeRx: FastifyPluginCallback<ApiBridgeRxOptions> = (
               previousDesiredStatus === BridgeStatus.RUNNING
             ) {
               try {
-                await callGateway(
-                  'PUT',
-                  `/api/v1/rx/${request.params.id}/state`,
-                  {
-                    desired: BridgeStatus.RUNNING
-                  }
+                await opts.bridgeDriver.setReceiverState(
+                  request.params.id,
+                  BridgeStatus.RUNNING
                 );
                 receiver.status = BridgeStatus.RUNNING;
                 receiver.desiredStatus = BridgeStatus.RUNNING;
@@ -461,7 +392,7 @@ const apiBridgeRx: FastifyPluginCallback<ApiBridgeRxOptions> = (
 
         // Delete from gateway first
         try {
-          await callGateway('DELETE', `/api/v1/rx/${request.params.id}`);
+          await opts.bridgeDriver.deleteReceiver(request.params.id);
         } catch (gatewayError) {
           Log().warn('Failed to delete receiver from gateway:', gatewayError);
           // Continue with database deletion even if gateway fails

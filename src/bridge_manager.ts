@@ -1,7 +1,7 @@
 import { DbManager } from './db/interface';
 import { Log } from './log';
 import { BridgeStatus } from './models';
-import { encodeSrtStreamId } from './utils';
+import { BridgeDriver } from './bridge/driver';
 
 // The bridge reconcile loop runs every second and logs per transmitter /
 // receiver, which floods the terminal. Gate that verbose output behind its own
@@ -13,87 +13,13 @@ const bridgeDebug = (...args: unknown[]): void => {
 
 export class BridgeManager {
   private dbManager: DbManager;
-  private whipGatewayUrl: string;
-  private whipGatewayApiKey?: string;
-  private whepGatewayUrl: string;
-  private whepGatewayApiKey?: string;
+  private driver: BridgeDriver;
   private syncInterval?: NodeJS.Timeout;
   private syncIntervalMs = 1000; // 1 second
 
-  constructor(
-    dbManager: DbManager,
-    whipGatewayUrl: string | undefined,
-    whipGatewayApiKey: string | undefined,
-    whepGatewayUrl: string | undefined,
-    whepGatewayApiKey: string | undefined
-  ) {
+  constructor(dbManager: DbManager, driver: BridgeDriver) {
     this.dbManager = dbManager;
-    this.whipGatewayUrl = whipGatewayUrl || '';
-    this.whipGatewayApiKey = whipGatewayApiKey;
-    this.whepGatewayUrl = whepGatewayUrl || '';
-    this.whepGatewayApiKey = whepGatewayApiKey;
-  }
-
-  // Helper function to call gateway API
-  private async callGateway(
-    gatewayUrl: string,
-    apiKey: string | undefined,
-    method: string,
-    path: string,
-    body?: any
-  ): Promise<any> {
-    const url = `${gatewayUrl}${path}`;
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json'
-    };
-    if (apiKey) {
-      headers['x-api-key'] = apiKey;
-    }
-
-    const options: RequestInit = {
-      method,
-      headers
-    };
-
-    if (body) {
-      options.body = JSON.stringify(body);
-    }
-
-    try {
-      const response = await fetch(url, options);
-
-      if (!response.ok) {
-        if (response.status === 404) {
-          return null;
-        }
-        const errorText = await response.text();
-        throw new Error(
-          `Gateway request failed: ${response.status} ${errorText}`
-        );
-      }
-
-      if (response.status === 204 || response.status === 201) {
-        return null;
-      }
-
-      const contentType = response.headers.get('content-type');
-      const text = await response.text();
-
-      if (!text) {
-        return null;
-      }
-
-      // Only parse as JSON if content-type indicates JSON
-      if (contentType && contentType.includes('application/json')) {
-        return JSON.parse(text);
-      }
-
-      // For text responses, just return null (we don't need the response body)
-      return null;
-    } catch (error) {
-      Log().error(`Failed to call gateway ${url}:`, error);
-      throw error;
-    }
+    this.driver = driver;
   }
 
   // Start the sync service
@@ -123,10 +49,10 @@ export class BridgeManager {
   // Sync all transmitters and receivers
   async syncAll() {
     const tasks: Promise<void>[] = [];
-    if (this.whipGatewayUrl) {
+    if (this.driver.transmittersEnabled) {
       tasks.push(this.syncTransmitters());
     }
-    if (this.whepGatewayUrl) {
+    if (this.driver.receiversEnabled) {
       tasks.push(this.syncReceivers());
     }
     await Promise.all(tasks);
@@ -141,13 +67,7 @@ export class BridgeManager {
       // Get all transmitters from gateway
       let gatewayTransmitters: any[] = [];
       try {
-        gatewayTransmitters =
-          (await this.callGateway(
-            this.whipGatewayUrl,
-            this.whipGatewayApiKey,
-            'GET',
-            '/api/v1/tx'
-          )) || [];
+        gatewayTransmitters = (await this.driver.listTransmitters()) || [];
       } catch (error) {
         Log().warn('Failed to fetch transmitters from gateway:', error);
         // Mark all as failed if gateway is unreachable
@@ -175,24 +95,7 @@ export class BridgeManager {
             // Use desiredStatus if set, otherwise use current status
             const statusToUse = dbTx.desiredStatus || dbTx.status;
 
-            await this.callGateway(
-              this.whipGatewayUrl,
-              this.whipGatewayApiKey,
-              'POST',
-              '/api/v1/tx/id',
-              {
-                id: dbTx._id,
-                label: dbTx.label,
-                port: dbTx.port,
-                mode: dbTx.mode === 'caller' ? 1 : 2,
-                srtUrl: dbTx.srtUrl?.replace(/^srt:\/\//, ''),
-                whipUrl: dbTx.whipUrl,
-                passThroughUrl: dbTx.passThroughUrl,
-                noVideo: dbTx.noVideo ?? true,
-                vp8: dbTx.vp8 ?? false,
-                status: statusToUse
-              }
-            );
+            await this.driver.createTransmitter(dbTx, statusToUse);
             Log().info(
               `Recreated transmitter on gateway: port ${dbTx.port} with status ${statusToUse}`
             );
@@ -212,34 +115,12 @@ export class BridgeManager {
               );
               try {
                 // Delete the stale transmitter
-                await this.callGateway(
-                  this.whipGatewayUrl,
-                  this.whipGatewayApiKey,
-                  'DELETE',
-                  `/api/v1/tx/id/${dbTx._id}`
-                );
+                await this.driver.deleteTransmitter(dbTx._id);
 
                 // Retry creation
                 const statusToUse = dbTx.desiredStatus || dbTx.status;
 
-                await this.callGateway(
-                  this.whipGatewayUrl,
-                  this.whipGatewayApiKey,
-                  'POST',
-                  '/api/v1/tx/id',
-                  {
-                    id: dbTx._id,
-                    label: dbTx.label,
-                    port: dbTx.port,
-                    mode: dbTx.mode === 'caller' ? 1 : 2,
-                    srtUrl: dbTx.srtUrl?.replace(/^srt:\/\//, ''),
-                    whipUrl: dbTx.whipUrl,
-                    passThroughUrl: dbTx.passThroughUrl,
-                    noVideo: dbTx.noVideo ?? true,
-                    vp8: dbTx.vp8 ?? false,
-                    status: statusToUse
-                  }
-                );
+                await this.driver.createTransmitter(dbTx, statusToUse);
                 Log().info(
                   `Successfully recreated transmitter after cleanup: port ${dbTx.port}`
                 );
@@ -281,14 +162,9 @@ export class BridgeManager {
                 `Transmitter port ${dbTx.port} - Enforcing state change: gateway="${gatewayTx.status}" db="${dbTx.status}" desired="${dbTx.desiredStatus}"`
               );
               try {
-                await this.callGateway(
-                  this.whipGatewayUrl,
-                  this.whipGatewayApiKey,
-                  'PUT',
-                  `/api/v1/tx/id/${dbTx._id}/state`,
-                  {
-                    desired: dbTx.desiredStatus
-                  }
+                await this.driver.setTransmitterState(
+                  dbTx._id,
+                  dbTx.desiredStatus
                 );
                 bridgeDebug(
                   `Transmitter port ${dbTx.port} - Successfully enforced desired state: "${dbTx.desiredStatus}"`
@@ -322,12 +198,9 @@ export class BridgeManager {
           try {
             // Stop transmitter first before deleting
             try {
-              await this.callGateway(
-                this.whipGatewayUrl,
-                this.whipGatewayApiKey,
-                'PUT',
-                `/api/v1/tx/id/${gatewayTx.id}/state`,
-                { desired: BridgeStatus.STOPPED }
+              await this.driver.setTransmitterState(
+                gatewayTx.id,
+                BridgeStatus.STOPPED
               );
             } catch (stopError) {
               Log().warn(
@@ -337,12 +210,7 @@ export class BridgeManager {
             }
 
             // Now delete the transmitter
-            await this.callGateway(
-              this.whipGatewayUrl,
-              this.whipGatewayApiKey,
-              'DELETE',
-              `/api/v1/tx/id/${gatewayTx.id}`
-            );
+            await this.driver.deleteTransmitter(gatewayTx.id);
             Log().info(
               `Removed orphaned transmitter from gateway: id ${gatewayTx.id}`
             );
@@ -368,13 +236,7 @@ export class BridgeManager {
       // Get all receivers from gateway
       let gatewayReceivers: any[] = [];
       try {
-        gatewayReceivers =
-          (await this.callGateway(
-            this.whepGatewayUrl,
-            this.whepGatewayApiKey,
-            'GET',
-            '/api/v1/rx'
-          )) || [];
+        gatewayReceivers = (await this.driver.listReceivers()) || [];
       } catch (error) {
         Log().warn('Failed to fetch receivers from gateway:', error);
         // Mark all as failed if gateway is unreachable
@@ -399,18 +261,7 @@ export class BridgeManager {
             // Use desiredStatus if set, otherwise use current status
             const statusToUse = dbRx.desiredStatus || dbRx.status;
 
-            await this.callGateway(
-              this.whepGatewayUrl,
-              this.whepGatewayApiKey,
-              'POST',
-              '/api/v1/rx',
-              {
-                id: dbRx._id,
-                whepUrl: dbRx.whepUrl,
-                srtUrl: encodeSrtStreamId(dbRx.srtUrl),
-                status: statusToUse
-              }
-            );
+            await this.driver.createReceiver(dbRx, statusToUse);
             Log().info(
               `Recreated receiver on gateway: id ${dbRx._id} with status ${statusToUse}`
             );
@@ -443,14 +294,9 @@ export class BridgeManager {
                 `Receiver ${dbRx._id} - Enforcing state change: gateway="${gatewayRx.status}" db="${dbRx.status}" desired="${dbRx.desiredStatus}"`
               );
               try {
-                await this.callGateway(
-                  this.whepGatewayUrl,
-                  this.whepGatewayApiKey,
-                  'PUT',
-                  `/api/v1/rx/${dbRx._id}/state`,
-                  {
-                    desired: dbRx.desiredStatus
-                  }
+                await this.driver.setReceiverState(
+                  dbRx._id,
+                  dbRx.desiredStatus
                 );
                 bridgeDebug(
                   `Receiver ${dbRx._id} - Successfully enforced desired state: "${dbRx.desiredStatus}"`
@@ -484,12 +330,9 @@ export class BridgeManager {
           try {
             // Stop receiver first before deleting
             try {
-              await this.callGateway(
-                this.whepGatewayUrl,
-                this.whepGatewayApiKey,
-                'PUT',
-                `/api/v1/rx/${gatewayRx.id}/state`,
-                { desired: BridgeStatus.STOPPED }
+              await this.driver.setReceiverState(
+                gatewayRx.id,
+                BridgeStatus.STOPPED
               );
             } catch (stopError) {
               Log().warn(
@@ -499,12 +342,7 @@ export class BridgeManager {
             }
 
             // Now delete the receiver
-            await this.callGateway(
-              this.whepGatewayUrl,
-              this.whepGatewayApiKey,
-              'DELETE',
-              `/api/v1/rx/${gatewayRx.id}`
-            );
+            await this.driver.deleteReceiver(gatewayRx.id);
             Log().info(
               `Removed orphaned receiver from gateway: id ${gatewayRx.id}`
             );

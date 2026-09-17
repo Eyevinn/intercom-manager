@@ -1,6 +1,7 @@
 import api from './api';
 import { CoreFunctions } from './api_productions_core_functions';
 import { BridgeManager } from './bridge_manager';
+import { GatewayBridgeDriver } from './bridge/gateway_driver';
 import { ConnectionQueue } from './connection_queue';
 import { DbManagerCouchDb } from './db/couchdb';
 import { DbManagerMongoDb } from './db/mongodb';
@@ -45,20 +46,19 @@ if (dbUrl.protocol === 'mongodb:' || dbUrl.protocol === 'mongodb+srv:') {
   const ingestManager = new IngestManager(dbManager);
   await ingestManager.load();
 
-  // Initialize bridge manager for gateway sync (only if gateways are configured)
+  const bridgeDriver = new GatewayBridgeDriver({
+    whipGatewayUrl: WHIP_GATEWAY_URL,
+    whipGatewayApiKey: process.env.WHIP_GATEWAY_API_KEY,
+    whepGatewayUrl: WHEP_GATEWAY_URL,
+    whepGatewayApiKey: process.env.WHEP_GATEWAY_API_KEY
+  });
   let bridgeManager: BridgeManager | null = null;
-  if (WHIP_GATEWAY_URL || WHEP_GATEWAY_URL) {
-    bridgeManager = new BridgeManager(
-      dbManager,
-      WHIP_GATEWAY_URL || '',
-      process.env.WHIP_GATEWAY_API_KEY,
-      WHEP_GATEWAY_URL || '',
-      process.env.WHEP_GATEWAY_API_KEY
-    );
+  if (bridgeDriver.transmittersEnabled || bridgeDriver.receiversEnabled) {
+    bridgeManager = new BridgeManager(dbManager, bridgeDriver);
     bridgeManager.start();
     Log().info('Bridge manager started');
   } else {
-    Log().info('Bridge manager disabled (no gateway URLs configured)');
+    Log().info('Bridge manager disabled');
   }
 
   const server = await api({
@@ -72,6 +72,7 @@ if (dbUrl.protocol === 'mongodb:' || dbUrl.protocol === 'mongodb+srv:') {
     productionManager: productionManager,
     ingestManager: ingestManager,
     coreFunctions: new CoreFunctions(productionManager, connectionQueue),
+    bridgeDriver: bridgeDriver,
     whipGatewayUrl: WHIP_GATEWAY_URL || '',
     whipGatewayApiKey: process.env.WHIP_GATEWAY_API_KEY,
     whepGatewayUrl: WHEP_GATEWAY_URL || '',

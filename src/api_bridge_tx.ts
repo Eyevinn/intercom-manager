@@ -10,11 +10,11 @@ import {
   BridgeStatus
 } from './models';
 import { Log } from './log';
+import { BridgeDriver } from './bridge/driver';
 
 export interface ApiBridgeTxOptions {
   dbManager: DbManager;
-  whipGatewayUrl?: string;
-  whipGatewayApiKey?: string;
+  bridgeDriver: BridgeDriver;
 }
 
 const ParamsId = Type.Object({
@@ -28,62 +28,8 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
   opts,
   next
 ) => {
-  const { dbManager, whipGatewayUrl, whipGatewayApiKey } = opts;
+  const { dbManager } = opts;
 
-  // Helper function to call gateway API
-  const callGateway = async (
-    method: string,
-    path: string,
-    body?: any
-  ): Promise<any> => {
-    const url = `${whipGatewayUrl}${path}`;
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json'
-    };
-    if (whipGatewayApiKey) {
-      headers['x-api-key'] = whipGatewayApiKey;
-    }
-
-    const options: RequestInit = {
-      method,
-      headers
-    };
-
-    if (body) {
-      options.body = JSON.stringify(body);
-    }
-
-    const response = await fetch(url, options);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(
-        `Gateway request failed: ${response.status} ${errorText}`
-      );
-    }
-
-    if (response.status === 204) {
-      return null;
-    }
-
-    const text = await response.text();
-    if (!text) {
-      return null;
-    }
-
-    // Try to parse as JSON, if it fails, return the text as-is
-    try {
-      return JSON.parse(text);
-    } catch (e) {
-      // If it's a plain boolean string, convert it
-      if (text.toLowerCase() === 'true') return true;
-      if (text.toLowerCase() === 'false') return false;
-      // Otherwise return the text
-      return text;
-    }
-  };
-
-  // List all transmitters
   fastify.get<{
     Querystring: { limit?: string; offset?: string };
     Reply: TransmitterListResponse | { error: string };
@@ -189,19 +135,10 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
 
         // Try to create on gateway
         try {
-          await callGateway('POST', '/api/v1/tx/id', {
-            id: transmitter._id,
-            label: transmitter.label,
-            port: transmitter.port,
-            mode: transmitter.mode === 'caller' ? 1 : 2,
-            srtUrl: transmitter.srtUrl?.replace(/^srt:\/\//, ''),
-            whipUrl: transmitter.whipUrl,
-            passThroughUrl: transmitter.passThroughUrl,
-            noVideo: transmitter.noVideo ?? true,
-            vp8: transmitter.vp8 ?? false,
-            bypassVideo: transmitter.bypassVideo ?? false,
-            status: BridgeStatus.IDLE
-          });
+          await opts.bridgeDriver.createTransmitter(
+            transmitter,
+            BridgeStatus.IDLE
+          );
 
           // Update status to idle (gateway created successfully)
           transmitter.status = BridgeStatus.IDLE;
@@ -256,9 +193,10 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
 
         // Update gateway state
         try {
-          await callGateway('PUT', `/api/v1/tx/id/${transmitter._id}/state`, {
-            desired: request.body.desired
-          });
+          await opts.bridgeDriver.setTransmitterState(
+            transmitter._id,
+            request.body.desired
+          );
 
           // Update actual status
           transmitter.status = request.body.desired;
@@ -368,12 +306,9 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
           try {
             // Stop the gateway first before deleting
             try {
-              await callGateway(
-                'PUT',
-                `/api/v1/tx/id/${transmitter._id}/state`,
-                {
-                  desired: BridgeStatus.STOPPED
-                }
+              await opts.bridgeDriver.setTransmitterState(
+                transmitter._id,
+                BridgeStatus.STOPPED
               );
             } catch (stopError) {
               Log().warn(
@@ -384,7 +319,7 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
 
             // Delete from gateway
             try {
-              await callGateway('DELETE', `/api/v1/tx/id/${transmitter._id}`);
+              await opts.bridgeDriver.deleteTransmitter(transmitter._id);
             } catch (deleteError) {
               Log().warn(
                 'Failed to delete transmitter from gateway:',
@@ -393,19 +328,10 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
             }
 
             // Create new gateway object with updated URL (gateway requires initial status)
-            await callGateway('POST', '/api/v1/tx/id', {
-              id: transmitter._id,
-              label: transmitter.label,
-              port: transmitter.port,
-              mode: transmitter.mode === 'caller' ? 1 : 2,
-              srtUrl: transmitter.srtUrl?.replace(/^srt:\/\//, ''),
-              whipUrl: transmitter.whipUrl,
-              passThroughUrl: transmitter.passThroughUrl,
-              noVideo: transmitter.noVideo ?? true,
-              vp8: transmitter.vp8 ?? false,
-              bypassVideo: transmitter.bypassVideo ?? false,
-              status: BridgeStatus.IDLE
-            });
+            await opts.bridgeDriver.createTransmitter(
+              transmitter,
+              BridgeStatus.IDLE
+            );
 
             // Restore previous state if it was running
             if (
@@ -413,12 +339,9 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
               previousDesiredStatus === BridgeStatus.RUNNING
             ) {
               try {
-                await callGateway(
-                  'PUT',
-                  `/api/v1/tx/id/${transmitter._id}/state`,
-                  {
-                    desired: BridgeStatus.RUNNING
-                  }
+                await opts.bridgeDriver.setTransmitterState(
+                  transmitter._id,
+                  BridgeStatus.RUNNING
                 );
                 transmitter.status = BridgeStatus.RUNNING;
                 transmitter.desiredStatus = BridgeStatus.RUNNING;
@@ -481,7 +404,7 @@ const apiBridgeTx: FastifyPluginCallback<ApiBridgeTxOptions> = (
 
         // Delete from gateway first
         try {
-          await callGateway('DELETE', `/api/v1/tx/id/${transmitter._id}`);
+          await opts.bridgeDriver.deleteTransmitter(transmitter._id);
         } catch (gatewayError) {
           Log().warn(
             'Failed to delete transmitter from gateway:',
