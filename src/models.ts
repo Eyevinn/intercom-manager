@@ -306,7 +306,7 @@ export const DetailedProductionResponse = Type.Object({
 
 export const NewSession = Type.Object({
   productionId: Type.String({ minLength: 1, pattern: '^[0-9]+$' }),
-  lineId: Type.String({ minLength: 1 }),
+  lineId: Type.String({ minLength: 1, maxLength: 200 }),
   username: Type.String({ minLength: 1, maxLength: 200 })
 });
 
@@ -316,7 +316,7 @@ export const SessionResponse = Type.Object({
 });
 
 export const SdpAnswer = Type.Object({
-  sdpAnswer: Type.String()
+  sdpAnswer: Type.String({ maxLength: 65536 })
 });
 
 export const ErrorResponse = Type.Object({

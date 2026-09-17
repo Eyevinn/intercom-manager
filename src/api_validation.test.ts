@@ -391,6 +391,19 @@ describe('Input Validation', () => {
       expect(response.statusCode).toBe(400);
     });
 
+    test('rejects lineId exceeding 200 characters', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/v1/session',
+        body: {
+          productionId: '1',
+          lineId: 'x'.repeat(201),
+          username: 'user'
+        }
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
     test('rejects username exceeding 200 characters', async () => {
       const response = await server.inject({
         method: 'POST',
