@@ -177,7 +177,10 @@ const mockProductionManager = {
     .fn()
     .mockImplementation((sessionId: string) => sessionId),
   createUserSession: jest.fn().mockResolvedValue(undefined),
-  getActiveUsers: jest.fn().mockResolvedValue([])
+  getActiveUsers: jest.fn().mockResolvedValue([]),
+  once: jest.fn(),
+  on: jest.fn(),
+  off: jest.fn()
 } as any;
 
 describe('Production API', () => {
@@ -492,6 +495,7 @@ describe('Production API', () => {
             callback();
           }
         });
+      mockProductionManager.off = jest.fn();
       const response = await server.inject({
         method: 'POST',
         url: '/api/v1/production/1/line/1/participants'
@@ -499,6 +503,11 @@ describe('Production API', () => {
       expect(response.statusCode).toBe(200);
       const body = response.body ? JSON.parse(response.body) : [];
       expect(Array.isArray(body)).toBe(true);
+      // Cleanup must remove the 'users:change' listener on every exit path.
+      expect(mockProductionManager.off).toHaveBeenCalledWith(
+        'users:change',
+        expect.any(Function)
+      );
     });
     test('returns 500 when long poll fails due to internal error', async () => {
       const sessionsSpy = jest
