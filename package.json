@@ -32,7 +32,7 @@
     "nodemon": "^3.1.10",
     "sdp-transform": "^2.15.0",
     "ts-node": "^10.9.2",
-    "uuid": "^14.0.0"
+    "uuid": "^14.0.2"
   },
   "overrides": {
     "js-yaml": ">=4.2.1"
