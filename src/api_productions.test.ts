@@ -490,6 +490,47 @@ describe('Production API', () => {
     });
   });
 
+  describe('PATCH /session/:id', () => {
+    test('flushes a 204 once the SDP answer is handled', async () => {
+      const patchSession = {
+        _id: 'mock-session',
+        name: 'usersession',
+        productionId: '1',
+        lineId: '1',
+        endpointId: 'mock-endpoint-1',
+        isActive: true,
+        isExpired: false,
+        isWhip: false,
+        sessionDescription: { audio: { ssrcs: [1] }, video: { ssrcs: [] } }
+      };
+      const getSessionSpy = jest
+        .spyOn(mockDbManager, 'getSession')
+        .mockResolvedValue(patchSession as any);
+      mockProductionManager.getProduction = jest
+        .fn()
+        .mockResolvedValue(mockProductions[0]);
+      mockProductionManager.updateUserEndpoint = jest
+        .fn()
+        .mockResolvedValue(undefined);
+      mockProductionManager.updateSessionHasVideo = jest
+        .fn()
+        .mockResolvedValue(undefined);
+      mockCoreFunctions.handleAnswerRequest = jest
+        .fn()
+        .mockResolvedValue(undefined);
+
+      const response = await server.inject({
+        method: 'PATCH',
+        url: '/api/v1/session/mock-session',
+        body: { sdpAnswer: 'v=0' }
+      });
+
+      expect(response.statusCode).toBe(204);
+      expect(mockCoreFunctions.handleAnswerRequest).toHaveBeenCalled();
+      getSessionSpy.mockRestore();
+    });
+  });
+
   describe('POST /production/:id/line/:id/participants', () => {
     test('can do long polling for change in line participants', async () => {
       mockProductionManager.once = jest

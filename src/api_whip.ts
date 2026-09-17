@@ -5,7 +5,12 @@ import sdpTransform, { parse } from 'sdp-transform';
 import { v4 as uuidv4 } from 'uuid';
 import { CoreFunctions } from './api_productions_core_functions';
 import { Log } from './log';
-import { Line, WhipWhepRequest, WhipWhepResponse } from './models';
+import {
+  Line,
+  SmbEndpointDescription,
+  WhipWhepRequest,
+  WhipWhepResponse
+} from './models';
 import { ProductionManager } from './production_manager';
 import { ISmbProtocol, SmbProtocol } from './smb';
 import { getIceServers } from './utils';
@@ -326,6 +331,54 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
         }
 
         await productionManager.clearWhepSourceIfPinned(sessionId);
+
+        // Reconcile receivers pinned to this departing WHIP publisher: strip
+        // their stale ssrc-whitelist so their video does not freeze. Mirrors
+        // the reconciliation in the PATCH /session/:sessionId DELETE path.
+        try {
+          const affected = await productionManager.getReceiversPinnedToSession(
+            sessionId
+          );
+          if (affected.length > 0) {
+            const production = await productionManager.getProduction(
+              parseInt(affected[0].productionId, 10)
+            );
+            const line = production?.lines.find(
+              (l) => l.id === affected[0].lineId
+            );
+            if (line) {
+              await Promise.all(
+                affected.map(async (receiver) => {
+                  const receiverId = (receiver as any)._id?.toString?.();
+                  const endpointId = receiver.endpointId;
+                  const endpointDescription = receiver.sessionDescription;
+                  if (!receiverId || !endpointId || !endpointDescription)
+                    return;
+                  const updatedDescription: SmbEndpointDescription = JSON.parse(
+                    JSON.stringify(endpointDescription)
+                  );
+                  if (updatedDescription.video) {
+                    delete updatedDescription.video['ssrc-whitelist'];
+                  }
+                  await smb.reconfigureEndpoint(
+                    smbServerUrl,
+                    line.smbConferenceId,
+                    endpointId,
+                    updatedDescription,
+                    smbServerApiKey
+                  );
+                  await productionManager.updateSessionVideoPin(
+                    receiverId,
+                    updatedDescription,
+                    null
+                  );
+                })
+              );
+            }
+          }
+        } catch {
+          // Never let pin reconciliation block the WHIP delete itself.
+        }
 
         await opts.dbManager.deleteUserSession(sessionId);
         productionManager.removeUserSession(sessionId);
