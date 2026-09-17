@@ -32,7 +32,12 @@ const apiBridgeRx: FastifyPluginCallback<ApiBridgeRxOptions> = (
   const { dbManager } = opts;
 
   fastify.get<{
-    Querystring: { limit?: string; offset?: string };
+    Querystring: {
+      limit?: string;
+      offset?: string;
+      productionId?: string;
+      lineId?: string;
+    };
     Reply: ReceiverListResponse | { error: string };
   }>(
     '/bridge/rx',
@@ -41,7 +46,9 @@ const apiBridgeRx: FastifyPluginCallback<ApiBridgeRxOptions> = (
         description: 'List all receivers',
         querystring: Type.Object({
           limit: Type.Optional(Type.String()),
-          offset: Type.Optional(Type.String())
+          offset: Type.Optional(Type.String()),
+          productionId: Type.Optional(Type.String()),
+          lineId: Type.Optional(Type.String())
         }),
         response: {
           200: ReceiverListResponse,
@@ -54,8 +61,17 @@ const apiBridgeRx: FastifyPluginCallback<ApiBridgeRxOptions> = (
         const limit = parseInt(request.query.limit || '100', 10);
         const offset = parseInt(request.query.offset || '0', 10);
 
-        const receivers = await dbManager.getReceivers(limit, offset);
-        const totalItems = await dbManager.getReceiversLength();
+        const filter = {
+          productionId: request.query.productionId
+            ? parseInt(request.query.productionId, 10)
+            : undefined,
+          lineId: request.query.lineId
+            ? parseInt(request.query.lineId, 10)
+            : undefined
+        };
+
+        const receivers = await dbManager.getReceivers(limit, offset, filter);
+        const totalItems = await dbManager.getReceiversLength(filter);
 
         // Clean up undefined fields by using JSON.parse/stringify
         // This removes undefined values which Fast JSON Stringify can't handle

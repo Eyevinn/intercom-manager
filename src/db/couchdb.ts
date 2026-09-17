@@ -13,7 +13,7 @@ import {
   Transmitter
 } from '../models';
 import { assert } from '../utils';
-import { DbManager } from './interface';
+import { BridgeFilter, DbManager } from './interface';
 import nano from 'nano';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -36,6 +36,19 @@ const toUserSession = (doc: unknown): UserSession => {
       : docId
   } as UserSession;
 };
+const matchesBridgeFilter = (doc: any, filter?: BridgeFilter): boolean => {
+  if (
+    filter?.productionId !== undefined &&
+    doc.productionId !== filter.productionId
+  ) {
+    return false;
+  }
+  if (filter?.lineId !== undefined && doc.lineId !== filter.lineId) {
+    return false;
+  }
+  return true;
+};
+
 export class DbManagerCouchDb implements DbManager {
   private client;
   private nanoDb: nano.DocumentScope<unknown> | undefined;
@@ -91,7 +104,11 @@ export class DbManagerCouchDb implements DbManager {
     }
   }
 
-  async getTransmitters(limit: number, offset: number): Promise<Transmitter[]> {
+  async getTransmitters(
+    limit: number,
+    offset: number,
+    filter?: BridgeFilter
+  ): Promise<Transmitter[]> {
     await this.connect();
     if (!this.nanoDb) {
       throw new Error('Database not connected');
@@ -102,7 +119,10 @@ export class DbManagerCouchDb implements DbManager {
       include_docs: true
     });
     response.rows.forEach((row: any) => {
-      if (row.doc._id.toLowerCase().startsWith('tx-')) {
+      if (
+        row.doc._id.toLowerCase().startsWith('tx-') &&
+        matchesBridgeFilter(row.doc, filter)
+      ) {
         transmitters.push(row.doc);
       }
     });
@@ -111,15 +131,19 @@ export class DbManagerCouchDb implements DbManager {
     return result as any as Transmitter[];
   }
 
-  async getTransmittersLength(): Promise<number> {
+  async getTransmittersLength(filter?: BridgeFilter): Promise<number> {
     await this.connect();
     if (!this.nanoDb) {
       throw new Error('Database not connected');
     }
 
-    const response = await this.nanoDb.list({ include_docs: false });
-    const filteredRows = response.rows.filter((row: any) =>
-      row.id.toLowerCase().startsWith('tx-')
+    const needsDocs =
+      filter?.productionId !== undefined || filter?.lineId !== undefined;
+    const response = await this.nanoDb.list({ include_docs: needsDocs });
+    const filteredRows = response.rows.filter(
+      (row: any) =>
+        row.id.toLowerCase().startsWith('tx-') &&
+        (!needsDocs || matchesBridgeFilter(row.doc, filter))
     );
     return filteredRows.length;
   }
@@ -201,7 +225,11 @@ export class DbManagerCouchDb implements DbManager {
     }
   }
 
-  async getReceivers(limit: number, offset: number): Promise<Receiver[]> {
+  async getReceivers(
+    limit: number,
+    offset: number,
+    filter?: BridgeFilter
+  ): Promise<Receiver[]> {
     await this.connect();
     if (!this.nanoDb) {
       throw new Error('Database not connected');
@@ -215,7 +243,8 @@ export class DbManagerCouchDb implements DbManager {
       if (
         row.doc._id.toLowerCase().indexOf('counter') === -1 &&
         row.doc._id.toLowerCase().indexOf('session_') === -1 &&
-        row.doc._id.toLowerCase().startsWith('rx-')
+        row.doc._id.toLowerCase().startsWith('rx-') &&
+        matchesBridgeFilter(row.doc, filter)
       ) {
         receivers.push(row.doc);
       }
@@ -225,18 +254,21 @@ export class DbManagerCouchDb implements DbManager {
     return result as any as Receiver[];
   }
 
-  async getReceiversLength(): Promise<number> {
+  async getReceiversLength(filter?: BridgeFilter): Promise<number> {
     await this.connect();
     if (!this.nanoDb) {
       throw new Error('Database not connected');
     }
 
-    const response = await this.nanoDb.list({ include_docs: false });
+    const needsDocs =
+      filter?.productionId !== undefined || filter?.lineId !== undefined;
+    const response = await this.nanoDb.list({ include_docs: needsDocs });
     const filteredRows = response.rows.filter(
       (row: any) =>
         row.id.toLowerCase().indexOf('counter') === -1 &&
         row.id.toLowerCase().indexOf('session_') === -1 &&
-        row.id.toLowerCase().startsWith('rx-')
+        row.id.toLowerCase().startsWith('rx-') &&
+        (!needsDocs || matchesBridgeFilter(row.doc, filter))
     );
     return filteredRows.length;
   }

@@ -11,6 +11,11 @@ import {
   Transmitter
 } from '../models';
 
+export interface BridgeFilter {
+  productionId?: number;
+  lineId?: number;
+}
+
 export interface DbManager {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
@@ -41,14 +46,22 @@ export interface DbManager {
   getSessionsByQuery(q: Partial<UserSession>): Promise<UserSession[]>;
   addTransmitter(transmitter: NewTransmitter): Promise<Transmitter>;
   getTransmitter(id: string): Promise<Transmitter | undefined>;
-  getTransmitters(limit: number, offset: number): Promise<Transmitter[]>;
-  getTransmittersLength(): Promise<number>;
+  getTransmitters(
+    limit: number,
+    offset: number,
+    filter?: BridgeFilter
+  ): Promise<Transmitter[]>;
+  getTransmittersLength(filter?: BridgeFilter): Promise<number>;
   updateTransmitter(transmitter: Transmitter): Promise<Transmitter | undefined>;
   deleteTransmitter(id: string): Promise<boolean>;
   addReceiver(receiver: NewReceiver): Promise<Receiver>;
   getReceiver(id: string): Promise<Receiver | undefined>;
-  getReceivers(limit: number, offset: number): Promise<Receiver[]>;
-  getReceiversLength(): Promise<number>;
+  getReceivers(
+    limit: number,
+    offset: number,
+    filter?: BridgeFilter
+  ): Promise<Receiver[]>;
+  getReceiversLength(filter?: BridgeFilter): Promise<number>;
   updateReceiver(receiver: Receiver): Promise<Receiver | undefined>;
   deleteReceiver(id: string): Promise<boolean>;
   addPreset(preset: Omit<Preset, '_id'>): Promise<Preset>;

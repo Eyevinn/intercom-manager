@@ -15,10 +15,21 @@ import {
 } from '../models';
 import { v4 as uuidv4 } from 'uuid';
 import { assert } from '../utils';
-import { DbManager } from './interface';
+import { BridgeFilter, DbManager } from './interface';
 import { Log } from '../log';
 
 const SESSION_PRUNE_SECONDS = 7_200;
+const bridgeQuery = (filter?: BridgeFilter): Record<string, unknown> => {
+  const query: Record<string, unknown> = {};
+  if (filter?.productionId !== undefined) {
+    query.productionId = filter.productionId;
+  }
+  if (filter?.lineId !== undefined) {
+    query.lineId = filter.lineId;
+  }
+  return query;
+};
+
 export class DbManagerMongoDb implements DbManager {
   private client: MongoClient;
   private readonly databaseName: string;
@@ -394,11 +405,15 @@ export class DbManagerMongoDb implements DbManager {
       .findOne({ _id: id } as any) as any | undefined;
   }
 
-  async getTransmitters(limit: number, offset: number): Promise<Transmitter[]> {
+  async getTransmitters(
+    limit: number,
+    offset: number,
+    filter?: BridgeFilter
+  ): Promise<Transmitter[]> {
     const db = this.client.db(this.databaseName);
     const transmitters = await db
       .collection<Transmitter>('transmitters')
-      .find()
+      .find(bridgeQuery(filter))
       .sort({ label: 1, createdAt: -1 })
       .skip(offset)
       .limit(limit)
@@ -406,9 +421,11 @@ export class DbManagerMongoDb implements DbManager {
     return transmitters as Transmitter[];
   }
 
-  async getTransmittersLength(): Promise<number> {
+  async getTransmittersLength(filter?: BridgeFilter): Promise<number> {
     const db = this.client.db(this.databaseName);
-    return await db.collection<Transmitter>('transmitters').countDocuments();
+    return await db
+      .collection<Transmitter>('transmitters')
+      .countDocuments(bridgeQuery(filter));
   }
 
   async updateTransmitter(
@@ -458,11 +475,15 @@ export class DbManagerMongoDb implements DbManager {
       | undefined;
   }
 
-  async getReceivers(limit: number, offset: number): Promise<Receiver[]> {
+  async getReceivers(
+    limit: number,
+    offset: number,
+    filter?: BridgeFilter
+  ): Promise<Receiver[]> {
     const db = this.client.db(this.databaseName);
     const receivers = await db
       .collection<Receiver>('receivers')
-      .find()
+      .find(bridgeQuery(filter))
       .sort({ label: 1, createdAt: -1 })
       .skip(offset)
       .limit(limit)
@@ -470,9 +491,11 @@ export class DbManagerMongoDb implements DbManager {
     return receivers as Receiver[];
   }
 
-  async getReceiversLength(): Promise<number> {
+  async getReceiversLength(filter?: BridgeFilter): Promise<number> {
     const db = this.client.db(this.databaseName);
-    return await db.collection<Receiver>('receivers').countDocuments();
+    return await db
+      .collection<Receiver>('receivers')
+      .countDocuments(bridgeQuery(filter));
   }
 
   async updateReceiver(receiver: Receiver): Promise<Receiver | undefined> {
