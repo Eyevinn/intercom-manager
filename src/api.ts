@@ -175,7 +175,8 @@ export default async (opts: ApiOptions) => {
   // Bridge configuration endpoint
   const BridgeConfig = Type.Object({
     transmittersEnabled: Type.Boolean(),
-    receiversEnabled: Type.Boolean()
+    receiversEnabled: Type.Boolean(),
+    supportsPassThrough: Type.Boolean()
   });
 
   api.get<{ Reply: Static<typeof BridgeConfig> }>(
@@ -191,7 +192,8 @@ export default async (opts: ApiOptions) => {
     async (_, reply) => {
       reply.send({
         transmittersEnabled: !!opts.bridgeDriver?.transmittersEnabled,
-        receiversEnabled: !!opts.bridgeDriver?.receiversEnabled
+        receiversEnabled: !!opts.bridgeDriver?.receiversEnabled,
+        supportsPassThrough: !!opts.bridgeDriver?.supportsPassThrough
       });
     }
   );

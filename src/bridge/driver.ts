@@ -8,6 +8,7 @@ export interface EngineBridgeState {
 export interface BridgeDriver {
   readonly transmittersEnabled: boolean;
   readonly receiversEnabled: boolean;
+  readonly supportsPassThrough: boolean;
 
   listTransmitters(): Promise<EngineBridgeState[]>;
   createTransmitter(

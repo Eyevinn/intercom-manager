@@ -31,6 +31,10 @@ export class GatewayBridgeDriver implements BridgeDriver {
     return !!this.whepGatewayUrl;
   }
 
+  get supportsPassThrough(): boolean {
+    return true;
+  }
+
   private async call(
     gatewayUrl: string,
     apiKey: string | undefined,

@@ -60,6 +60,22 @@ export class StromBridgeDriver implements BridgeDriver {
     return !!this.stromUrl;
   }
 
+  get supportsPassThrough(): boolean {
+    return false;
+  }
+
+  private transmitterSrtUri(transmitter: Transmitter): string {
+    if (transmitter.srtUrl) {
+      return transmitter.srtUrl;
+    }
+    if (transmitter.mode === 'listener') {
+      return `srt://0.0.0.0:${transmitter.port}?mode=listener`;
+    }
+    throw new Error(
+      `Transmitter ${transmitter._id} is in caller mode without an srtUrl`
+    );
+  }
+
   private flowId(prefix: string, bridgeId: string): string {
     return uuidv5(`${prefix}${bridgeId}`, FLOW_ID_NAMESPACE);
   }
@@ -175,7 +191,7 @@ export class StromBridgeDriver implements BridgeDriver {
       id: 'srt_in',
       block_definition_id: 'builtin.mpegtssrt_input',
       properties: {
-        srt_uri: transmitter.srtUrl || '',
+        srt_uri: this.transmitterSrtUri(transmitter),
         latency: this.srtLatencyMs,
         num_audio_tracks: 1,
         num_video_tracks: withVideo ? 1 : 0,
