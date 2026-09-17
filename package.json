@@ -34,6 +34,9 @@
     "ts-node": "^10.9.2",
     "uuid": "^14.0.0"
   },
+  "overrides": {
+    "js-yaml": ">=4.2.1"
+  },
   "devDependencies": {
     "@commitlint/cli": "^17.8.1",
     "@commitlint/config-conventional": "^17.8.1",
