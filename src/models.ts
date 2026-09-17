@@ -320,8 +320,7 @@ export const SdpAnswer = Type.Object({
 });
 
 export const ErrorResponse = Type.Object({
-  message: Type.String(),
-  stackTrace: Type.Optional(Type.String())
+  message: Type.String()
 });
 
 export const ShareRequest = Type.Object({
