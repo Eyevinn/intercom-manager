@@ -3,6 +3,7 @@ import { Static, Type } from '@sinclair/typebox';
 import { FastifyPluginCallback } from 'fastify';
 import sdpTransform, { parse } from 'sdp-transform';
 import { v4 as uuidv4 } from 'uuid';
+import { promises as dns } from 'dns';
 import { CoreFunctions } from './api_productions_core_functions';
 import { Log } from './log';
 import { Line, WhipWhepRequest, WhipWhepResponse } from './models';
@@ -19,15 +20,50 @@ export interface ApiWhipOptions {
   productionManager: ProductionManager;
   dbManager: DbManager;
   whipAuthKey?: string;
+  whipGatewayUrl?: string;
   smb?: ISmbProtocol;
 }
 
-export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
+export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = async (
   fastify,
-  opts,
-  next
+  opts
 ) => {
   const productionManager = opts.productionManager;
+
+  // Build allowList for rate limiting
+  const rateLimitAllowList = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
+  if (opts.whipGatewayUrl) {
+    try {
+      const gatewayHost = new URL(opts.whipGatewayUrl).hostname;
+      if (gatewayHost && !rateLimitAllowList.includes(gatewayHost)) {
+        rateLimitAllowList.push(gatewayHost);
+
+        try {
+          const addresses = await dns.resolve(gatewayHost);
+          for (const ip of addresses) {
+            if (!rateLimitAllowList.includes(ip)) {
+              rateLimitAllowList.push(ip);
+            }
+          }
+          Log().info(
+            `WHIP rate limit allowList - resolved ${gatewayHost} to IPs: ${addresses.join(
+              ', '
+            )}`
+          );
+        } catch (resolveErr) {
+          Log().warn(
+            `Failed to resolve WHIP gateway hostname ${gatewayHost}: ${resolveErr}`
+          );
+        }
+      }
+    } catch (err) {
+      Log().warn(
+        `Failed to parse WHIP gateway URL for rate limit allowList: ${err}`
+      );
+    }
+  }
+
+  Log().info(`WHIP rate limit allowList: ${rateLimitAllowList.join(', ')}`);
 
   fastify.addContentTypeParser(
     'application/sdp',
@@ -57,7 +93,7 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
 
   async function requireWhipAuth(request: any, reply: any): Promise<boolean> {
     if (!whipAuthKey) {
-      return true; // auth disabled
+      return true;
     }
 
     const authHeader =
@@ -108,9 +144,15 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
       },
       config: {
         rateLimit: {
-          max: 10,
+          max: 100,
           timeWindow: '1 minute',
           hook: 'onRequest',
+          allowList: rateLimitAllowList,
+          onExceeded: (req) => {
+            Log().warn(
+              `Rate limit exceeded for WHIP endpoint - IP: ${req.ip}, URL: ${req.url}`
+            );
+          },
           errorResponseBuilder: (_req, context) => {
             return {
               statusCode: 429,
@@ -270,7 +312,6 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
         }
 
         // Create the Location URL for the WHIP resource
-        // Location URL can be relative to Request URL, so this is OK.
         const locationUrl = `/api/v1/whip/${productionId}/${lineId}/${sessionId}`;
 
         // Set response headers
@@ -278,13 +319,20 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
           'Content-Type': 'application/sdp',
           Location: locationUrl,
           ETag: sessionId,
-          Link: getIceServers().join(',')
+          Link: getIceServers().join(','),
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS, PATCH',
+          'Access-Control-Allow-Headers':
+            'Content-Type, Authorization, ETag, If-Match, Link',
+          'Access-Control-Expose-Headers': 'Location, ETag, Link'
         });
 
-        reply.code(201).send(sdpAnswer);
+        await reply.code(201).send(sdpAnswer);
       } catch (err) {
         Log().error(err);
-        reply.code(500).send({ error: 'Failed to process WHIP request' });
+        reply
+          .code(500)
+          .send({ error: `Failed to process WHIP request: ${err}` });
       }
     }
   );
@@ -310,8 +358,9 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
     },
     async (request, reply) => {
       if (!(await requireWhipAuth(request, reply))) return;
-      const { sessionId } = request.params;
       try {
+        const { sessionId } = request.params;
+
         Log().info(
           `Received WHIP DELETE request - sessionId: ${sessionId}, IP: ${request.ip}`
         );
@@ -334,13 +383,22 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
         Log().info(
           `WHIP session deleted successfully - sessionId: ${sessionId}`
         );
+
+        reply.headers({
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'POST, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+        });
+
         reply.code(200).send('OK');
       } catch (err) {
         Log().error(
-          `Failed to delete WHIP session - sessionId: ${sessionId}:`,
+          `Failed to delete WHIP session - sessionId: ${request.params.sessionId}:`,
           err
         );
-        reply.code(500).send({ error: 'Failed to terminate WHIP connection' });
+        reply
+          .code(500)
+          .send({ error: `Failed to terminate WHIP connection: ${err}` });
       }
     }
   );
@@ -368,7 +426,6 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
       try {
         const { productionId, lineId } = request.params;
 
-        // Check if production and line exist
         const productionIdNum = parseInt(productionId, 10);
         if (isNaN(productionIdNum)) {
           reply.code(400).send({ error: 'Invalid production ID' });
@@ -390,18 +447,23 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
         }
 
         reply.headers({
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'POST, DELETE, OPTIONS, PATCH',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization, ETag',
+          'Access-Control-Expose-Headers': 'Location, ETag, Link',
+          'Access-Control-Max-Age': '86400',
           'Accept-Post': 'application/sdp'
         });
 
         reply.code(200).send('OK');
       } catch (err) {
         Log().error(err);
-        reply.code(500).send({ error: 'Failed to process OPTIONS request' });
+        reply
+          .code(500)
+          .send({ error: `Failed to process OPTIONS request: ${err}` });
       }
     }
   );
-
-  next();
 };
 
 export default apiWhip;

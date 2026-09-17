@@ -52,3 +52,9 @@ export function getIceServers(): string[] {
 
   return links;
 }
+
+export function encodeSrtStreamId(srtUrl: string): string {
+  return srtUrl.replace(/([?&]streamid=)([^&]*)/i, (_, prefix, value) => {
+    return prefix + encodeURIComponent(decodeURIComponent(value));
+  });
+}
