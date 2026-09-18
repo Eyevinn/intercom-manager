@@ -14,6 +14,9 @@ export interface MediaStreamsInfo {
   audio: {
     ssrcs: MediaStreamsInfoSsrc[];
   };
+  video?: {
+    ssrcs: MediaStreamsInfoSsrc[];
+  };
 }
 
 export type RtpCodec = {

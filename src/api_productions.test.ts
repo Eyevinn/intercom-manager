@@ -168,6 +168,12 @@ const mockProductionManager = {
     .mockImplementation((lines: any[], id: string) =>
       lines.find((l) => l.id === id)
     ),
+  requireLine: jest.fn().mockImplementation((lines: any[], id: string) => {
+    const found = lines.find((l) => l.id === id);
+    if (!found) throw new Error(`Line ${id} not found`);
+    return found;
+  }),
+  clearWhepSourceIfPinned: jest.fn().mockResolvedValue(undefined),
   updateUserLastSeen: jest
     .fn()
     .mockImplementation((sessionId: string) => sessionId === 'alive-session'),
@@ -176,6 +182,7 @@ const mockProductionManager = {
   removeUserSession: jest
     .fn()
     .mockImplementation((sessionId: string) => sessionId),
+  emit: jest.fn(),
   createUserSession: jest.fn().mockResolvedValue(undefined),
   getActiveUsers: jest.fn().mockResolvedValue([]),
   once: jest.fn(),
@@ -483,6 +490,47 @@ describe('Production API', () => {
       });
       expect(response.statusCode).toBe(500);
       removeSpy.mockRestore();
+    });
+  });
+
+  describe('PATCH /session/:id', () => {
+    test('flushes a 204 once the SDP answer is handled', async () => {
+      const patchSession = {
+        _id: 'mock-session',
+        name: 'usersession',
+        productionId: '1',
+        lineId: '1',
+        endpointId: 'mock-endpoint-1',
+        isActive: true,
+        isExpired: false,
+        isWhip: false,
+        sessionDescription: { audio: { ssrcs: [1] }, video: { ssrcs: [] } }
+      };
+      const getSessionSpy = jest
+        .spyOn(mockDbManager, 'getSession')
+        .mockResolvedValue(patchSession as any);
+      mockProductionManager.getProduction = jest
+        .fn()
+        .mockResolvedValue(mockProductions[0]);
+      mockProductionManager.updateUserEndpoint = jest
+        .fn()
+        .mockResolvedValue(undefined);
+      mockProductionManager.updateSessionHasVideo = jest
+        .fn()
+        .mockResolvedValue(undefined);
+      mockCoreFunctions.handleAnswerRequest = jest
+        .fn()
+        .mockResolvedValue(undefined);
+
+      const response = await server.inject({
+        method: 'PATCH',
+        url: '/api/v1/session/mock-session',
+        body: { sdpAnswer: 'v=0' }
+      });
+
+      expect(response.statusCode).toBe(204);
+      expect(mockCoreFunctions.handleAnswerRequest).toHaveBeenCalled();
+      getSessionSpy.mockRestore();
     });
   });
 

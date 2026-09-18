@@ -261,7 +261,8 @@ export class ProductionManager extends EventEmitter {
         name: line.name,
         id: index.toString(),
         smbConferenceId: '',
-        programOutputLine: line.programOutputLine || false
+        programOutputLine: line.programOutputLine || false,
+        videoEnabled: line.videoEnabled || false
       };
       newProductionLines.push(newProductionLine);
     }
@@ -280,7 +281,8 @@ export class ProductionManager extends EventEmitter {
   async addProductionLine(
     production: Production,
     newLineName: string,
-    programOutputLine: boolean
+    programOutputLine: boolean,
+    videoEnabled = false
   ): Promise<Production | undefined> {
     const nextLineId = production.lines.length
       ? Math.max(...production.lines.map((line) => parseInt(line.id, 10))) + 1
@@ -290,7 +292,8 @@ export class ProductionManager extends EventEmitter {
       name: newLineName,
       id: nextLineId.toString(),
       smbConferenceId: '',
-      programOutputLine: programOutputLine || false
+      programOutputLine: programOutputLine || false,
+      videoEnabled: videoEnabled || false
     });
 
     return this.dbManager.updateProduction(production);
@@ -307,6 +310,57 @@ export class ProductionManager extends EventEmitter {
       return this.dbManager.updateProduction(production);
     }
     return undefined;
+  }
+
+  async clearWhepSourceIfPinned(sessionId: string): Promise<void> {
+    try {
+      const session = await this.dbManager.getSession(sessionId);
+      if (!session) return;
+      const productionIdNum = parseInt(session.productionId, 10);
+      if (Number.isNaN(productionIdNum)) return;
+      const production = await this.getProduction(productionIdNum);
+      if (!production) return;
+      const line = production.lines.find((l) => l.id === session.lineId);
+      if (!line) return;
+      if (line.whepSourceSessionId !== sessionId) return;
+      line.whepSourceSessionId = null;
+      await this.dbManager.updateProduction(production);
+    } catch (err) {
+      Log().warn(
+        `[whep-pin] clearWhepSourceIfPinned for ${sessionId} failed: ${err}`
+      );
+    }
+  }
+
+  async getReceiversPinnedToSession(
+    leaverSessionId: string
+  ): Promise<UserSession[]> {
+    const leaver = await this.dbManager.getSession(leaverSessionId);
+    if (!leaver) return [];
+    const sessions = await this.dbManager.getSessionsByQuery({
+      productionId: leaver.productionId,
+      lineId: leaver.lineId,
+      isExpired: false
+    });
+    return sessions.filter(
+      (s) =>
+        (s as any)._id?.toString?.() !== leaverSessionId &&
+        (s as any).pinnedVideoSessionId === leaverSessionId
+    );
+  }
+
+  async setLineWhepSource(
+    production: Production,
+    lineId: string,
+    sessionId: string | null
+  ): Promise<Production | undefined> {
+    const line = production.lines.find((l) => l.id === lineId);
+    if (!line) return undefined;
+    const current = line.whepSourceSessionId ?? null;
+    const next = sessionId ?? null;
+    if (current === next) return production;
+    line.whepSourceSessionId = sessionId;
+    return this.dbManager.updateProduction(production);
   }
 
   async deleteProductionLine(
@@ -383,7 +437,11 @@ export class ProductionManager extends EventEmitter {
     lineId: string,
     sessionId: string,
     name: string,
-    isWhip = false
+    isWhip = false,
+    // WHEP recipients also currently set isWhip=true (legacy from when both
+    // WHIP and WHEP shared a code path).
+    isWhepReceiver = false,
+    hasVideo = false
   ): Promise<void> {
     const userSession: UserSession = {
       _id: sessionId,
@@ -394,7 +452,9 @@ export class ProductionManager extends EventEmitter {
       lastSeen: isWhip ? Date.now() + 20000 : Date.now(),
       isActive: true,
       isExpired: false,
-      isWhip
+      isWhip,
+      isWhepReceiver,
+      hasVideo
     };
 
     this.userSessions[sessionId] = userSession;
@@ -444,27 +504,63 @@ export class ProductionManager extends EventEmitter {
     endpointId: string,
     sessionDescription: SmbEndpointDescription
   ): Promise<boolean> {
+    const smbPresenceKey = endpointId.toLowerCase();
+
+    const ok = await this.dbManager.updateSession(sessionId, {
+      endpointId,
+      sessionDescription,
+      isActive: true,
+      isExpired: false,
+      lastSeen: Date.now(),
+      ...({ smbPresenceKey } as any)
+    });
+
     const userSession = this.userSessions[sessionId];
     if (userSession) {
       userSession.endpointId = endpointId;
       userSession.sessionDescription = sessionDescription;
-      const smbPresenceKey = endpointId.toLowerCase();
-
       (userSession as any).smbPresenceKey = smbPresenceKey;
-
-      const ok = await this.dbManager.updateSession(sessionId, {
-        endpointId,
-        sessionDescription,
-        isActive: true,
-        isExpired: false,
-        lastSeen: Date.now(),
-        ...({ smbPresenceKey } as any)
-      });
-
-      if (ok) this.emit('users:change');
-      return ok;
     }
-    return false;
+
+    if (ok) this.emit('users:change');
+    return ok;
+  }
+
+  async updateSessionHasVideo(
+    sessionId: string,
+    hasVideo: boolean
+  ): Promise<boolean> {
+    const ok = await this.dbManager.updateSession(sessionId, {
+      hasVideo
+    } as any);
+
+    const userSession = this.userSessions[sessionId];
+    if (userSession) {
+      userSession.hasVideo = hasVideo;
+    }
+
+    if (ok) this.emit('users:change');
+    return ok;
+  }
+
+  async updateSessionVideoPin(
+    sessionId: string,
+    sessionDescription: SmbEndpointDescription,
+    pinnedVideoSessionId: string | null
+  ): Promise<boolean> {
+    const ok = await this.dbManager.updateSession(sessionId, {
+      sessionDescription,
+      ...({ pinnedVideoSessionId } as any)
+    });
+
+    const userSession = this.userSessions[sessionId];
+    if (userSession) {
+      userSession.sessionDescription = sessionDescription;
+      (userSession as any).pinnedVideoSessionId = pinnedVideoSessionId;
+    }
+
+    if (ok) this.emit('users:change');
+    return ok;
   }
 
   removeUserSession(sessionId: string): string | undefined {
@@ -495,7 +591,9 @@ export class ProductionManager extends EventEmitter {
         sessionId: s._id?.toString?.() ?? '',
         name: s.name ?? '',
         isActive: !!s.isActive,
-        isWhip: !!s.isWhip
+        isWhip: !!s.isWhip,
+        isWhepReceiver: !!s.isWhepReceiver,
+        hasVideo: !!s.hasVideo
       };
       if (typeof s.endpointId === 'string' && s.endpointId.length > 0)
         u.endpointId = s.endpointId;
@@ -514,5 +612,12 @@ export class ProductionManager extends EventEmitter {
     });
 
     return participants;
+  }
+
+  async getUserNameBySessionId(sessionId: string): Promise<string | null> {
+    const cached = this.userSessions[sessionId];
+    if (cached) return cached.name;
+    const dbSession = await this.dbManager.getSession(sessionId);
+    return dbSession?.name ?? null;
   }
 }

@@ -83,14 +83,16 @@ export const NewProduction = Type.Object({
   lines: Type.Array(
     Type.Object({
       name: Type.String({ minLength: 1, maxLength: 200 }),
-      programOutputLine: Type.Optional(Type.Boolean())
+      programOutputLine: Type.Optional(Type.Boolean()),
+      videoEnabled: Type.Optional(Type.Boolean())
     })
   )
 });
 
 export const NewProductionLine = Type.Object({
   name: Type.String({ minLength: 1, maxLength: 200 }),
-  programOutputLine: Type.Optional(Type.Boolean())
+  programOutputLine: Type.Optional(Type.Boolean()),
+  videoEnabled: Type.Optional(Type.Boolean())
 });
 
 const SmbCandidate = Type.Object({
@@ -151,11 +153,7 @@ const SmbRtpHeaderExtension = Type.Object({
   uri: Type.String()
 });
 
-const VideoSmbPayloadParameters = Type.Object({
-  'x-google-start-bitrate': Type.Optional(Type.String()),
-  'x-google-max-bitrate': Type.Optional(Type.String()),
-  'x-google-min-bitrate': Type.Optional(Type.String())
-});
+const VideoSmbPayloadParameters = Type.Record(Type.String(), Type.String());
 
 const VideoSmbPayloadType = Type.Object({
   id: Type.Number(),
@@ -189,11 +187,30 @@ export const SmbEndpointDescription = Type.Object({
     'payload-type': AudioSmbPayloadType,
     'rtp-hdrexts': Type.Array(SmbRtpHeaderExtension)
   }),
-  video: Type.Object({
-    ssrcs: Type.Array(Type.Number()),
-    'payload-type': VideoSmbPayloadType,
-    'rtp-hdrexts': Type.Array(SmbRtpHeaderExtension)
-  }),
+
+  video: Type.Optional(
+    Type.Object({
+      ssrcs: Type.Optional(Type.Array(Type.Number())),
+      'payload-type': Type.Optional(VideoSmbPayloadType),
+      'payload-types': Type.Optional(Type.Array(VideoSmbPayloadType)),
+      'rtp-hdrexts': Type.Optional(Type.Array(SmbRtpHeaderExtension)),
+      streams: Type.Optional(
+        Type.Array(
+          Type.Object({
+            id: Type.String(),
+            content: Type.String(),
+            sources: Type.Array(
+              Type.Object({
+                main: Type.Number(),
+                feedback: Type.Optional(Type.Number())
+              })
+            )
+          })
+        )
+      ),
+      'ssrc-whitelist': Type.Optional(Type.Array(Type.Number()))
+    })
+  ),
   data: Type.Optional(Type.Object({ port: Type.Number() })),
   idleTimeout: Type.Optional(Type.Number())
 });
@@ -227,7 +244,9 @@ export const UserResponse = Type.Object({
   sessionId: Type.String(),
   endpointId: Type.Optional(Type.String()),
   isActive: Type.Boolean(),
-  isWhip: Type.Boolean()
+  isWhip: Type.Boolean(),
+  isWhepReceiver: Type.Optional(Type.Boolean()),
+  hasVideo: Type.Boolean()
 });
 
 export const UserSession = Type.Object({
@@ -249,7 +268,10 @@ export const UserSession = Type.Object({
   endpointId: Type.Optional(Type.String()),
   sessionDescription: Type.Optional(SmbEndpointDescription),
   iceCandidates: Type.Optional(Type.Array(IceCandidate)),
-  isWhip: Type.Boolean()
+  isWhip: Type.Boolean(),
+  isWhepReceiver: Type.Optional(Type.Boolean()),
+  hasVideo: Type.Boolean(),
+  pinnedVideoSessionId: Type.Optional(Type.String())
 });
 
 export const Conference = Type.Object({
@@ -262,7 +284,9 @@ export const Line = Type.Object({
   name: Type.String(),
   id: Type.String(),
   smbConferenceId: Type.String(),
-  programOutputLine: Type.Optional(Type.Boolean())
+  programOutputLine: Type.Optional(Type.Boolean()),
+  videoEnabled: Type.Optional(Type.Boolean()),
+  whepSourceSessionId: Type.Optional(Type.Union([Type.String(), Type.Null()]))
 });
 
 export const LineResponse = Type.Object({
@@ -270,11 +294,31 @@ export const LineResponse = Type.Object({
   id: Type.String(),
   smbConferenceId: Type.String(),
   participants: Type.Array(UserResponse),
-  programOutputLine: Type.Optional(Type.Boolean())
+  programOutputLine: Type.Optional(Type.Boolean()),
+  videoEnabled: Type.Optional(Type.Boolean()),
+  whepSourceSessionId: Type.Optional(Type.Union([Type.String(), Type.Null()]))
 });
 
 export const PatchLine = Type.Omit(Line, ['id', 'smbConferenceId']);
 export const PatchLineResponse = Type.Omit(Line, ['smbConferenceId']);
+
+export const SetLineWhepSourceRequest = Type.Object({
+  pinnedSessionId: Type.Union([Type.String(), Type.Null()])
+});
+
+export const SetLineWhepSourceResponse = Type.Object({
+  lineId: Type.String(),
+  pinnedSessionId: Type.Union([Type.String(), Type.Null()])
+});
+
+export const SetSessionVideoSourceRequest = Type.Object({
+  pinnedSessionId: Type.Union([Type.String(), Type.Null()])
+});
+
+export const SetSessionVideoSourceResponse = Type.Object({
+  sessionId: Type.String(),
+  pinnedSessionId: Type.Union([Type.String(), Type.Null()])
+});
 
 export const Production = Type.Object({
   _id: Type.Number(),
