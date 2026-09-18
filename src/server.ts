@@ -58,7 +58,16 @@ if (dbUrl.protocol === 'mongodb:' || dbUrl.protocol === 'mongodb+srv:') {
   throw new Error('Unsupported database protocol');
 }
 
+const REQUIRED_ENV = ['SMB_ADDRESS', 'CORS_ORIGIN'] as const;
+
 (async function startServer() {
+  for (const key of REQUIRED_ENV) {
+    if (!process.env[key]) {
+      console.error(`Missing required environment variable: ${key}`);
+      process.exit(1);
+    }
+  }
+
   await dbManager.connect();
   const productionManager = new ProductionManager(dbManager);
   await productionManager.load();
