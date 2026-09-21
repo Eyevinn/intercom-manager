@@ -3,16 +3,16 @@ import { CoreFunctions } from './api_productions_core_functions';
 import { ConnectionQueue } from './connection_queue';
 import { DbManagerCouchDb } from './db/couchdb';
 import { DbManagerMongoDb } from './db/mongodb';
+import { DbManager } from './db/interface';
 import { IngestManager } from './ingest_manager';
 import { Log } from './log';
 import { ProductionManager } from './production_manager';
 
-const SMB_ADDRESS: string = process.env.SMB_ADDRESS ?? 'http://localhost:8080';
+// SMB_ADDRESS is required (validated in validateRequiredEnv); no default is
+// provided so that a missing value is caught by startup validation rather than
+// silently falling back to localhost.
+const SMB_ADDRESS: string = process.env.SMB_ADDRESS ?? '';
 const PUBLIC_HOST: string = process.env.PUBLIC_HOST ?? 'http://localhost:8000';
-
-if (!process.env.SMB_ADDRESS) {
-  Log().warn('SMB_ADDRESS environment variable not set, using defaults');
-}
 
 if (!process.env.PUBLIC_HOST) {
   Log().warn('PUBLIC_HOST is not set — falling back to localhost default');
@@ -27,16 +27,18 @@ if (
   );
 }
 
-try {
-  const smbUrl = new URL(SMB_ADDRESS);
-  const localHosts = ['localhost', '127.0.0.1', '::1'];
-  if (smbUrl.protocol === 'http:' && !localHosts.includes(smbUrl.hostname)) {
-    Log().warn(
-      `SMB_ADDRESS uses plaintext http:// to a remote host (${smbUrl.hostname}); SDP/ICE data will be sent unencrypted. Use https:// in production.`
-    );
+if (SMB_ADDRESS) {
+  try {
+    const smbUrl = new URL(SMB_ADDRESS);
+    const localHosts = ['localhost', '127.0.0.1', '::1'];
+    if (smbUrl.protocol === 'http:' && !localHosts.includes(smbUrl.hostname)) {
+      Log().warn(
+        `SMB_ADDRESS uses plaintext http:// to a remote host (${smbUrl.hostname}); SDP/ICE data will be sent unencrypted. Use https:// in production.`
+      );
+    }
+  } catch (err) {
+    Log().warn(`SMB_ADDRESS could not be parsed as a URL: ${SMB_ADDRESS}`);
   }
-} catch (err) {
-  Log().warn(`SMB_ADDRESS could not be parsed as a URL: ${SMB_ADDRESS}`);
 }
 
 const ENDPOINT_IDLE_TIMEOUT_S: string =
@@ -48,7 +50,7 @@ const DB_CONNECTION_STRING: string =
   process.env.DB_CONNECTION_STRING ??
   process.env.MONGODB_CONNECTION_STRING ??
   'mongodb://localhost:27017/intercom-manager';
-let dbManager;
+let dbManager: DbManager;
 const dbUrl = new URL(DB_CONNECTION_STRING);
 if (dbUrl.protocol === 'mongodb:' || dbUrl.protocol === 'mongodb+srv:') {
   dbManager = new DbManagerMongoDb(dbUrl);
@@ -60,13 +62,22 @@ if (dbUrl.protocol === 'mongodb:' || dbUrl.protocol === 'mongodb+srv:') {
 
 const REQUIRED_ENV = ['SMB_ADDRESS', 'CORS_ORIGIN'] as const;
 
-(async function startServer() {
+/**
+ * Validate that all required environment variables are set and non-empty.
+ * Exits the process with code 1 on the first missing/empty variable so that
+ * the server never starts in a misconfigured state.
+ */
+export function validateRequiredEnv(): void {
   for (const key of REQUIRED_ENV) {
     if (!process.env[key]) {
-      console.error(`Missing required environment variable: ${key}`);
+      Log().error(`Missing required environment variable: ${key}`);
       process.exit(1);
     }
   }
+}
+
+async function startServer() {
+  validateRequiredEnv();
 
   await dbManager.connect();
   const productionManager = new ProductionManager(dbManager);
@@ -115,4 +126,10 @@ const REQUIRED_ENV = ['SMB_ADDRESS', 'CORS_ORIGIN'] as const;
     Log().error('Uncaught exception:', err);
     process.exit(1);
   });
-})();
+}
+
+// Only start the server when this module is executed directly (e.g. via
+// `ts-node src/server.ts`), not when it is imported (e.g. by unit tests).
+if (require.main === module) {
+  startServer();
+}
