@@ -580,4 +580,56 @@ describe('Production API', () => {
       expect(response.statusCode).toBe(410);
     });
   });
+  // The handler returns 410 when the session is gone, but that status was not
+  // in the declared response schema (204/400/500 only).
+  describe('PATCH /session/:id — session gone', () => {
+    test('answers 410 with the declared error shape', async () => {
+      const getSessionSpy = jest
+        .spyOn(mockDbManager, 'getSession')
+        .mockResolvedValue(null as any);
+
+      const response = await server.inject({
+        method: 'PATCH',
+        url: '/api/v1/session/missing-session',
+        body: { sdpAnswer: 'v=0' }
+      });
+
+      expect(response.statusCode).toBe(410);
+      expect(response.json().message).toContain('missing-session');
+      getSessionSpy.mockRestore();
+    });
+  });
+
+  describe('GET /session/:sessionId/name', () => {
+    test('returns the session display name', async () => {
+      mockProductionManager.getUserNameBySessionId = jest
+        .fn()
+        .mockResolvedValue('maximus');
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/api/v1/session/named-session/name'
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        sessionId: 'named-session',
+        name: 'maximus'
+      });
+    });
+
+    test('returns 404 for an unknown session', async () => {
+      mockProductionManager.getUserNameBySessionId = jest
+        .fn()
+        .mockResolvedValue(null);
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/api/v1/session/nobody/name'
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toEqual({ message: 'Session not found' });
+    });
+  });
 });

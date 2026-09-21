@@ -31,6 +31,8 @@ const mockProductionManager = {
   getUser: jest.fn().mockResolvedValue(undefined),
   requireLine: jest.fn().mockResolvedValue({}),
   clearWhepSourceIfPinned: jest.fn().mockResolvedValue(undefined),
+  getReceiversPinnedToSession: jest.fn().mockResolvedValue([]),
+  updateSessionVideoPin: jest.fn().mockResolvedValue(true),
   updateSessionHasVideo: jest.fn().mockResolvedValue(undefined),
   setLineWhepSource: jest.fn().mockResolvedValue(undefined),
   once: jest.fn(),
@@ -511,5 +513,145 @@ describe('apiWhip hasVideo', () => {
     await post(sdp(AUDIO));
 
     expect(hasVideoCalls()).toEqual([]);
+  });
+});
+
+/**
+ * A WHIP publisher leaving is a publisher-removal path exactly like the app
+ * session DELETE. Receivers pinned to it carry its SSRCs in their endpoint
+ * `ssrc-whitelist`; if that whitelist survives the publisher, SMB forwards
+ * nothing and the receiver's tile freezes on the last decoded frame.
+ *
+ * The WHIP path is reconciled as of #341; these are the regression tests
+ * for it, which that change did not carry.
+ */
+describe('DELETE /whip/:productionId/:lineId/:sessionId — pin reconciliation', () => {
+  const RECEIVER_ENDPOINT = 'receiver-endpoint-1';
+  const PUBLISHER_SSRCS = [111111, 222222];
+
+  type Reconfigure = {
+    conferenceId: string;
+    endpointId: string;
+    ssrcWhitelist: number[] | undefined;
+  };
+  let reconfigures: Reconfigure[];
+  let mockSmb: any;
+
+  const makeReceiver = (pinnedTo: string) => ({
+    _id: 'receiver-1',
+    productionId: '1',
+    lineId: 'line1',
+    endpointId: RECEIVER_ENDPOINT,
+    pinnedVideoSessionId: pinnedTo,
+    sessionDescription: {
+      'bundle-transport': {},
+      video: {
+        ssrcs: [999999],
+        'ssrc-whitelist': PUBLISHER_SSRCS,
+        'payload-type': {},
+        'rtp-hdrexts': []
+      }
+    }
+  });
+
+  const createServer = async () => {
+    const fastify = Fastify();
+    fastify.register(apiWhip, { ...defaultOptions, smb: mockSmb });
+    await fastify.ready();
+    return fastify;
+  };
+
+  beforeEach(() => {
+    // This describe sits outside `describe('apiWhip')`, so it does not inherit
+    // that block's afterEach(clearAllMocks) — clear here or call counts leak
+    // between these tests.
+    jest.clearAllMocks();
+    reconfigures = [];
+    mockSmb = {
+      reconfigureEndpoint: jest
+        .fn()
+        .mockImplementation(
+          async (
+            _url: string,
+            conferenceId: string,
+            endpointId: string,
+            desc: any
+          ) => {
+            reconfigures.push({
+              conferenceId,
+              endpointId,
+              ssrcWhitelist: desc?.video?.['ssrc-whitelist']
+            });
+          }
+        )
+    };
+    mockProductionManager.getProduction.mockResolvedValue({
+      _id: 1,
+      lines: [{ id: 'line1', smbConferenceId: 'smb-conf-1' }]
+    });
+  });
+
+  it('strips the ssrc-whitelist from receivers pinned to the leaving publisher', async () => {
+    mockProductionManager.getReceiversPinnedToSession.mockResolvedValueOnce([
+      makeReceiver('mock-session-id')
+    ]);
+    mockDbManager.getSession.mockResolvedValueOnce({ _id: 'mock-session-id' });
+
+    const fastify = await createServer();
+    const res = await fastify.inject({
+      method: 'DELETE',
+      url: '/whip/prod1/line1/mock-session-id'
+    });
+
+    expect(res.statusCode).toBe(200);
+
+    // The key must be deleted, not emptied: an empty-but-present whitelist
+    // tells SMB to forward nothing at all.
+    expect(reconfigures).toHaveLength(1);
+    expect(reconfigures[0].endpointId).toBe(RECEIVER_ENDPOINT);
+    expect(reconfigures[0].conferenceId).toBe('smb-conf-1');
+    expect(reconfigures[0].ssrcWhitelist).toBeUndefined();
+
+    expect(mockProductionManager.updateSessionVideoPin).toHaveBeenCalledWith(
+      'receiver-1',
+      expect.anything(),
+      null
+    );
+  });
+
+  it('does not reconfigure anything when nobody is pinned to the publisher', async () => {
+    mockProductionManager.getReceiversPinnedToSession.mockResolvedValueOnce([]);
+    mockDbManager.getSession.mockResolvedValueOnce({ _id: 'mock-session-id' });
+
+    const fastify = await createServer();
+    const res = await fastify.inject({
+      method: 'DELETE',
+      url: '/whip/prod1/line1/mock-session-id'
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(reconfigures).toHaveLength(0);
+    expect(mockProductionManager.updateSessionVideoPin).not.toHaveBeenCalled();
+  });
+
+  it('still deletes the session when the bridge rejects the reconfigure', async () => {
+    // Reconciliation is best-effort: a wedged bridge must not leave the
+    // publisher's session undeletable.
+    mockProductionManager.getReceiversPinnedToSession.mockResolvedValueOnce([
+      makeReceiver('mock-session-id')
+    ]);
+    mockSmb.reconfigureEndpoint.mockRejectedValueOnce(new Error('smb down'));
+    mockDbManager.getSession.mockResolvedValueOnce({ _id: 'mock-session-id' });
+
+    const fastify = await createServer();
+    const res = await fastify.inject({
+      method: 'DELETE',
+      url: '/whip/prod1/line1/mock-session-id'
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(mockDbManager.deleteUserSession).toHaveBeenCalledWith(
+      'mock-session-id'
+    );
   });
 });

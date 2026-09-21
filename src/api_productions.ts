@@ -989,6 +989,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         response: {
           204: Type.Null(),
           400: Type.String(),
+          410: ErrorResponse,
           500: Type.String()
         }
       }
@@ -1336,6 +1337,19 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
 
   fastify.get<{ Params: { sessionId: string } }>(
     '/session/:sessionId/name',
+    {
+      schema: {
+        description: 'Get the display name of a session.',
+        params: SessionIdParams,
+        response: {
+          200: Type.Object({
+            sessionId: Type.String(),
+            name: Type.String()
+          }),
+          404: ErrorResponse
+        }
+      }
+    },
     async (request, reply) => {
       const name = await productionManager.getUserNameBySessionId(
         request.params.sessionId

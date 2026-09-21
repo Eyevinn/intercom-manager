@@ -153,7 +153,14 @@ const SmbRtpHeaderExtension = Type.Object({
   uri: Type.String()
 });
 
-const VideoSmbPayloadParameters = Type.Record(Type.String(), Type.String());
+// SMB returns codec-specific fmtp parameters whose key set differs per codec
+// (x-google-* for VP8, profile-level-id / packetization-mode for H264), so the
+// keys cannot be enumerated here. Values are bounded to keep an unexpected
+// bridge response from carrying an unbounded string into the session document.
+const VideoSmbPayloadParameters = Type.Record(
+  Type.String({ maxLength: 100 }),
+  Type.String({ maxLength: 200 })
+);
 
 const VideoSmbPayloadType = Type.Object({
   id: Type.Number(),
@@ -303,7 +310,10 @@ export const PatchLine = Type.Omit(Line, ['id', 'smbConferenceId']);
 export const PatchLineResponse = Type.Omit(Line, ['smbConferenceId']);
 
 export const SetLineWhepSourceRequest = Type.Object({
-  pinnedSessionId: Type.Union([Type.String(), Type.Null()])
+  pinnedSessionId: Type.Union([
+    Type.String({ minLength: 1, maxLength: 200 }),
+    Type.Null()
+  ])
 });
 
 export const SetLineWhepSourceResponse = Type.Object({
@@ -312,7 +322,10 @@ export const SetLineWhepSourceResponse = Type.Object({
 });
 
 export const SetSessionVideoSourceRequest = Type.Object({
-  pinnedSessionId: Type.Union([Type.String(), Type.Null()])
+  pinnedSessionId: Type.Union([
+    Type.String({ minLength: 1, maxLength: 200 }),
+    Type.Null()
+  ])
 });
 
 export const SetSessionVideoSourceResponse = Type.Object({
