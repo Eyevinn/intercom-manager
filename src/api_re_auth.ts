@@ -1,4 +1,5 @@
 import { FastifyPluginCallback } from 'fastify';
+import { Type } from '@sinclair/typebox';
 import { ErrorResponse, ReAuthResponse } from './models';
 
 const OSC_ACCESS_TOKEN = process.env.OSC_ACCESS_TOKEN;
@@ -42,7 +43,23 @@ const apiReAuth: FastifyPluginCallback = (fastify, _, next) => {
           200: ReAuthResponse,
           400: ErrorResponse,
           405: ErrorResponse,
+          429: Type.Object({ error: Type.String() }),
           500: ErrorResponse
+        }
+      },
+      config: {
+        rateLimit: {
+          max: 5,
+          timeWindow: '1 minute',
+          hook: 'onRequest',
+          errorResponseBuilder: (_req, context) => {
+            return {
+              statusCode: 429,
+              error: 'Too Many Requests',
+              message: 'Too many requests, please try again later',
+              expiresIn: context.after
+            };
+          }
         }
       }
     },
