@@ -9,6 +9,17 @@ export function assert(condition: any, message: string): asserts condition {
   }
 }
 
+// Strip CR/LF and other control characters (keeping regular spaces) to prevent
+// log injection / forging when untrusted values are logged. Defense-in-depth:
+// schema validation should already reject such values, but this guarantees no
+// control chars reach the logger even on error paths.
+// Removes C0 controls (incl. LF \x0a, CR \x0d, ESC \x1b), DEL \x7f and C1
+// controls (\x80-\x9f). Printable characters and spaces are kept.
+export function sanitizeForLog(value: string): string {
+  // eslint-disable-next-line no-control-regex
+  return value.replace(/[\x00-\x1f\x7f-\x9f]/g, '');
+}
+
 export function getIceServers(): string[] {
   const defaultStun = 'stun:stun.l.google.com:19302';
   const raw = process.env.ICE_SERVERS || '';
