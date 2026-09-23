@@ -411,7 +411,16 @@ export const PresetCall = Type.Object({
 export const NewPreset = Type.Object({
   name: Type.String({ minLength: 1, maxLength: 200 }),
   calls: Type.Array(PresetCall, { minItems: 1, maxItems: 20 }),
-  companionUrl: Type.Optional(Type.String())
+  // companionUrl points at the Companion module's WebSocket endpoint (ws://
+  // or wss://); http(s) is also accepted. The pattern blocks dangerous schemes
+  // like javascript:/data:/file: while the length cap bounds stored input.
+  companionUrl: Type.Optional(
+    Type.String({
+      format: 'uri',
+      pattern: '^(wss?|https?)://',
+      maxLength: 2048
+    })
+  )
 });
 
 export const Preset = Type.Object({
@@ -429,7 +438,18 @@ export const PresetListResponse = Type.Object({
 export const UpdatePreset = Type.Object({
   name: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
   calls: Type.Optional(Type.Array(PresetCall, { minItems: 0, maxItems: 20 })),
-  companionUrl: Type.Optional(Type.Union([Type.String(), Type.Null()]))
+  // Empty string is allowed and treated as removal by the PATCH handler; a
+  // non-empty value must be a ws(s)/http(s) URL (pattern) within a sane length.
+  companionUrl: Type.Optional(
+    Type.Union([
+      Type.String({
+        format: 'uri',
+        pattern: '^((wss?|https?)://.*)?$',
+        maxLength: 2048
+      }),
+      Type.Null()
+    ])
+  )
 });
 
 export type PresetCall = Static<typeof PresetCall>;
