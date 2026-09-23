@@ -54,7 +54,7 @@ jobs:
 
               // Get commit messages between tags
               const gitLogArgs = previousTag
-                ? ['log', `${previousTag}..HEAD`, '--oneline', '--no-merges']
+                ? ['log', '--oneline', '--no-merges', '--end-of-options', `${previousTag}..HEAD`]
                 : ['log', '--oneline', '--no-merges'];
 
               const commits = execFileSync('git', gitLogArgs, { encoding: 'utf-8' }).trim();
@@ -91,7 +91,7 @@ jobs:
               const releaseNotesFile = 'release_notes.md';
               require('fs').writeFileSync(releaseNotesFile, releaseNotes);
 
-              execFileSync('gh', ['release', 'create', currentTag, '--title', `Release ${currentTag}`, '--notes-file', releaseNotesFile], {
+              execFileSync('gh', ['release', 'create', '--title', `Release ${currentTag}`, '--notes-file', releaseNotesFile, '--', currentTag], {
                 stdio: 'inherit',
                 env: { ...process.env, GH_TOKEN: process.env.GITHUB_TOKEN }
               });
