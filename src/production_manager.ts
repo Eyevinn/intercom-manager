@@ -340,6 +340,24 @@ export class ProductionManager extends EventEmitter {
   }
 
   /**
+   * Returns true if the production has any non-expired session (regular
+   * participants or WHIP endpoints). "In use" is keyed on `isExpired: false`
+   * to match `getUsersForLine`/`checkUserStatus`, which drive the participant
+   * list and the frontend's disabled delete button. A session can be flipped
+   * to `isActive: false` after the inactivity threshold while still being
+   * non-expired (a heartbeat would reactivate it); such a session must still
+   * block deletion, so `isActive` is deliberately not part of this query.
+   * Used to guard against deleting a production that is still in use.
+   */
+  async hasActiveSessions(productionId: string): Promise<boolean> {
+    const activeSessions = await this.dbManager.getSessionsByQuery({
+      productionId,
+      isExpired: false
+    });
+    return activeSessions.length > 0;
+  }
+
+  /**
    * Delete the production from the db and local cache
    */
   async deleteProduction(productionId: number): Promise<boolean> {
