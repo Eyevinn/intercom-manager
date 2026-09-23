@@ -280,6 +280,37 @@ describe('production_manager', () => {
 });
 
 describe('production_manager', () => {
+  it('reports active sessions when the production has a non-expired active session', async () => {
+    const dbManager = jest.requireMock('./db/interface');
+    dbManager.getSessionsByQuery.mockResolvedValueOnce([
+      { _id: 'session-1', productionId: '1', isActive: true, isExpired: false }
+    ]);
+
+    const productionManagerTest = new ProductionManager(dbManager);
+
+    expect(await productionManagerTest.hasActiveSessions('1')).toStrictEqual(
+      true
+    );
+    expect(dbManager.getSessionsByQuery).toHaveBeenCalledWith({
+      productionId: '1',
+      isExpired: false,
+      isActive: true
+    });
+  });
+
+  it('reports no active sessions when none are found', async () => {
+    const dbManager = jest.requireMock('./db/interface');
+    dbManager.getSessionsByQuery.mockResolvedValueOnce([]);
+
+    const productionManagerTest = new ProductionManager(dbManager);
+
+    expect(await productionManagerTest.hasActiveSessions('1')).toStrictEqual(
+      false
+    );
+  });
+});
+
+describe('production_manager', () => {
   it('add an endpoint description to line connections', async () => {
     const dbManager = jest.requireMock('./db/interface');
     dbManager.getProduction.mockReturnValueOnce(existingProduction);

@@ -101,6 +101,7 @@ const mockProductionManager = {
   updateUserLastSeen: jest.fn().mockReturnValue(true),
   deleteProductionLine: jest.fn().mockResolvedValue(undefined),
   deleteProduction: jest.fn().mockResolvedValue(true),
+  hasActiveSessions: jest.fn().mockResolvedValue(false),
   removeUserSession: jest.fn(),
   createUserSession: jest.fn().mockResolvedValue(undefined),
   getActiveUsers: jest.fn().mockResolvedValue([]),

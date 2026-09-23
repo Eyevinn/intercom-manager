@@ -875,6 +875,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         response: {
           200: Type.String(),
           400: Type.String(),
+          409: Type.String(),
           500: Type.String()
         }
       }
@@ -882,6 +883,14 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     async (request, reply) => {
       const { productionId } = request.params;
       try {
+        if (await productionManager.hasActiveSessions(productionId)) {
+          reply
+            .code(409)
+            .send(
+              `Cannot delete production ${productionId} with active sessions`
+            );
+          return;
+        }
         if (
           !(await productionManager.deleteProduction(
             parseInt(productionId, 10)
