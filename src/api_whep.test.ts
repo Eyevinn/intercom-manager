@@ -1,21 +1,62 @@
-jest.mock('./log', () => ({
-  Log: () => ({
-    error: jest.fn(),
-    warn: jest.fn(),
-    info: jest.fn(),
-    debug: jest.fn()
-  })
-}));
-
 import rateLimit from '@fastify/rate-limit';
 import Fastify from 'fastify';
 import { CoreFunctions } from './api_productions_core_functions';
 import apiWhep from './api_whep';
 import { ConnectionQueue } from './connection_queue';
+import { Log } from './log';
+
+// A valid UUID v4 used as the generated session id in tests. Session ids are
+// UUIDs in production, and the DELETE route now enforces a UUID pattern.
+const MOCK_SESSION_ID = '123e4567-e89b-42d3-a456-426614174000';
 
 jest.mock('uuid', () => ({
-  v4: jest.fn(() => 'mock-session-id')
+  v4: jest.fn(() => '123e4567-e89b-42d3-a456-426614174000')
 }));
+
+// Mock the logger so we can assert nothing with CR/LF/control chars is logged.
+jest.mock('./log', () => {
+  const logger = {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+    fatal: jest.fn()
+  };
+  return {
+    Log: jest.fn(() => logger),
+    Logger: jest.fn(() => logger)
+  };
+});
+
+const mockLogger = Log() as unknown as {
+  info: jest.Mock;
+  warn: jest.Mock;
+  error: jest.Mock;
+  debug: jest.Mock;
+  fatal: jest.Mock;
+};
+
+// Asserts that none of the logger methods were ever called with a string
+// argument containing CR, LF or other control characters.
+const expectNoControlCharsLogged = () => {
+  // eslint-disable-next-line no-control-regex
+  const controlCharRe = /[\x00-\x1f\x7f-\x9f]/;
+  for (const method of [
+    mockLogger.info,
+    mockLogger.warn,
+    mockLogger.error,
+    mockLogger.debug,
+    mockLogger.fatal
+  ]) {
+    for (const call of method.mock.calls) {
+      for (const arg of call) {
+        if (typeof arg === 'string') {
+          expect(arg).not.toMatch(controlCharRe);
+        }
+      }
+    }
+  }
+};
 
 const mockProductionManager = {
   createUserSession: jest.fn(),
@@ -134,7 +175,7 @@ const createAuthServer = async () => {
   const fastify = Fastify();
 
   mockDbManager.getSession.mockResolvedValue({
-    _id: 'mock-session-id'
+    _id: MOCK_SESSION_ID
   } as any);
 
   fastify.register(apiWhep, { ...defaultOptions, whipAuthKey: 'secret-123' });
@@ -153,7 +194,7 @@ describe('apiWhep', () => {
 
       const response = await fastify.inject({
         method: 'POST',
-        url: '/whep/prod1/line1/testuser',
+        url: '/whep/123/456/testuser',
         headers: {
           'content-type': 'application/sdp'
         },
@@ -164,7 +205,7 @@ describe('apiWhep', () => {
       expect(response.statusCode).toBe(201);
       expect(response.headers['content-type']).toBe('application/sdp');
       expect(response.headers['location']).toContain(
-        '/whep/prod1/line1/mock-session-id'
+        `/whep/123/456/${MOCK_SESSION_ID}`
       );
       expect(response.payload).toContain('v=0');
     });
@@ -178,7 +219,7 @@ describe('apiWhep', () => {
 
       const response = await fastify.inject({
         method: 'POST',
-        url: '/whep/prod1/line1/testuser',
+        url: '/whep/123/456/testuser',
         headers: {
           'content-type': 'application/sdp'
         },
@@ -200,7 +241,7 @@ describe('apiWhep', () => {
 
       const response = await fastify.inject({
         method: 'POST',
-        url: '/whep/prod1/line1/testuser',
+        url: '/whep/123/456/testuser',
         headers: {
           'content-type': 'application/json'
         },
@@ -210,13 +251,86 @@ describe('apiWhep', () => {
       expect(response.statusCode).toBe(415);
     });
 
+    it.each([
+      ['LF newline', 'evil\ninjected'],
+      ['CR carriage return', 'evil\rinjected'],
+      ['ANSI escape sequence', 'evil\x1b[31mred\x1b[0m']
+    ])(
+      'should return 400 when username contains control chars (%s, log injection)',
+      async (_label, payload) => {
+        const fastify = await createTestServer();
+
+        const response = await fastify.inject({
+          method: 'POST',
+          url: '/whep/123/456/' + encodeURIComponent(payload),
+          headers: {
+            'content-type': 'application/sdp'
+          },
+          payload: 'v=0\r\n'
+        });
+
+        expect(response.statusCode).toBe(400);
+        expectNoControlCharsLogged();
+      }
+    );
+
+    it('should accept a username at the allowed-char boundary (word, space, dot, dash)', async () => {
+      const fastify = await createTestServer();
+
+      const response = await fastify.inject({
+        method: 'POST',
+        url: '/whep/123/456/' + encodeURIComponent('Ada B. Lovelace-1_2'),
+        headers: {
+          'content-type': 'application/sdp'
+        },
+        payload:
+          'v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\nm=audio 0 RTP/AVP 0\r\na=mid:0\r\n'
+      });
+
+      expect(response.statusCode).toBe(201);
+    });
+
+    it('should return 400 when productionId is not numeric', async () => {
+      const fastify = await createTestServer();
+
+      const response = await fastify.inject({
+        method: 'POST',
+        url: '/whep/abc/456/testuser',
+        headers: {
+          'content-type': 'application/sdp'
+        },
+        payload: 'v=0\r\n'
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    // The numeric pattern alone would accept an arbitrarily long digit string;
+    // maxLength is what bounds it. Covered explicitly because the two
+    // constraints were added by separate PRs and a merge once dropped this one.
+    it('should return 400 when a numeric productionId exceeds maxLength of 200', async () => {
+      const fastify = await createTestServer();
+
+      const response = await fastify.inject({
+        method: 'POST',
+        url: `/whep/${'1'.repeat(201)}/456/testuser`,
+        headers: {
+          'content-type': 'application/sdp'
+        },
+        payload: 'v=0\r\n'
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
     it('should return 429 when rate limit is exceeded', async () => {
       const fastify = await createTestServer();
 
+      // Send 10 valid requests (these should succeed or at least not trigger 429)
       for (let i = 0; i < 10; i++) {
         await fastify.inject({
           method: 'POST',
-          url: '/whep/prod1/line1/testuser',
+          url: '/whep/123/456/testuser',
           headers: {
             'content-type': 'application/sdp'
           },
@@ -224,9 +338,10 @@ describe('apiWhep', () => {
         });
       }
 
+      // The 11th request should exceed the rate limit
       const response = await fastify.inject({
         method: 'POST',
-        url: '/whep/prod1/line1/testuser',
+        url: '/whep/123/456/testuser',
         headers: {
           'content-type': 'application/sdp'
         },
@@ -247,7 +362,7 @@ describe('apiWhep', () => {
       const fastify = await createAuthServer();
       const res = await fastify.inject({
         method: 'POST',
-        url: '/whep/prod1/line1/testuser',
+        url: '/whep/123/456/testuser',
         headers: { 'content-type': 'application/sdp' },
         payload: 'v=0\r\n'
       });
@@ -259,7 +374,7 @@ describe('apiWhep', () => {
       const fastify = await createAuthServer();
       const res = await fastify.inject({
         method: 'POST',
-        url: '/whep/prod1/line1/testuser',
+        url: '/whep/123/456/testuser',
         headers: {
           'content-type': 'application/sdp',
           authorization: 'Bearer wrong'
@@ -274,7 +389,7 @@ describe('apiWhep', () => {
       const fastify = await createAuthServer();
       const res = await fastify.inject({
         method: 'POST',
-        url: '/whep/prod1/line1/testuser',
+        url: '/whep/123/456/testuser',
         headers: {
           'content-type': 'application/sdp',
           authorization: 'Bearer secret-123'
@@ -287,20 +402,20 @@ describe('apiWhep', () => {
   });
 
   describe('DELETE /whep/:productionId/:lineId/:sessionId', () => {
-    it('should return 401 when trying to delete WHEP session when auth enabled and no token', async () => {
+    it('should return 401 when trying to delete WHEP session when it is not active', async () => {
       const fastify = await createAuthServer();
       const res = await fastify.inject({
         method: 'DELETE',
-        url: '/whep/prod1/line1/mock-session-id'
+        url: `/whep/123/456/${MOCK_SESSION_ID}`
       });
       expect(res.statusCode).toBe(401);
     });
 
-    it('should terminate session and return 200 OK with auth enabled and correct token', async () => {
+    it('should terminate session and return 200 OK with auth enabled and correct token auth key', async () => {
       const fastify = await createAuthServer();
       const res = await fastify.inject({
         method: 'DELETE',
-        url: '/whep/prod1/line1/mock-session-id',
+        url: `/whep/123/456/${MOCK_SESSION_ID}`,
         headers: { authorization: 'Bearer secret-123' }
       });
       expect(res.statusCode).toBe(200);
@@ -310,12 +425,12 @@ describe('apiWhep', () => {
       const fastify = await createTestServer();
 
       mockDbManager.getSession.mockResolvedValueOnce({
-        _id: 'mock-session-id'
+        _id: MOCK_SESSION_ID
       } as any);
 
       const response = await fastify.inject({
         method: 'DELETE',
-        url: '/whep/prod1/line1/mock-session-id'
+        url: `/whep/123/456/${MOCK_SESSION_ID}`
       });
 
       expect(response.statusCode).toBe(200);
@@ -328,12 +443,34 @@ describe('apiWhep', () => {
 
       const response = await fastify.inject({
         method: 'DELETE',
-        url: '/whep/prod1/line1/nonexistent-session'
+        url: '/whep/123/456/00000000-0000-4000-8000-000000000000'
       });
 
       expect(response.statusCode).toBe(404);
       expect(response.json()).toEqual({ error: 'WHEP session not found' });
     });
+
+    it.each([
+      ['LF newline', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\ninjected'],
+      ['CR carriage return', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\rinjected'],
+      [
+        'ANSI escape sequence',
+        'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\x1b[31mred\x1b[0m'
+      ]
+    ])(
+      'should return 400 and not log control chars for malicious sessionId (%s)',
+      async (_label, sessionId) => {
+        const fastify = await createTestServer();
+
+        const response = await fastify.inject({
+          method: 'DELETE',
+          url: '/whep/123/456/' + encodeURIComponent(sessionId)
+        });
+
+        expect(response.statusCode).toBe(400);
+        expectNoControlCharsLogged();
+      }
+    );
   });
 
   describe('OPTIONS /whep/:productionId/:lineId', () => {
@@ -384,7 +521,7 @@ describe('apiWhep', () => {
 
       const response = await fastify.inject({
         method: 'PATCH',
-        url: '/whep/prod1/line1/mock-session-id',
+        url: `/whep/123/456/${MOCK_SESSION_ID}`,
         headers: { 'content-type': 'application/trickle-ice-sdpfrag' },
         payload: 'a=candidate:1 1 UDP 12345 192.168.1.2 54321 typ host'
       });
@@ -403,7 +540,9 @@ describe('apiWhep', () => {
         payload: 'a=candidate:1 1 UDP 12345 192.168.1.2 54321 typ host'
       });
 
-      // Single-char params satisfy minLength:1 — handler returns 405
+      // The PATCH stub keeps the permissive minLength:1/maxLength:200 schema —
+      // it is not constrained to numeric ids or a UUID sessionId like the live
+      // POST/DELETE routes, so single-char params validate and reach the 405.
       expect(response.statusCode).toBe(405);
     });
 
@@ -413,7 +552,7 @@ describe('apiWhep', () => {
 
       const response = await fastify.inject({
         method: 'PATCH',
-        url: `/whep/${longParam}/line1/mock-session-id`,
+        url: `/whep/${longParam}/456/${MOCK_SESSION_ID}`,
         headers: { 'content-type': 'application/trickle-ice-sdpfrag' },
         payload: 'a=candidate:1 1 UDP 12345 192.168.1.2 54321 typ host'
       });
@@ -427,7 +566,7 @@ describe('apiWhep', () => {
 
       const response = await fastify.inject({
         method: 'PATCH',
-        url: `/whep/prod1/${longParam}/mock-session-id`,
+        url: `/whep/123/${longParam}/${MOCK_SESSION_ID}`,
         headers: { 'content-type': 'application/trickle-ice-sdpfrag' },
         payload: 'a=candidate:1 1 UDP 12345 192.168.1.2 54321 typ host'
       });
@@ -441,7 +580,7 @@ describe('apiWhep', () => {
 
       const response = await fastify.inject({
         method: 'PATCH',
-        url: `/whep/prod1/line1/${longParam}`,
+        url: `/whep/123/456/${longParam}`,
         headers: { 'content-type': 'application/trickle-ice-sdpfrag' },
         payload: 'a=candidate:1 1 UDP 12345 192.168.1.2 54321 typ host'
       });

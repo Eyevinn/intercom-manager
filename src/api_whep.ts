@@ -8,8 +8,14 @@ import { Log } from './log';
 import { Line, WhipWhepRequest, WhipWhepResponse } from './models';
 import { ProductionManager } from './production_manager';
 import { ISmbProtocol, SmbProtocol } from './smb';
-import { getIceServers } from './utils';
+import { getIceServers, sanitizeForLog } from './utils';
 import { DbManager } from './db/interface';
+
+// Session IDs are generated as UUID v4 (see uuidv4() below). Constrain the
+// DELETE sessionId path param to this format so malformed/malicious values
+// (e.g. CRLF log-injection payloads) are rejected with 400 before logging.
+const UUID_PATTERN =
+  '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$';
 
 export interface ApiWhepOptions {
   smbServerBaseUrl: string;
@@ -92,9 +98,20 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
       schema: {
         description: 'WHEP endpoint for Egress WebRTC streams',
         params: Type.Object({
-          productionId: Type.String({ maxLength: 200 }),
-          lineId: Type.String({ maxLength: 200 }),
-          username: Type.String({ maxLength: 200 })
+          productionId: Type.String({
+            minLength: 1,
+            maxLength: 200,
+            pattern: '^[0-9]+$'
+          }),
+          lineId: Type.String({
+            minLength: 1,
+            maxLength: 200,
+            pattern: '^[0-9]+$'
+          }),
+          username: Type.String({
+            maxLength: 200,
+            pattern: '^[\\w .-]{1,200}$'
+          })
         }),
         body: WhipWhepRequest,
         response: {
@@ -253,9 +270,17 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
       schema: {
         description: 'Terminate a WHEP connection',
         params: Type.Object({
-          productionId: Type.String({ maxLength: 200 }),
-          lineId: Type.String({ maxLength: 200 }),
-          sessionId: Type.String({ maxLength: 200 })
+          productionId: Type.String({
+            minLength: 1,
+            maxLength: 200,
+            pattern: '^[0-9]+$'
+          }),
+          lineId: Type.String({
+            minLength: 1,
+            maxLength: 200,
+            pattern: '^[0-9]+$'
+          }),
+          sessionId: Type.String({ maxLength: 200, pattern: UUID_PATTERN })
         }),
         response: {
           200: Type.String({ description: 'OK' }),
@@ -267,15 +292,18 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
     async (request, reply) => {
       if (!(await requireWhepAuth(request, reply))) return;
       const { sessionId } = request.params;
+      // Defense-in-depth: sanitize before logging in case the schema pattern
+      // is ever relaxed. Schema validation already rejects control chars.
+      const safeSessionId = sanitizeForLog(sessionId);
       try {
         Log().info(
-          `Received WHEP DELETE request - sessionId: ${sessionId}, IP: ${request.ip}`
+          `Received WHEP DELETE request - sessionId: ${safeSessionId}, IP: ${request.ip}`
         );
 
         const doc = await opts.dbManager.getSession(sessionId);
         if (!doc) {
           Log().warn(
-            `WHEP session not found for deletion - sessionId: ${sessionId}`
+            `WHEP session not found for deletion - sessionId: ${safeSessionId}`
           );
           reply.code(404).send({ error: 'WHEP session not found' });
           return;
@@ -286,13 +314,13 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
         productionManager.emit('users:change');
 
         Log().info(
-          `WHEP session deleted successfully - sessionId: ${sessionId}`
+          `WHEP session deleted successfully - sessionId: ${safeSessionId}`
         );
 
         reply.code(200).send('OK');
       } catch (err) {
         Log().error(
-          `Failed to delete WHEP session - sessionId: ${sessionId}:`,
+          `Failed to delete WHEP session - sessionId: ${safeSessionId}:`,
           err
         );
         reply.code(500).send({ error: 'Failed to terminate WHEP connection' });
