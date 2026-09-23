@@ -1,3 +1,12 @@
+jest.mock('./log', () => ({
+  Log: () => ({
+    error: jest.fn(),
+    warn: jest.fn(),
+    info: jest.fn(),
+    debug: jest.fn()
+  })
+}));
+
 import api from './api';
 import { CoreFunctions } from './api_productions_core_functions';
 import { ConnectionQueue } from './connection_queue';
