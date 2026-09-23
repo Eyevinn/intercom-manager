@@ -304,9 +304,25 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
   fastify.patch<{
     Params: { productionId: string; lineId: string; sessionId: string };
     Body: string;
-  }>('/whip/:productionId/:lineId/:sessionId', {}, async (request, reply) => {
-    reply.code(405).send('Method not allowed');
-  });
+  }>(
+    '/whip/:productionId/:lineId/:sessionId',
+    {
+      schema: {
+        description: 'WHIP PATCH stub — not implemented',
+        params: Type.Object({
+          productionId: Type.String({ minLength: 1, maxLength: 200 }),
+          lineId: Type.String({ minLength: 1, maxLength: 200 }),
+          sessionId: Type.String({ minLength: 1, maxLength: 200 })
+        }),
+        response: {
+          405: Type.String({ description: 'Method not allowed' })
+        }
+      }
+    },
+    async (request, reply) => {
+      reply.code(405).send('Method not allowed');
+    }
+  );
 
   fastify.options<{
     Params: { productionId: string; lineId: string };

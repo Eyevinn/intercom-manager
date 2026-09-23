@@ -1,0 +1,18 @@
+name: Trigger Sync Fork on Merge
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+concurrency:
+  group: sync-fork-on-merge-prod
+  cancel-in-progress: false
+
+jobs:
+  sync-fork:
+    if: github.event.pull_request.merged == true
+    uses: ./.github/workflows/sync-fork.yml
+    with:
+      environment: prod
+    secrets: inherit
