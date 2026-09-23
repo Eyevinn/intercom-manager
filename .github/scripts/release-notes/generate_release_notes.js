@@ -1,5 +1,5 @@
 const { Anthropic } = require('@anthropic-ai/sdk');
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 
 async function generateReleaseNotes() {
   try {
@@ -13,18 +13,18 @@ async function generateReleaseNotes() {
     // Get the previous tag
     let previousTag;
     try {
-      previousTag = execSync('git describe --tags --abbrev=0 HEAD^', { encoding: 'utf-8' }).trim();
+      previousTag = execFileSync('git', ['describe', '--tags', '--abbrev=0', 'HEAD^'], { encoding: 'utf-8' }).trim();
     } catch (error) {
       // If no previous tag exists, get all commits
       previousTag = null;
     }
 
     // Get commit messages between tags
-    const gitLogCommand = previousTag
-      ? `git log ${previousTag}..HEAD --oneline --no-merges`
-      : `git log --oneline --no-merges`;
+    const gitLogArgs = previousTag
+      ? ['log', '--oneline', '--no-merges', '--end-of-options', `${previousTag}..HEAD`]
+      : ['log', '--oneline', '--no-merges'];
 
-    const commits = execSync(gitLogCommand, { encoding: 'utf-8' }).trim();
+    const commits = execFileSync('git', gitLogArgs, { encoding: 'utf-8' }).trim();
 
     if (!commits) {
       console.log('No commits found for release notes generation');
@@ -58,15 +58,15 @@ async function generateReleaseNotes() {
     const releaseNotesFile = 'release_notes.md';
     require('fs').writeFileSync(releaseNotesFile, releaseNotes);
 
-    execSync(`gh release create ${currentTag} --title "Release ${currentTag}" --notes-file ${releaseNotesFile}`, {
+    execFileSync('gh', ['release', 'create', '--title', `Release ${currentTag}`, '--notes-file', releaseNotesFile, '--', currentTag], {
       stdio: 'inherit',
       env: { ...process.env, GH_TOKEN: process.env.GITHUB_TOKEN }
     });
 
-    console.log(`Release notes generated and published for ${currentTag}`);
+    console.log(`✅ Release notes generated and published for ${currentTag}`);
 
   } catch (error) {
-    console.error('Error generating release notes:', error);
+    console.error('❌ Error generating release notes:', error);
     process.exit(1);
   }
 }
