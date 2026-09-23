@@ -1,0 +1,74 @@
+const { Anthropic } = require('@anthropic-ai/sdk');
+const { execFileSync } = require('child_process');
+
+async function generateReleaseNotes() {
+  try {
+    const anthropic = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY
+    });
+
+    const currentTag = process.env.GITHUB_REF_NAME;
+    console.log(`Generating release notes for tag: ${currentTag}`);
+
+    // Get the previous tag
+    let previousTag;
+    try {
+      previousTag = execFileSync('git', ['describe', '--tags', '--abbrev=0', 'HEAD^'], { encoding: 'utf-8' }).trim();
+    } catch (error) {
+      // If no previous tag exists, get all commits
+      previousTag = null;
+    }
+
+    // Get commit messages between tags
+    const gitLogArgs = previousTag
+      ? ['log', '--oneline', '--no-merges', '--end-of-options', `${previousTag}..HEAD`]
+      : ['log', '--oneline', '--no-merges'];
+
+    const commits = execFileSync('git', gitLogArgs, { encoding: 'utf-8' }).trim();
+
+    if (!commits) {
+      console.log('No commits found for release notes generation');
+      return;
+    }
+
+    const prompt = `Please generate professional release notes for version ${currentTag} based on the following git commits:
+
+    ${commits}
+
+    Please format the release notes with:
+    - A brief summary of the changes
+    - Categorized changes (Features, Bug Fixes, Improvements, etc.)
+    - Clear, user-friendly descriptions
+    - Proper markdown formatting
+
+    The release notes should be professional and suitable for a public release.`;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-3-5-sonnet-20241022',
+      max_tokens: 2000,
+      messages: [{
+        role: 'user',
+        content: prompt
+      }]
+    });
+
+    const releaseNotes = response.content[0].text;
+
+    // Create the release using GitHub CLI
+    const releaseNotesFile = 'release_notes.md';
+    require('fs').writeFileSync(releaseNotesFile, releaseNotes);
+
+    execFileSync('gh', ['release', 'create', '--title', `Release ${currentTag}`, '--notes-file', releaseNotesFile, '--', currentTag], {
+      stdio: 'inherit',
+      env: { ...process.env, GH_TOKEN: process.env.GITHUB_TOKEN }
+    });
+
+    console.log(`✅ Release notes generated and published for ${currentTag}`);
+
+  } catch (error) {
+    console.error('❌ Error generating release notes:', error);
+    process.exit(1);
+  }
+}
+
+generateReleaseNotes();
