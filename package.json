@@ -27,7 +27,7 @@
     "@sinclair/typebox": "^0.32.35",
     "dotenv": "^16.6.1",
     "fastify": "^5.12.5",
-    "mongodb": "^6.16.0",
+    "mongodb": "^6.21.0",
     "nano": "^10.1.4",
     "nodemon": "^3.1.14",
     "sdp-transform": "^2.15.0",
