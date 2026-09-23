@@ -21,7 +21,7 @@
     "@fastify/cors": "^11.3.0",
     "@fastify/helmet": "^13.1.1",
     "@fastify/rate-limit": "^10.3.0",
-    "@fastify/swagger": "^9.5.1",
+    "@fastify/swagger": "^9.8.1",
     "@fastify/swagger-ui": "^6.1.1",
     "@fastify/type-provider-typebox": "^5.2.0",
     "@sinclair/typebox": "^0.32.35",
