@@ -258,6 +258,35 @@ describe('Input Validation', () => {
       expect(response.body).toBe('');
     });
 
+    test('PATCH /session/:sessionId rejects missing sdpAnswer with 400', async () => {
+      const response = await server.inject({
+        method: 'PATCH',
+        url: '/api/v1/session/valid-session-id',
+        body: {}
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
+    test('PATCH /session/:sessionId rejects wrong-type sdpAnswer with 400', async () => {
+      // Use a non-coercible type (object) — Fastify/AJV coerces scalar
+      // primitives like numbers to strings, but not objects/arrays.
+      const response = await server.inject({
+        method: 'PATCH',
+        url: '/api/v1/session/valid-session-id',
+        body: { sdpAnswer: { unexpected: 'object' } }
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
+    test('PATCH /session/:sessionId rejects sdpAnswer exceeding maxLength with 400', async () => {
+      const response = await server.inject({
+        method: 'PATCH',
+        url: '/api/v1/session/valid-session-id',
+        body: { sdpAnswer: 'x'.repeat(65537) }
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
     test('DELETE /session/:sessionId accepts non-empty sessionId', async () => {
       const response = await server.inject({
         method: 'DELETE',
