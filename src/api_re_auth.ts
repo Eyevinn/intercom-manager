@@ -4,6 +4,11 @@ import { ErrorResponse, ReAuthResponse } from './models';
 const OSC_ACCESS_TOKEN = process.env.OSC_ACCESS_TOKEN;
 const OSC_ENVIRONMENT = process.env.OSC_ENVIRONMENT ?? 'prod';
 
+// Scope the SAT cookie name per OSC environment so that being logged into
+// OSC Dev and Prod at the same time does not create competing cookies that
+// overwrite each other and break auth silently (intercom-frontend#452).
+const SAT_COOKIE_NAME = `eyevinn-intercom-manager.${OSC_ENVIRONMENT}.sat`;
+
 const REAUTH_MAX_ATTEMPTS = 3;
 const REAUTH_RETRY_DELAY_MS = 1000;
 
@@ -21,8 +26,10 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * This endpoint exists solely to renew that externally issued credential. It
  * exchanges the configured OSC Personal Access Token (`OSC_ACCESS_TOKEN`) for a
  * fresh service access token from the OSC token service and stores it in the
- * `eyevinn-intercom-manager.sat` cookie, which lives for two hours, so that API
- * calls keep working as the previous token approaches expiry. With no
+ * environment-scoped `eyevinn-intercom-manager.<OSC_ENVIRONMENT>.sat` cookie,
+ * which lives for two hours, so that API calls keep working as the previous
+ * token approaches expiry. Scoping the name per environment keeps a Dev and a
+ * Prod session from overwriting each other's cookie. With no
  * `OSC_ACCESS_TOKEN` configured the service is not running in an OSC context
  * and the route responds with 405.
  *
@@ -67,17 +74,13 @@ const apiReAuth: FastifyPluginCallback = (fastify, _, next) => {
             if (response.ok) {
               const json = (await response.json()) as { token: string };
               reply
-                .cookie(
-                  'eyevinn-intercom-manager.sat',
-                  `Bearer ${json.token}`,
-                  {
-                    path: '/',
-                    httpOnly: true,
-                    secure: true,
-                    sameSite: 'strict',
-                    maxAge: 60 * 60 * 2 // 2 hours, in seconds
-                  }
-                )
+                .cookie(SAT_COOKIE_NAME, `Bearer ${json.token}`, {
+                  path: '/',
+                  httpOnly: true,
+                  secure: true,
+                  sameSite: 'strict',
+                  maxAge: 60 * 60 * 2 // 2 hours, in seconds
+                })
                 .send({ token: json.token });
               return;
             }
