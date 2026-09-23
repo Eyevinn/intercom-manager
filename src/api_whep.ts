@@ -98,8 +98,16 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
       schema: {
         description: 'WHEP endpoint for Egress WebRTC streams',
         params: Type.Object({
-          productionId: Type.String({ minLength: 1, pattern: '^[0-9]+$' }),
-          lineId: Type.String({ minLength: 1, pattern: '^[0-9]+$' }),
+          productionId: Type.String({
+            minLength: 1,
+            maxLength: 200,
+            pattern: '^[0-9]+$'
+          }),
+          lineId: Type.String({
+            minLength: 1,
+            maxLength: 200,
+            pattern: '^[0-9]+$'
+          }),
           username: Type.String({
             maxLength: 200,
             pattern: '^[\\w .-]{1,200}$'
@@ -262,8 +270,16 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
       schema: {
         description: 'Terminate a WHEP connection',
         params: Type.Object({
-          productionId: Type.String({ minLength: 1, pattern: '^[0-9]+$' }),
-          lineId: Type.String({ minLength: 1, pattern: '^[0-9]+$' }),
+          productionId: Type.String({
+            minLength: 1,
+            maxLength: 200,
+            pattern: '^[0-9]+$'
+          }),
+          lineId: Type.String({
+            minLength: 1,
+            maxLength: 200,
+            pattern: '^[0-9]+$'
+          }),
           sessionId: Type.String({ maxLength: 200, pattern: UUID_PATTERN })
         }),
         response: {
@@ -315,9 +331,25 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
   fastify.patch<{
     Params: { productionId: string; lineId: string; sessionId: string };
     Body: string;
-  }>('/whep/:productionId/:lineId/:sessionId', {}, async (request, reply) => {
-    reply.code(405).send('Method not allowed');
-  });
+  }>(
+    '/whep/:productionId/:lineId/:sessionId',
+    {
+      schema: {
+        description: 'WHEP PATCH stub — not implemented',
+        params: Type.Object({
+          productionId: Type.String({ minLength: 1, maxLength: 200 }),
+          lineId: Type.String({ minLength: 1, maxLength: 200 }),
+          sessionId: Type.String({ minLength: 1, maxLength: 200 })
+        }),
+        response: {
+          405: Type.String({ description: 'Method not allowed' })
+        }
+      }
+    },
+    async (request, reply) => {
+      reply.code(405).send('Method not allowed');
+    }
+  );
 
   fastify.options<{
     Params: { productionId: string; lineId: string };
@@ -326,6 +358,10 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
     {
       schema: {
         description: 'CORS preflight and WHEP discovery endpoint',
+        params: Type.Object({
+          productionId: Type.String({ minLength: 1, maxLength: 200 }),
+          lineId: Type.String({ minLength: 1, maxLength: 200 })
+        }),
         response: {
           200: Type.String({ description: 'OK' })
         }

@@ -152,7 +152,7 @@ const defaultOptions = {
 };
 
 const createTestServer = async () => {
-  const fastify = Fastify();
+  const fastify = Fastify({ maxParamLength: 300 });
 
   fastify.addContentTypeParser(
     'application/json',
@@ -296,6 +296,24 @@ describe('apiWhep', () => {
       const response = await fastify.inject({
         method: 'POST',
         url: '/whep/abc/456/testuser',
+        headers: {
+          'content-type': 'application/sdp'
+        },
+        payload: 'v=0\r\n'
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    // The numeric pattern alone would accept an arbitrarily long digit string;
+    // maxLength is what bounds it. Covered explicitly because the two
+    // constraints were added by separate PRs and a merge once dropped this one.
+    it('should return 400 when a numeric productionId exceeds maxLength of 200', async () => {
+      const fastify = await createTestServer();
+
+      const response = await fastify.inject({
+        method: 'POST',
+        url: `/whep/${'1'.repeat(201)}/456/testuser`,
         headers: {
           'content-type': 'application/sdp'
         },
@@ -498,7 +516,7 @@ describe('apiWhep', () => {
   });
 
   describe('PATCH /whep/:productionId/:lineId/:sessionId', () => {
-    it('should return 405 method not allowed', async () => {
+    it('should return 405 method not allowed for valid params', async () => {
       const fastify = await createTestServer();
 
       const response = await fastify.inject({
@@ -510,6 +528,64 @@ describe('apiWhep', () => {
 
       expect(response.statusCode).toBe(405);
       expect(response.payload).toBe('Method not allowed');
+    });
+
+    it('should return 405 for single-char params (minLength:1 boundary)', async () => {
+      const fastify = await createTestServer();
+
+      const response = await fastify.inject({
+        method: 'PATCH',
+        url: '/whep/p/l/s',
+        headers: { 'content-type': 'application/trickle-ice-sdpfrag' },
+        payload: 'a=candidate:1 1 UDP 12345 192.168.1.2 54321 typ host'
+      });
+
+      // The PATCH stub keeps the permissive minLength:1/maxLength:200 schema —
+      // it is not constrained to numeric ids or a UUID sessionId like the live
+      // POST/DELETE routes, so single-char params validate and reach the 405.
+      expect(response.statusCode).toBe(405);
+    });
+
+    it('should return 400 when productionId param exceeds maxLength of 200', async () => {
+      const fastify = await createTestServer();
+      const longParam = 'a'.repeat(201);
+
+      const response = await fastify.inject({
+        method: 'PATCH',
+        url: `/whep/${longParam}/456/${MOCK_SESSION_ID}`,
+        headers: { 'content-type': 'application/trickle-ice-sdpfrag' },
+        payload: 'a=candidate:1 1 UDP 12345 192.168.1.2 54321 typ host'
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('should return 400 when lineId param exceeds maxLength of 200', async () => {
+      const fastify = await createTestServer();
+      const longParam = 'b'.repeat(201);
+
+      const response = await fastify.inject({
+        method: 'PATCH',
+        url: `/whep/123/${longParam}/${MOCK_SESSION_ID}`,
+        headers: { 'content-type': 'application/trickle-ice-sdpfrag' },
+        payload: 'a=candidate:1 1 UDP 12345 192.168.1.2 54321 typ host'
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('should return 400 when sessionId param exceeds maxLength of 200', async () => {
+      const fastify = await createTestServer();
+      const longParam = 'c'.repeat(201);
+
+      const response = await fastify.inject({
+        method: 'PATCH',
+        url: `/whep/123/456/${longParam}`,
+        headers: { 'content-type': 'application/trickle-ice-sdpfrag' },
+        payload: 'a=candidate:1 1 UDP 12345 192.168.1.2 54321 typ host'
+      });
+
+      expect(response.statusCode).toBe(400);
     });
   });
 });

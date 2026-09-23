@@ -98,8 +98,16 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
       schema: {
         description: 'WHIP endpoint for ingesting WebRTC streams',
         params: Type.Object({
-          productionId: Type.String({ minLength: 1, pattern: '^[0-9]+$' }),
-          lineId: Type.String({ minLength: 1, pattern: '^[0-9]+$' }),
+          productionId: Type.String({
+            minLength: 1,
+            maxLength: 200,
+            pattern: '^[0-9]+$'
+          }),
+          lineId: Type.String({
+            minLength: 1,
+            maxLength: 200,
+            pattern: '^[0-9]+$'
+          }),
           username: Type.String({
             maxLength: 200,
             pattern: '^[\\w .-]{1,200}$'
@@ -263,8 +271,16 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
       schema: {
         description: 'Terminate a WHIP connection',
         params: Type.Object({
-          productionId: Type.String({ minLength: 1, pattern: '^[0-9]+$' }),
-          lineId: Type.String({ minLength: 1, pattern: '^[0-9]+$' }),
+          productionId: Type.String({
+            minLength: 1,
+            maxLength: 200,
+            pattern: '^[0-9]+$'
+          }),
+          lineId: Type.String({
+            minLength: 1,
+            maxLength: 200,
+            pattern: '^[0-9]+$'
+          }),
           sessionId: Type.String({ maxLength: 200, pattern: UUID_PATTERN })
         }),
         response: {
@@ -316,9 +332,25 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
   fastify.patch<{
     Params: { productionId: string; lineId: string; sessionId: string };
     Body: string;
-  }>('/whip/:productionId/:lineId/:sessionId', {}, async (request, reply) => {
-    reply.code(405).send('Method not allowed');
-  });
+  }>(
+    '/whip/:productionId/:lineId/:sessionId',
+    {
+      schema: {
+        description: 'WHIP PATCH stub — not implemented',
+        params: Type.Object({
+          productionId: Type.String({ minLength: 1, maxLength: 200 }),
+          lineId: Type.String({ minLength: 1, maxLength: 200 }),
+          sessionId: Type.String({ minLength: 1, maxLength: 200 })
+        }),
+        response: {
+          405: Type.String({ description: 'Method not allowed' })
+        }
+      }
+    },
+    async (request, reply) => {
+      reply.code(405).send('Method not allowed');
+    }
+  );
 
   fastify.options<{
     Params: { productionId: string; lineId: string };
@@ -327,6 +359,10 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
     {
       schema: {
         description: 'CORS preflight and WHIP discovery endpoint',
+        params: Type.Object({
+          productionId: Type.String({ minLength: 1, maxLength: 200 }),
+          lineId: Type.String({ minLength: 1, maxLength: 200 })
+        }),
         response: {
           200: Type.String({ description: 'OK' })
         }

@@ -10,7 +10,7 @@ import fastify, { FastifyPluginCallback } from 'fastify';
 import { getApiIngests } from './api_ingests';
 import { ApiProductionsOptions, getApiProductions } from './api_productions';
 import apiGroups from './api_groups';
-import apiReAuth from './api_re_auth';
+import apiReAuth, { ApiReAuthOptions } from './api_re_auth';
 import apiShare from './api_share';
 import apiWhip, { ApiWhipOptions } from './api_whip';
 import apiWhep, { ApiWhepOptions } from './api_whep';
@@ -62,7 +62,8 @@ export interface ApiGeneralOptions {
 export type ApiOptions = ApiGeneralOptions &
   ApiProductionsOptions &
   ApiWhipOptions &
-  ApiWhepOptions;
+  ApiWhepOptions &
+  ApiReAuthOptions;
 
 export default async (opts: ApiOptions) => {
   const api = fastify({
@@ -154,11 +155,7 @@ export default async (opts: ApiOptions) => {
     smb: opts.smb
   });
   api.register(apiShare, { publicHost: opts.publicHost, prefix: 'api/v1' });
-  // Registered without an auth hook on purpose. intercom-manager ships no
-  // authentication layer of its own; in an OSC deployment the OSC provided auth
-  // wall sits in front of the whole API, and /reauth only renews the token that
-  // wall issued. See the block comment in ./api_re_auth.ts before adding auth.
-  api.register(apiReAuth, { prefix: 'api/v1' });
+  api.register(apiReAuth, { prefix: 'api/v1', reAuthKey: opts.reAuthKey });
   api.register(apiGroups, { prefix: 'api/v1', dbManager: opts.dbManager });
 
   api.all('/whip/:productionId/:lineId', async (request, reply) => {

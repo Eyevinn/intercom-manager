@@ -93,6 +93,11 @@ const mockProductionManager = {
     .mockImplementation((lines: any[], id: string) =>
       lines.find((l: any) => l.id === id)
     ),
+  requireLine: jest.fn().mockImplementation((lines: any[], id: string) => {
+    const found = lines.find((l: any) => l.id === id);
+    if (!found) throw new Error(`Line ${id} not found`);
+    return found;
+  }),
   updateUserLastSeen: jest.fn().mockReturnValue(true),
   deleteProductionLine: jest.fn().mockResolvedValue(undefined),
   deleteProduction: jest.fn().mockResolvedValue(true),
@@ -232,6 +237,54 @@ describe('Input Validation', () => {
       });
       // Should not be 400 — it will fail deeper (no session found), but param is valid
       expect(response.statusCode).not.toBe(400);
+    });
+
+    test('PATCH /session/:sessionId returns 204 with empty body on success', async () => {
+      mockDbManager.getSession.mockResolvedValueOnce({
+        productionId: '1',
+        lineId: 'lid-1',
+        endpointId: 'endpoint-1',
+        sessionDescription: { audio: {} }
+      });
+      mockCoreFunctions.handleAnswerRequest = jest
+        .fn()
+        .mockResolvedValue(undefined);
+      const response = await server.inject({
+        method: 'PATCH',
+        url: '/api/v1/session/valid-session-id',
+        body: { sdpAnswer: 'v=0\r\n' }
+      });
+      expect(response.statusCode).toBe(204);
+      expect(response.body).toBe('');
+    });
+
+    test('PATCH /session/:sessionId rejects missing sdpAnswer with 400', async () => {
+      const response = await server.inject({
+        method: 'PATCH',
+        url: '/api/v1/session/valid-session-id',
+        body: {}
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
+    test('PATCH /session/:sessionId rejects wrong-type sdpAnswer with 400', async () => {
+      // Use a non-coercible type (object) — Fastify/AJV coerces scalar
+      // primitives like numbers to strings, but not objects/arrays.
+      const response = await server.inject({
+        method: 'PATCH',
+        url: '/api/v1/session/valid-session-id',
+        body: { sdpAnswer: { unexpected: 'object' } }
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
+    test('PATCH /session/:sessionId rejects sdpAnswer exceeding maxLength with 400', async () => {
+      const response = await server.inject({
+        method: 'PATCH',
+        url: '/api/v1/session/valid-session-id',
+        body: { sdpAnswer: 'x'.repeat(65537) }
+      });
+      expect(response.statusCode).toBe(400);
     });
 
     test('DELETE /session/:sessionId accepts non-empty sessionId', async () => {
@@ -391,6 +444,19 @@ describe('Input Validation', () => {
       expect(response.statusCode).toBe(400);
     });
 
+    test('rejects lineId exceeding 200 characters', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/v1/session',
+        body: {
+          productionId: '1',
+          lineId: 'x'.repeat(201),
+          username: 'user'
+        }
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
     test('rejects username exceeding 200 characters', async () => {
       const response = await server.inject({
         method: 'POST',
@@ -445,6 +511,55 @@ describe('Input Validation', () => {
         url: '/api/v1/heartbeat/dead-session'
       });
       expect(response.statusCode).toBe(410);
+    });
+  });
+
+  // ── Ingest :ingestId param validation (regression for #257) ────
+  // Routes are 501-gated by a preHandler, but Fastify runs schema
+  // validation before preHandler, so a bad ingestId is rejected with
+  // 400 while a valid numeric id falls through to the 501 stub.
+
+  describe('Ingest :ingestId param validation', () => {
+    test.each([
+      ['non-numeric', 'abc'],
+      ['empty-ish', ' '],
+      ['float', '1.5'],
+      ['negative', '-1'],
+      ['special characters', 'id!@#']
+    ])(
+      'GET /ingest/:ingestId rejects %s ingestId with 400',
+      async (_label, badId) => {
+        const response = await server.inject({
+          method: 'GET',
+          url: `/api/v1/ingest/${encodeURIComponent(badId)}`
+        });
+        expect(response.statusCode).toBe(400);
+      }
+    );
+
+    test('PATCH /ingest/:ingestId rejects non-numeric ingestId with 400', async () => {
+      const response = await server.inject({
+        method: 'PATCH',
+        url: '/api/v1/ingest/abc',
+        body: { label: 'valid-label' }
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
+    test('DELETE /ingest/:ingestId rejects non-numeric ingestId with 400', async () => {
+      const response = await server.inject({
+        method: 'DELETE',
+        url: '/api/v1/ingest/abc'
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
+    test('GET /ingest/:ingestId with a valid numeric id passes validation (501, not 400)', async () => {
+      const response = await server.inject({
+        method: 'GET',
+        url: '/api/v1/ingest/123'
+      });
+      expect(response.statusCode).toBe(501);
     });
   });
 });

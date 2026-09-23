@@ -483,7 +483,23 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           200: LineResponse,
           400: Type.String(),
           404: ErrorResponse,
+          429: Type.Object({ error: Type.String() }),
           500: Type.String()
+        }
+      },
+      config: {
+        rateLimit: {
+          max: 90,
+          timeWindow: '1 minute',
+          hook: 'onRequest',
+          errorResponseBuilder: (_req, context) => {
+            return {
+              statusCode: 429,
+              error: 'Too Many Requests',
+              message: 'Too many requests, please try again later',
+              expiresIn: context.after
+            };
+          }
         }
       }
     },
@@ -660,7 +676,23 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         response: {
           201: SessionResponse,
           400: ErrorResponse,
+          429: Type.Object({ error: Type.String() }),
           500: Type.String()
+        }
+      },
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: '1 minute',
+          hook: 'onRequest',
+          errorResponseBuilder: (_req, context) => {
+            return {
+              statusCode: 429,
+              error: 'Too Many Requests',
+              message: 'Too many requests, please try again later',
+              expiresIn: context.after
+            };
+          }
         }
       }
     },
@@ -731,8 +763,8 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
             .send({ sessionId, sdp: sdpOffer });
         } else {
           reply.code(400).send({
-            message: 'Could not establish a media connection',
-            stackTrace: 'Failed to generate sdp offer for endpoint'
+            message:
+              'Could not establish a media connection: failed to generate sdp offer for endpoint'
           });
           return;
         }
@@ -753,8 +785,9 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         description:
           'Provide client local SDP description as request body to finalize connection protocol.',
         params: SessionIdParams,
+        body: SdpAnswer,
         response: {
-          200: Type.String(),
+          204: Type.Null(),
           400: Type.String(),
           500: Type.String()
         }
@@ -908,7 +941,23 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         response: {
           200: Type.Array(UserResponse),
           400: Type.String(),
+          429: Type.Object({ error: Type.String() }),
           500: Type.String()
+        }
+      },
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: '1 minute',
+          hook: 'onRequest',
+          errorResponseBuilder: (_req, context) => {
+            return {
+              statusCode: 429,
+              error: 'Too Many Requests',
+              message: 'Too many requests, please try again later',
+              expiresIn: context.after
+            };
+          }
         }
       }
     },
@@ -916,19 +965,29 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       try {
         const timeoutMs = 25_000;
 
-        // Wait until either users:change fires or timeout expires
+        // Wait until users:change fires, the timeout expires, or the client
+        // disconnects. Cleanup runs once in every exit path so the listener and
+        // timer are always released and resolve is never called twice.
         await new Promise<void>((resolve) => {
-          const onChange = () => {
+          let settled = false;
+
+          const cleanup = () => {
+            if (settled) {
+              return;
+            }
+            settled = true;
             clearTimeout(timer);
+            productionManager.off('users:change', onChange);
+            request.raw.off('close', cleanup);
             resolve();
           };
 
-          const timer = setTimeout(() => {
-            productionManager.off('users:change', onChange);
-            resolve();
-          }, timeoutMs);
+          const onChange = () => cleanup();
+
+          const timer = setTimeout(cleanup, timeoutMs);
 
           productionManager.once('users:change', onChange);
+          request.raw.on('close', cleanup);
         });
 
         const { productionId, lineId } = request.params;
@@ -967,7 +1026,23 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         response: {
           200: Type.String(),
           400: Type.String(),
-          410: Type.String()
+          410: Type.String(),
+          429: Type.Object({ error: Type.String() })
+        }
+      },
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: '1 minute',
+          hook: 'onRequest',
+          errorResponseBuilder: (_req, context) => {
+            return {
+              statusCode: 429,
+              error: 'Too Many Requests',
+              message: 'Too many requests, please try again later',
+              expiresIn: context.after
+            };
+          }
         }
       }
     },

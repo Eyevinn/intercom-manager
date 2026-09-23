@@ -15,6 +15,17 @@ export interface ApiGroupsOptions {
   dbManager: DbManager;
 }
 
+const ALLOWED_COMPANION_PROTOCOLS = ['ws:', 'wss:', 'http:', 'https:'];
+
+function isValidCompanionUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return ALLOWED_COMPANION_PROTOCOLS.includes(url.protocol);
+  } catch {
+    return false;
+  }
+}
+
 const apiGroups: FastifyPluginCallback<ApiGroupsOptions> = (
   fastify,
   opts,
@@ -49,6 +60,14 @@ const apiGroups: FastifyPluginCallback<ApiGroupsOptions> = (
       }
     },
     async (req, reply) => {
+      if (
+        req.body.companionUrl !== undefined &&
+        !isValidCompanionUrl(req.body.companionUrl)
+      ) {
+        return reply.code(400).send({
+          message: 'companionUrl must be a valid ws/wss/http/https URL'
+        });
+      }
       const preset = await opts.dbManager.addPreset({
         ...req.body,
         createdAt: new Date().toISOString()
@@ -84,6 +103,7 @@ const apiGroups: FastifyPluginCallback<ApiGroupsOptions> = (
         body: UpdatePreset,
         response: {
           200: Preset,
+          400: ErrorResponse,
           404: ErrorResponse
         }
       }
@@ -100,6 +120,15 @@ const apiGroups: FastifyPluginCallback<ApiGroupsOptions> = (
       if (body.calls !== undefined) update.calls = body.calls;
       if (body.companionUrl !== undefined) {
         // AJV coerces null to "" for string|null unions — treat empty string as null (removal)
+        if (
+          body.companionUrl !== null &&
+          body.companionUrl !== '' &&
+          !isValidCompanionUrl(body.companionUrl)
+        ) {
+          return reply.code(400).send({
+            message: 'companionUrl must be a valid ws/wss/http/https URL'
+          });
+        }
         update.companionUrl =
           body.companionUrl === '' ? null : body.companionUrl;
       }

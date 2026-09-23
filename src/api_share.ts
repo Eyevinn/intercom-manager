@@ -28,6 +28,11 @@ const apiShare: FastifyPluginCallback<ApiShareOptions> = (
     },
     async (req, reply) => {
       let shareLinkUrl = new URL(req.body.path, opts.publicHost);
+      if (shareLinkUrl.origin !== new URL(opts.publicHost).origin) {
+        return reply.code(400).send({
+          message: 'Invalid path: must resolve within the application host'
+        });
+      }
       if (process.env.OSC_ACCESS_TOKEN) {
         const response = await fetch(
           `https://token.svc.${OSC_ENVIRONMENT}.osaas.io/delegate/eyevinn-intercom-manager`,
