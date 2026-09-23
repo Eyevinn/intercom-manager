@@ -483,7 +483,23 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           200: LineResponse,
           400: Type.String(),
           404: ErrorResponse,
+          429: Type.Object({ error: Type.String() }),
           500: Type.String()
+        }
+      },
+      config: {
+        rateLimit: {
+          max: 90,
+          timeWindow: '1 minute',
+          hook: 'onRequest',
+          errorResponseBuilder: (_req, context) => {
+            return {
+              statusCode: 429,
+              error: 'Too Many Requests',
+              message: 'Too many requests, please try again later',
+              expiresIn: context.after
+            };
+          }
         }
       }
     },
@@ -660,7 +676,23 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         response: {
           201: SessionResponse,
           400: ErrorResponse,
+          429: Type.Object({ error: Type.String() }),
           500: Type.String()
+        }
+      },
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: '1 minute',
+          hook: 'onRequest',
+          errorResponseBuilder: (_req, context) => {
+            return {
+              statusCode: 429,
+              error: 'Too Many Requests',
+              message: 'Too many requests, please try again later',
+              expiresIn: context.after
+            };
+          }
         }
       }
     },
@@ -909,7 +941,23 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         response: {
           200: Type.Array(UserResponse),
           400: Type.String(),
+          429: Type.Object({ error: Type.String() }),
           500: Type.String()
+        }
+      },
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: '1 minute',
+          hook: 'onRequest',
+          errorResponseBuilder: (_req, context) => {
+            return {
+              statusCode: 429,
+              error: 'Too Many Requests',
+              message: 'Too many requests, please try again later',
+              expiresIn: context.after
+            };
+          }
         }
       }
     },
@@ -978,7 +1026,23 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         response: {
           200: Type.String(),
           400: Type.String(),
-          410: Type.String()
+          410: Type.String(),
+          429: Type.Object({ error: Type.String() })
+        }
+      },
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: '1 minute',
+          hook: 'onRequest',
+          errorResponseBuilder: (_req, context) => {
+            return {
+              statusCode: 429,
+              error: 'Too Many Requests',
+              message: 'Too many requests, please try again later',
+              expiresIn: context.after
+            };
+          }
         }
       }
     },
