@@ -785,6 +785,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         description:
           'Provide client local SDP description as request body to finalize connection protocol.',
         params: SessionIdParams,
+        body: SdpAnswer,
         response: {
           204: Type.Null(),
           400: Type.String(),
