@@ -22,8 +22,10 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * This endpoint renews the OSC service access token (SAT). It exchanges the
  * configured OSC Personal Access Token (`OSC_ACCESS_TOKEN`) for a fresh service
  * access token from the OSC token service and stores it in the
- * `eyevinn-intercom-manager.sat` cookie, which lives for two hours, so that API
- * calls keep working as the previous token approaches expiry. With no
+ * `eyevinn-intercom-manager.${OSC_ENVIRONMENT}.sat` cookie (the cookie name is
+ * scoped by OSC environment so Dev and Prod do not share it), which lives for
+ * two hours, so that API calls keep working as the previous token approaches
+ * expiry. With no
  * `OSC_ACCESS_TOKEN` configured the service is not running in an OSC context
  * and the route responds with 405.
  *
@@ -123,7 +125,7 @@ const apiReAuth: FastifyPluginCallback<ApiReAuthOptions> = (
               const json = (await response.json()) as { token: string };
               reply
                 .cookie(
-                  'eyevinn-intercom-manager.sat',
+                  `eyevinn-intercom-manager.${OSC_ENVIRONMENT}.sat`,
                   `Bearer ${json.token}`,
                   {
                     path: '/',
