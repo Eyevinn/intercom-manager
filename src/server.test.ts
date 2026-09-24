@@ -19,6 +19,9 @@ describe('validateRequiredEnv (startup env validation)', () => {
     process.env = { ...ORIGINAL_ENV };
     process.env.SMB_ADDRESS = 'http://localhost:8080';
     process.env.CORS_ORIGIN = 'http://localhost:3000';
+    process.env.DB_CONNECTION_STRING =
+      'mongodb://localhost:27017/intercom-manager';
+    delete process.env.MONGODB_CONNECTION_STRING;
 
     // process.exit must be mocked so the test runner is not torn down and so we
     // can assert on the exit behaviour. Throw so control flow stops like the
@@ -62,6 +65,28 @@ describe('validateRequiredEnv (startup env validation)', () => {
   });
 
   it('does not exit when both SMB_ADDRESS and CORS_ORIGIN are set', () => {
+    expect(() => validateRequiredEnv()).not.toThrow();
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it('exits(1) when neither DB_CONNECTION_STRING nor MONGODB_CONNECTION_STRING is set', () => {
+    delete process.env.DB_CONNECTION_STRING;
+    delete process.env.MONGODB_CONNECTION_STRING;
+    expect(() => validateRequiredEnv()).toThrow('process.exit:1');
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('exits(1) when DB_CONNECTION_STRING is empty', () => {
+    process.env.DB_CONNECTION_STRING = '';
+    delete process.env.MONGODB_CONNECTION_STRING;
+    expect(() => validateRequiredEnv()).toThrow('process.exit:1');
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('does not exit when only MONGODB_CONNECTION_STRING is set (legacy name)', () => {
+    delete process.env.DB_CONNECTION_STRING;
+    process.env.MONGODB_CONNECTION_STRING =
+      'mongodb://localhost:27017/intercom-manager';
     expect(() => validateRequiredEnv()).not.toThrow();
     expect(exitSpy).not.toHaveBeenCalled();
   });
