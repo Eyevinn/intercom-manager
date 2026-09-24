@@ -61,9 +61,15 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
   const coreFunctions = opts.coreFunctions;
   const whipAuthKey = opts.whipAuthKey?.trim();
 
+  if (!whipAuthKey) {
+    Log().warn(
+      'SECURITY: WHIP_AUTH_KEY not set - WHEP endpoint (/whep) is UNAUTHENTICATED. Anyone who can reach this server can subscribe to audio streams from live productions. Set WHIP_AUTH_KEY to a non-empty secret to require a Bearer token.'
+    );
+  }
+
   async function requireWhepAuth(request: any, reply: any): Promise<boolean> {
     if (!whipAuthKey) {
-      return true; // auth disabled
+      return true; // auth disabled - a loud SECURITY warning is logged at startup
     }
 
     const authHeader =
