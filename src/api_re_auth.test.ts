@@ -218,7 +218,7 @@ describe('reAuth api', () => {
     expect(response.json()).toEqual({ success: true });
     expect(response.json().token).toBeUndefined();
     expect(String(response.headers['set-cookie'])).toContain(
-      'eyevinn-intercom-manager.sat=Bearer%20a-new-sat-token'
+      'eyevinn-intercom-manager.prod.sat=Bearer%20a-new-sat-token'
     );
   });
 
