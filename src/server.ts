@@ -82,8 +82,8 @@ async function startServer() {
   validateRequiredEnv();
 
   const dbConnectionString =
-    process.env.DB_CONNECTION_STRING ??
-    process.env.MONGODB_CONNECTION_STRING ??
+    process.env.DB_CONNECTION_STRING ||
+    process.env.MONGODB_CONNECTION_STRING ||
     '';
   const dbUrl = new URL(dbConnectionString);
   let dbManager: DbManager;
@@ -148,5 +148,8 @@ async function startServer() {
 // Only start the server when this module is executed directly (e.g. via
 // `ts-node src/server.ts`), not when it is imported (e.g. by unit tests).
 if (require.main === module) {
-  startServer();
+  startServer().catch((err) => {
+    Log().error('Fatal error during startup:', err);
+    process.exit(1);
+  });
 }

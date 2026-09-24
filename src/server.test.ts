@@ -1,5 +1,13 @@
 // Keep the module-level side effects in server.ts (DB manager construction,
 // heavy imports) from doing anything real when the module is imported here.
+jest.mock('./log', () => ({
+  Log: () => ({
+    info: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+    warn: jest.fn()
+  })
+}));
 jest.mock('./db/mongodb');
 jest.mock('./db/couchdb');
 jest.mock('./api', () => ({
@@ -85,6 +93,14 @@ describe('validateRequiredEnv (startup env validation)', () => {
 
   it('does not exit when only MONGODB_CONNECTION_STRING is set (legacy name)', () => {
     delete process.env.DB_CONNECTION_STRING;
+    process.env.MONGODB_CONNECTION_STRING =
+      'mongodb://localhost:27017/intercom-manager';
+    expect(() => validateRequiredEnv()).not.toThrow();
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not exit when DB_CONNECTION_STRING is empty but MONGODB_CONNECTION_STRING is set', () => {
+    process.env.DB_CONNECTION_STRING = '';
     process.env.MONGODB_CONNECTION_STRING =
       'mongodb://localhost:27017/intercom-manager';
     expect(() => validateRequiredEnv()).not.toThrow();
