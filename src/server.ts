@@ -18,15 +18,6 @@ if (!process.env.PUBLIC_HOST) {
   Log().warn('PUBLIC_HOST is not set — falling back to localhost default');
 }
 
-if (
-  !process.env.DB_CONNECTION_STRING &&
-  !process.env.MONGODB_CONNECTION_STRING
-) {
-  Log().warn(
-    'DB_CONNECTION_STRING is not set — using localhost MongoDB default'
-  );
-}
-
 if (SMB_ADDRESS) {
   try {
     const smbUrl = new URL(SMB_ADDRESS);
@@ -59,20 +50,6 @@ const ENDPOINT_IDLE_TIMEOUT_S: string =
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8000;
 
-const DB_CONNECTION_STRING: string =
-  process.env.DB_CONNECTION_STRING ??
-  process.env.MONGODB_CONNECTION_STRING ??
-  'mongodb://localhost:27017/intercom-manager';
-let dbManager: DbManager;
-const dbUrl = new URL(DB_CONNECTION_STRING);
-if (dbUrl.protocol === 'mongodb:' || dbUrl.protocol === 'mongodb+srv:') {
-  dbManager = new DbManagerMongoDb(dbUrl);
-} else if (dbUrl.protocol === 'http:' || dbUrl.protocol === 'https:') {
-  dbManager = new DbManagerCouchDb(dbUrl);
-} else {
-  throw new Error('Unsupported database protocol');
-}
-
 const REQUIRED_ENV = ['SMB_ADDRESS', 'CORS_ORIGIN'] as const;
 
 /**
@@ -87,10 +64,36 @@ export function validateRequiredEnv(): void {
       process.exit(1);
     }
   }
+
+  // A database connection string is required; no hardcoded localhost fallback is
+  // provided so that a missing value fails fast at startup rather than silently
+  // connecting to a local MongoDB. Local development supplies the localhost
+  // default via .env/.env.example/docker-compose, not in production code.
+  if (
+    !process.env.DB_CONNECTION_STRING &&
+    !process.env.MONGODB_CONNECTION_STRING
+  ) {
+    Log().error('Missing required environment variable: DB_CONNECTION_STRING');
+    process.exit(1);
+  }
 }
 
 async function startServer() {
   validateRequiredEnv();
+
+  const dbConnectionString =
+    process.env.DB_CONNECTION_STRING ||
+    process.env.MONGODB_CONNECTION_STRING ||
+    '';
+  const dbUrl = new URL(dbConnectionString);
+  let dbManager: DbManager;
+  if (dbUrl.protocol === 'mongodb:' || dbUrl.protocol === 'mongodb+srv:') {
+    dbManager = new DbManagerMongoDb(dbUrl);
+  } else if (dbUrl.protocol === 'http:' || dbUrl.protocol === 'https:') {
+    dbManager = new DbManagerCouchDb(dbUrl);
+  } else {
+    throw new Error('Unsupported database protocol');
+  }
 
   await dbManager.connect();
   const productionManager = new ProductionManager(dbManager);
@@ -145,5 +148,8 @@ async function startServer() {
 // Only start the server when this module is executed directly (e.g. via
 // `ts-node src/server.ts`), not when it is imported (e.g. by unit tests).
 if (require.main === module) {
-  startServer();
+  startServer().catch((err) => {
+    Log().error('Fatal error during startup:', err);
+    process.exit(1);
+  });
 }
