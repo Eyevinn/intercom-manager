@@ -211,6 +211,10 @@ describe('reAuth api', () => {
 
     expect(response.statusCode).toBe(200);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://token.svc.prod.osaas.io/servicetoken',
+      expect.anything()
+    );
     expect(response.json()).toEqual({ success: true });
     expect(response.json().token).toBeUndefined();
     expect(String(response.headers['set-cookie'])).toContain(

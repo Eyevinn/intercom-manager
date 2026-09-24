@@ -20,6 +20,25 @@ export function sanitizeForLog(value: string): string {
   return value.replace(/[\x00-\x1f\x7f-\x9f]/g, '');
 }
 
+// The OSC shared token service is reached at a per-*platform-environment* host
+// (`token.svc.prod.osaas.io`, `token.svc.stage.osaas.io`, ...), NOT at a
+// per-hosting-cluster host. `docker-entrypoint.sh` derives `OSC_ENVIRONMENT`
+// from the instance hostname, which on the Elastx cluster yields the cluster
+// name `prod-se` rather than the platform environment `prod`. Building the
+// token-service URL straight from that produces `token.svc.prod-se.osaas.io`,
+// which does not exist, so reauth/share fail. Strip a trailing per-cluster
+// suffix (e.g. `-se`) so `prod-se` -> `prod` and `stage-se` -> `stage`, while
+// leaving bare platform environments (`prod`, `stage`, `dev`) untouched. See
+// #317. Note: this normalization is applied ONLY when building the shared OSC
+// token-service host; `OSC_ENVIRONMENT` itself is left as-is for any other use.
+export function oscPlatformEnvironment(rawEnvironment: string): string {
+  return rawEnvironment.replace(/-[a-z]+$/, '');
+}
+
+export function oscTokenServiceBaseUrl(rawEnvironment: string): string {
+  return `https://token.svc.${oscPlatformEnvironment(rawEnvironment)}.osaas.io`;
+}
+
 export function getIceServers(): string[] {
   const defaultStun = 'stun:stun.l.google.com:19302';
   const raw = process.env.ICE_SERVERS || '';
