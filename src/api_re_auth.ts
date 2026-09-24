@@ -2,6 +2,7 @@ import { timingSafeEqual } from 'crypto';
 import { FastifyPluginCallback } from 'fastify';
 import { Type } from '@sinclair/typebox';
 import { ErrorResponse, ReAuthResponse } from './models';
+import { oscTokenServiceBaseUrl } from './utils';
 
 export interface ApiReAuthOptions {
   reAuthKey?: string;
@@ -102,7 +103,7 @@ const apiReAuth: FastifyPluginCallback<ApiReAuthOptions> = (
         return;
       }
       if (OSC_ACCESS_TOKEN) {
-        const url = `https://token.svc.${OSC_ENVIRONMENT}.osaas.io/servicetoken`;
+        const url = `${oscTokenServiceBaseUrl(OSC_ENVIRONMENT)}/servicetoken`;
         const options = {
           method: 'POST' as const,
           headers: {

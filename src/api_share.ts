@@ -1,5 +1,6 @@
 import { FastifyPluginCallback } from 'fastify';
 import { ErrorResponse, ShareRequest, ShareResponse } from './models';
+import { oscTokenServiceBaseUrl } from './utils';
 
 export interface ApiShareOptions {
   publicHost: string;
@@ -35,7 +36,9 @@ const apiShare: FastifyPluginCallback<ApiShareOptions> = (
       }
       if (process.env.OSC_ACCESS_TOKEN) {
         const response = await fetch(
-          `https://token.svc.${OSC_ENVIRONMENT}.osaas.io/delegate/eyevinn-intercom-manager`,
+          `${oscTokenServiceBaseUrl(
+            OSC_ENVIRONMENT
+          )}/delegate/eyevinn-intercom-manager`,
           {
             method: 'POST',
             headers: {
