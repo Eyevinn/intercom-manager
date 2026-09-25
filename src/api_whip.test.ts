@@ -89,6 +89,11 @@ const mockProductionManager = {
   deleteProduction: jest.fn().mockResolvedValue(true),
   getUser: jest.fn().mockResolvedValue(undefined),
   requireLine: jest.fn().mockResolvedValue({}),
+  clearWhepSourceIfPinned: jest.fn().mockResolvedValue(undefined),
+  getReceiversPinnedToSession: jest.fn().mockResolvedValue([]),
+  updateSessionVideoPin: jest.fn().mockResolvedValue(true),
+  updateSessionHasVideo: jest.fn().mockResolvedValue(undefined),
+  setLineWhepSource: jest.fn().mockResolvedValue(undefined),
   once: jest.fn(),
   emit: jest.fn()
 } as any;
@@ -196,6 +201,28 @@ const createAuthServer = async () => {
 describe('apiWhip', () => {
   afterEach(() => {
     jest.clearAllMocks();
+  });
+
+  /**
+   * WHIP ingest uses 'ssrc-rewrite' for video, like every other endpoint in the
+   * system. It used 'forwarder' historically, on a rationale measured for WHEP
+   * consumers that never applied to a publisher.
+   */
+  describe('video relay type', () => {
+    const videoRelayArg = () =>
+      (coreFunctions.createEndpoint as jest.Mock).mock.calls[0][11];
+
+    it("requests 'ssrc-rewrite' video relay for a WHIP publisher", async () => {
+      const fastify = await createTestServer();
+      await fastify.inject({
+        method: 'POST',
+        url: '/whip/prod1/line1/testuser',
+        headers: { 'content-type': 'application/sdp' },
+        payload:
+          'v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\nm=audio 0 RTP/AVP 0\r\na=mid:0\r\n'
+      });
+      expect(videoRelayArg()).toBe('ssrc-rewrite');
+    });
   });
 
   describe('POST /whip/:productionId/:lineId/:username', () => {
@@ -600,5 +627,245 @@ describe('apiWhip', () => {
 
       expect(response.statusCode).toBe(400);
     });
+  });
+});
+
+/**
+ * hasVideo advertises a session as a pin source, so it must mean "has sending
+ * video SSRCs persisted", not "the offer had a video m-line".
+ */
+describe('apiWhip hasVideo', () => {
+  const sdp = (lines: string[]) =>
+    ['v=0', 'o=- 0 0 IN IP4 127.0.0.1', ...lines].join('\r\n') + '\r\n';
+
+  const AUDIO = ['m=audio 9 RTP/AVP 111', 'a=mid:0'];
+
+  const post = async (payload: string) => {
+    const fastify = await createTestServer();
+    return fastify.inject({
+      method: 'POST',
+      url: '/whip/prod1/line1/testuser',
+      headers: { 'content-type': 'application/sdp' },
+      payload
+    });
+  };
+
+  const hasVideoCalls = () =>
+    (mockProductionManager.updateSessionHasVideo as jest.Mock).mock.calls;
+  const storedEndpoint = () =>
+    (mockProductionManager.updateUserEndpoint as jest.Mock).mock.calls[0]?.[2];
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    // A fresh endpoint per call: the shared mock otherwise hands every test
+    // the same object, so SSRCs stamped by one test leak into the next.
+    (coreFunctions.createEndpoint as jest.Mock).mockImplementation(
+      async () => ({
+        'bundle-transport': {
+          'rtcp-mux': true,
+          ice: { ufrag: 'test-ufrag', pwd: 'test-pwd', candidates: [] },
+          dtls: { fingerprint: 'sha-256 FAKEFINGERPRINT', setup: 'actpass' }
+        }
+      })
+    );
+    // Echo the offer's mids: the route 406s when a mid is missing from the
+    // answer, and the shared mock answers audio-only.
+    (coreFunctions.createWhipWhepAnswer as jest.Mock).mockImplementation(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      async (offer: any) =>
+        [
+          'v=0',
+          'o=- 0 0 IN IP4 127.0.0.1',
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ...offer.media.map(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (m: any) => `m=${m.type} 9 RTP/AVP 96\r\na=mid:${m.mid}`
+          )
+        ].join('\r\n') + '\r\n'
+    );
+  });
+
+  it('advertises a publisher whose offer carries an FID group', async () => {
+    await post(
+      sdp([
+        ...AUDIO,
+        'm=video 9 RTP/AVP 96',
+        'a=mid:1',
+        'a=ssrc-group:FID 111111 222222',
+        'a=ssrc:111111 cname:probe',
+        'a=ssrc:222222 cname:probe'
+      ])
+    );
+
+    expect(hasVideoCalls()).toEqual([['mock-session-id', true]]);
+    // Both main and RTX: without the RTX SSRC SMB drops retransmissions.
+    expect(storedEndpoint()?.video?.ssrcs).toEqual([111111, 222222]);
+  });
+
+  it('advertises a publisher offering a bare a=ssrc with no FID group', async () => {
+    await post(
+      sdp([
+        ...AUDIO,
+        'm=video 9 RTP/AVP 96',
+        'a=mid:1',
+        'a=ssrc:333333 cname:probe'
+      ])
+    );
+
+    expect(hasVideoCalls()).toEqual([['mock-session-id', true]]);
+    expect(storedEndpoint()?.video?.ssrcs).toEqual([333333]);
+  });
+
+  it('does NOT advertise a video m-line whose SSRCs cannot be parsed', async () => {
+    await post(sdp([...AUDIO, 'm=video 9 RTP/AVP 96', 'a=mid:1']));
+
+    expect(hasVideoCalls()).toEqual([]);
+    expect(storedEndpoint()?.video?.ssrcs).toBeUndefined();
+  });
+
+  it('does NOT advertise an audio-only publisher', async () => {
+    await post(sdp(AUDIO));
+
+    expect(hasVideoCalls()).toEqual([]);
+  });
+});
+
+/**
+ * A WHIP publisher leaving is a publisher-removal path exactly like the app
+ * session DELETE. Receivers pinned to it carry its SSRCs in their endpoint
+ * `ssrc-whitelist`; if that whitelist survives the publisher, SMB forwards
+ * nothing and the receiver's tile freezes on the last decoded frame.
+ *
+ * The WHIP path is reconciled as of #341; these are the regression tests
+ * for it, which that change did not carry.
+ */
+describe('DELETE /whip/:productionId/:lineId/:sessionId — pin reconciliation', () => {
+  const RECEIVER_ENDPOINT = 'receiver-endpoint-1';
+  const PUBLISHER_SSRCS = [111111, 222222];
+
+  type Reconfigure = {
+    conferenceId: string;
+    endpointId: string;
+    ssrcWhitelist: number[] | undefined;
+  };
+  let reconfigures: Reconfigure[];
+  let mockSmb: any;
+
+  const makeReceiver = (pinnedTo: string) => ({
+    _id: 'receiver-1',
+    productionId: '1',
+    lineId: 'line1',
+    endpointId: RECEIVER_ENDPOINT,
+    pinnedVideoSessionId: pinnedTo,
+    sessionDescription: {
+      'bundle-transport': {},
+      video: {
+        ssrcs: [999999],
+        'ssrc-whitelist': PUBLISHER_SSRCS,
+        'payload-type': {},
+        'rtp-hdrexts': []
+      }
+    }
+  });
+
+  const createServer = async () => {
+    const fastify = Fastify();
+    fastify.register(apiWhip, { ...defaultOptions, smb: mockSmb });
+    await fastify.ready();
+    return fastify;
+  };
+
+  beforeEach(() => {
+    // This describe sits outside `describe('apiWhip')`, so it does not inherit
+    // that block's afterEach(clearAllMocks) — clear here or call counts leak
+    // between these tests.
+    jest.clearAllMocks();
+    reconfigures = [];
+    mockSmb = {
+      reconfigureEndpoint: jest
+        .fn()
+        .mockImplementation(
+          async (
+            _url: string,
+            conferenceId: string,
+            endpointId: string,
+            desc: any
+          ) => {
+            reconfigures.push({
+              conferenceId,
+              endpointId,
+              ssrcWhitelist: desc?.video?.['ssrc-whitelist']
+            });
+          }
+        )
+    };
+    mockProductionManager.getProduction.mockResolvedValue({
+      _id: 1,
+      lines: [{ id: 'line1', smbConferenceId: 'smb-conf-1' }]
+    });
+  });
+
+  it('strips the ssrc-whitelist from receivers pinned to the leaving publisher', async () => {
+    mockProductionManager.getReceiversPinnedToSession.mockResolvedValueOnce([
+      makeReceiver('mock-session-id')
+    ]);
+    mockDbManager.getSession.mockResolvedValueOnce({ _id: 'mock-session-id' });
+
+    const fastify = await createServer();
+    const res = await fastify.inject({
+      method: 'DELETE',
+      url: '/whip/prod1/line1/mock-session-id'
+    });
+
+    expect(res.statusCode).toBe(200);
+
+    // The key must be deleted, not emptied: an empty-but-present whitelist
+    // tells SMB to forward nothing at all.
+    expect(reconfigures).toHaveLength(1);
+    expect(reconfigures[0].endpointId).toBe(RECEIVER_ENDPOINT);
+    expect(reconfigures[0].conferenceId).toBe('smb-conf-1');
+    expect(reconfigures[0].ssrcWhitelist).toBeUndefined();
+
+    expect(mockProductionManager.updateSessionVideoPin).toHaveBeenCalledWith(
+      'receiver-1',
+      expect.anything(),
+      null
+    );
+  });
+
+  it('does not reconfigure anything when nobody is pinned to the publisher', async () => {
+    mockProductionManager.getReceiversPinnedToSession.mockResolvedValueOnce([]);
+    mockDbManager.getSession.mockResolvedValueOnce({ _id: 'mock-session-id' });
+
+    const fastify = await createServer();
+    const res = await fastify.inject({
+      method: 'DELETE',
+      url: '/whip/prod1/line1/mock-session-id'
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(reconfigures).toHaveLength(0);
+    expect(mockProductionManager.updateSessionVideoPin).not.toHaveBeenCalled();
+  });
+
+  it('still deletes the session when the bridge rejects the reconfigure', async () => {
+    // Reconciliation is best-effort: a wedged bridge must not leave the
+    // publisher's session undeletable.
+    mockProductionManager.getReceiversPinnedToSession.mockResolvedValueOnce([
+      makeReceiver('mock-session-id')
+    ]);
+    mockSmb.reconfigureEndpoint.mockRejectedValueOnce(new Error('smb down'));
+    mockDbManager.getSession.mockResolvedValueOnce({ _id: 'mock-session-id' });
+
+    const fastify = await createServer();
+    const res = await fastify.inject({
+      method: 'DELETE',
+      url: '/whip/prod1/line1/mock-session-id'
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(mockDbManager.deleteUserSession).toHaveBeenCalledWith(
+      'mock-session-id'
+    );
   });
 });

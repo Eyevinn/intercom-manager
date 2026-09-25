@@ -5,7 +5,12 @@ import sdpTransform, { parse } from 'sdp-transform';
 import { v4 as uuidv4 } from 'uuid';
 import { CoreFunctions } from './api_productions_core_functions';
 import { Log } from './log';
-import { Line, WhipWhepRequest, WhipWhepResponse } from './models';
+import {
+  Line,
+  SmbEndpointDescription,
+  WhipWhepRequest,
+  WhipWhepResponse
+} from './models';
 import { ProductionManager } from './production_manager';
 import { ISmbProtocol, SmbProtocol } from './smb';
 import { getIceServers, sanitizeForLog } from './utils';
@@ -160,6 +165,8 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
 
         const sdpOffer = parse(request.body);
 
+        const offerHasVideo = sdpOffer.media.some((m) => m.type === 'video');
+
         // Create a unique session ID for this WHIP connection
         const sessionId = uuidv4();
         const endpointId = uuidv4();
@@ -173,7 +180,9 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
           lineId
         );
 
-        // Allocate endpoint with audio support
+        // Allocate endpoint with audio (and video, when the offer includes a
+        // video m= section). SMB requires video to be allocated before a
+        // configure call can send a video block
         const endpoint = await coreFunctions.createEndpoint(
           smb,
           smbServerUrl,
@@ -181,10 +190,12 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
           smbConferenceId,
           endpointId,
           true, // audio
+          offerHasVideo, // video
           false, // no data channel needed for WHIP
           true, // iceControlling
-          'ssrc-rewrite', // relayType
-          parseInt(opts.endpointIdleTimeout, 10)
+          'ssrc-rewrite', // audio relay type
+          parseInt(opts.endpointIdleTimeout, 10),
+          'ssrc-rewrite'
         );
 
         await coreFunctions.configureEndpointForWhipWhep(
@@ -196,6 +207,27 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
           smbConferenceId,
           endpointId
         );
+
+        if (offerHasVideo) {
+          const videoMedia = sdpOffer.media.find((m) => m.type === 'video');
+          const fidGroup = videoMedia?.ssrcGroups?.find(
+            (g) => g.semantics === 'FID'
+          );
+          const ssrcs: number[] = [];
+          if (fidGroup) {
+            for (const part of fidGroup.ssrcs.split(' ')) {
+              const n = parseInt(part, 10);
+              if (Number.isFinite(n)) ssrcs.push(n);
+            }
+          } else {
+            const fallback = Number(videoMedia?.ssrcs?.[0]?.id);
+            if (Number.isFinite(fallback)) ssrcs.push(fallback);
+          }
+          if (ssrcs.length > 0) {
+            if (!endpoint.video) endpoint.video = {};
+            endpoint.video.ssrcs = ssrcs;
+          }
+        }
 
         const sdpAnswer = await coreFunctions.createWhipWhepAnswer(
           sdpOffer,
@@ -229,25 +261,41 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
         }
 
         // Create user session in production manager (await to guarantee DB state)
-        Log().info(
+        Log().debug(
           `Creating WHIP user session - username: ${username}, sessionId: ${sessionId}, production: ${productionId}, line: ${lineId}`
         );
-
         await productionManager.createUserSession(
           smbConferenceId,
           productionId,
           lineId,
           sessionId,
           username,
-          true
+          true, // isWhip
+          false, // isWhepReceiver
+          false // hasVideo flipped below once video.ssrcs is persisted
         );
 
-        // Update user endpoint information
         await productionManager.updateUserEndpoint(
           sessionId,
           endpointId,
           endpoint
         );
+
+        // Now that video.ssrcs is persisted, flip hasVideo so receivers'
+        // auto-pin lookup finds this publisher with a usable whitelist.
+        // Bound to the SSRCs actually persisted, the same rule the browser
+        // path uses: a video m-line whose SSRCs do not parse would otherwise
+        // be advertised as a pin source and 425 every pin.
+        const publishedVideoSsrcs = endpoint.video?.ssrcs ?? [];
+        if (publishedVideoSsrcs.length > 0) {
+          await productionManager.updateSessionHasVideo(sessionId, true);
+        } else if (offerHasVideo) {
+          Log().warn(
+            `WHIP offer for session=${sessionId} has a video m-line but no ` +
+              `usable SSRCs (no FID group, no a=ssrc): not advertising it as ` +
+              `a pin source, so its video cannot be pinned by receivers.`
+          );
+        }
 
         // Create the Location URL for the WHIP resource
         // Location URL can be relative to Request URL, so this is OK.
@@ -316,7 +364,56 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
           return;
         }
 
-        // Remove the user session
+        await productionManager.clearWhepSourceIfPinned(sessionId);
+
+        // Reconcile receivers pinned to this departing WHIP publisher: strip
+        // their stale ssrc-whitelist so their video does not freeze. Mirrors
+        // the reconciliation in the PATCH /session/:sessionId DELETE path.
+        try {
+          const affected = await productionManager.getReceiversPinnedToSession(
+            sessionId
+          );
+          if (affected.length > 0) {
+            const production = await productionManager.getProduction(
+              parseInt(affected[0].productionId, 10)
+            );
+            const line = production?.lines.find(
+              (l) => l.id === affected[0].lineId
+            );
+            if (line) {
+              await Promise.all(
+                affected.map(async (receiver) => {
+                  const receiverId = (receiver as any)._id?.toString?.();
+                  const endpointId = receiver.endpointId;
+                  const endpointDescription = receiver.sessionDescription;
+                  if (!receiverId || !endpointId || !endpointDescription)
+                    return;
+                  const updatedDescription: SmbEndpointDescription = JSON.parse(
+                    JSON.stringify(endpointDescription)
+                  );
+                  if (updatedDescription.video) {
+                    delete updatedDescription.video['ssrc-whitelist'];
+                  }
+                  await smb.reconfigureEndpoint(
+                    smbServerUrl,
+                    line.smbConferenceId,
+                    endpointId,
+                    updatedDescription,
+                    smbServerApiKey
+                  );
+                  await productionManager.updateSessionVideoPin(
+                    receiverId,
+                    updatedDescription,
+                    null
+                  );
+                })
+              );
+            }
+          }
+        } catch {
+          // Never let pin reconciliation block the WHIP delete itself.
+        }
+
         await opts.dbManager.deleteUserSession(sessionId);
         productionManager.removeUserSession(sessionId);
         productionManager.emit('users:change');

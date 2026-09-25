@@ -1,4 +1,4 @@
-import { SmbProtocol } from './smb';
+import { SmbEndpointActionError, SmbProtocol } from './smb';
 
 // Mock fetch globally
 const mockFetch = jest.fn();
@@ -113,6 +113,7 @@ describe('SmbProtocol', () => {
         'conf-1',
         'ep-1',
         true,
+        false,
         true,
         true,
         'ssrc-rewrite',
@@ -142,6 +143,7 @@ describe('SmbProtocol', () => {
         'ep-1',
         true,
         false,
+        false,
         true,
         'mixed',
         60,
@@ -159,6 +161,7 @@ describe('SmbProtocol', () => {
         smbUrl,
         'conf-1',
         'ep-1',
+        false,
         false,
         true,
         true,
@@ -180,6 +183,7 @@ describe('SmbProtocol', () => {
         'ep-1',
         true,
         false,
+        false,
         true,
         'ssrc-rewrite',
         120,
@@ -199,6 +203,7 @@ describe('SmbProtocol', () => {
           'conf-1',
           'ep-1',
           true,
+          false,
           true,
           true,
           'ssrc-rewrite',
@@ -333,6 +338,138 @@ describe('SmbProtocol', () => {
           smbKey
         )
       ).rejects.toThrow('Failed to configure endpoint');
+    });
+
+    // The route turns this specific rejection into a 425 so the client retries.
+    // It matches on the typed error, so the client must actually produce one —
+    // a plain Error here would silently turn the retry back into a 500.
+    it('rejects with a typed error that flags a not-yet-configured endpoint', async () => {
+      mockFetch.mockResolvedValue(
+        // text() is what the client reads, so the body must be the raw JSON
+        // string SMB actually sends.
+        mockResponse(
+          400,
+          JSON.stringify({
+            message:
+              "Can't reconfigure audio because it was not configured in first place",
+            status_code: 400
+          }),
+          'application/json'
+        )
+      );
+
+      const err = await smb
+        .reconfigureEndpoint(
+          smbUrl,
+          'conf-1',
+          'ep-1',
+          endpointDescription as any,
+          smbKey
+        )
+        .catch((e) => e);
+
+      expect(err).toBeInstanceOf(SmbEndpointActionError);
+      expect(err.status).toBe(400);
+      expect(err.action).toBe('reconfigure');
+      expect(err.isEndpointNotConfiguredYet).toBe(true);
+    });
+
+    it('does not flag an unrelated 400 as not-yet-configured', async () => {
+      mockFetch.mockResolvedValue(
+        mockResponse(
+          400,
+          JSON.stringify({ message: 'invalid ssrc' }),
+          'application/json'
+        )
+      );
+
+      const err = await smb
+        .reconfigureEndpoint(
+          smbUrl,
+          'conf-1',
+          'ep-1',
+          endpointDescription as any,
+          smbKey
+        )
+        .catch((e) => e);
+
+      expect(err).toBeInstanceOf(SmbEndpointActionError);
+      expect(err.isEndpointNotConfiguredYet).toBe(false);
+    });
+  });
+
+  // ── requestKeyframe ────────────────────────────────────────────────
+
+  describe('requestKeyframe', () => {
+    const pinnedDescription = {
+      audio: { ssrcs: [9000] },
+      video: { ssrcs: [], 'ssrc-whitelist': [3333, 4444] }
+    };
+
+    it('performs a whitelist remove -> re-add reconfigure cycle', async () => {
+      mockFetch.mockResolvedValue(mockResponse(200, null));
+
+      await smb.requestKeyframe(
+        smbUrl,
+        'conf-1',
+        'ep-1',
+        pinnedDescription as any,
+        smbKey
+      );
+
+      // Two reconfigure PUTs: clear, then re-apply.
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+
+      const first = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(first.action).toBe('reconfigure');
+      expect(first.video['ssrc-whitelist']).toBeUndefined();
+
+      const second = JSON.parse(mockFetch.mock.calls[1][1].body);
+      expect(second.action).toBe('reconfigure');
+      expect(second.video['ssrc-whitelist']).toEqual([3333, 4444]);
+    });
+
+    it('does not mutate the original endpointDescription', async () => {
+      mockFetch.mockResolvedValue(mockResponse(200, null));
+      const original = JSON.parse(JSON.stringify(pinnedDescription));
+
+      await smb.requestKeyframe(
+        smbUrl,
+        'conf-1',
+        'ep-1',
+        pinnedDescription as any,
+        smbKey
+      );
+
+      expect(pinnedDescription).toEqual(original);
+    });
+
+    it('is a no-op when there is no ssrc-whitelist', async () => {
+      mockFetch.mockResolvedValue(mockResponse(200, null));
+
+      await smb.requestKeyframe(
+        smbUrl,
+        'conf-1',
+        'ep-1',
+        { audio: { ssrcs: [9000] }, video: { ssrcs: [] } } as any,
+        smbKey
+      );
+
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('is a no-op when there is no video block', async () => {
+      mockFetch.mockResolvedValue(mockResponse(200, null));
+
+      await smb.requestKeyframe(
+        smbUrl,
+        'conf-1',
+        'ep-1',
+        { audio: { ssrcs: [9000] } } as any,
+        smbKey
+      );
+
+      expect(mockFetch).not.toHaveBeenCalled();
     });
   });
 

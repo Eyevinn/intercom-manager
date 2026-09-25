@@ -1,4 +1,4 @@
-import { Type } from '@sinclair/typebox';
+import { Static, Type } from '@sinclair/typebox';
 import { FastifyPluginCallback } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import { CoreFunctions } from './api_productions_core_functions';
@@ -19,12 +19,16 @@ import {
   ProductionResponse,
   SdpAnswer,
   SessionResponse,
+  SetLineWhepSourceRequest,
+  SetLineWhepSourceResponse,
+  SetSessionVideoSourceRequest,
+  SetSessionVideoSourceResponse,
   SmbEndpointDescription,
   UserResponse,
   UserSession
 } from './models';
 import { ProductionManager } from './production_manager';
-import { ISmbProtocol, SmbProtocol } from './smb';
+import { ISmbProtocol, SmbEndpointActionError, SmbProtocol } from './smb';
 
 export interface ApiProductionsOptions {
   smbServerBaseUrl: string;
@@ -38,10 +42,12 @@ export interface ApiProductionsOptions {
 
 function toUserResponse(doc: any) {
   const out: any = {
-    sessionId: (doc?._id ?? '').toString(),
-    name: (doc?.name ?? '').toString(),
-    isActive: !!doc?.isActive,
-    isWhip: !!doc?.isWhip
+    sessionId: String(doc?._id ?? ''),
+    name: String(doc?.name ?? ''),
+    isActive: Boolean(doc?.isActive),
+    isWhip: Boolean(doc?.isWhip),
+    isWhepReceiver: Boolean(doc?.isWhepReceiver),
+    hasVideo: Boolean(doc?.hasVideo)
   };
   if (typeof doc?.endpointId === 'string' && doc.endpointId.length > 0) {
     out.endpointId = doc.endpointId;
@@ -229,7 +235,8 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
                   id: line.id,
                   smbConferenceId: line.smbConferenceId,
                   participants: sortParticipants(participants),
-                  programOutputLine: line.programOutputLine || false
+                  programOutputLine: line.programOutputLine || false,
+                  videoEnabled: line.videoEnabled || false
                 };
               });
               return { _id: production._id, name: production.name, lines };
@@ -421,7 +428,8 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
               id: line.id,
               smbConferenceId: line.smbConferenceId,
               participants: sortParticipants(participants),
-              programOutputLine: line.programOutputLine || false
+              programOutputLine: line.programOutputLine || false,
+              videoEnabled: line.videoEnabled || false
             };
           }
         );
@@ -465,7 +473,8 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           await productionManager.addProductionLine(
             production,
             request.body.name,
-            request.body.programOutputLine || false
+            request.body.programOutputLine || false,
+            request.body.videoEnabled || false
           );
           const allLinesResponse: LineResponse[] =
             await coreFunctions.getAllLinesResponse(production);
@@ -533,8 +542,10 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           sessionId: (s._id ?? '').toString(),
           endpointId: s.endpointId,
           name: s.name,
-          isActive: !!s.isActive,
-          isWhip: s.isWhip
+          isActive: s.isWhip ? true : Boolean(s.isActive),
+          isWhip: Boolean(s.isWhip),
+          isWhepReceiver: Boolean(s.isWhepReceiver),
+          hasVideo: Boolean(s.hasVideo)
         }));
 
         const lineResponse: LineResponse = {
@@ -542,7 +553,9 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           id: line.id,
           smbConferenceId: line.smbConferenceId,
           participants: sortParticipants(participants),
-          programOutputLine: line.programOutputLine || false
+          programOutputLine: line.programOutputLine || false,
+          videoEnabled: line.videoEnabled || false,
+          whepSourceSessionId: line.whepSourceSessionId ?? null
         };
         reply.code(200).send(lineResponse);
       } catch (err) {
@@ -609,7 +622,8 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
               reply.code(200).send({
                 name: request.body.name,
                 id: lineId,
-                programOutputLine: line.programOutputLine || false
+                programOutputLine: line.programOutputLine || false,
+                videoEnabled: line.videoEnabled || false
               });
             }
           }
@@ -617,6 +631,215 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       } catch (err) {
         Log().error(err);
         reply.code(500).send('Failed to get line');
+      }
+    }
+  );
+
+  fastify.patch<{
+    Params: { productionId: string; lineId: string };
+    Body: Static<typeof SetLineWhepSourceRequest>;
+    Reply: Static<typeof SetLineWhepSourceResponse> | ErrorResponse | string;
+  }>(
+    '/production/:productionId/line/:lineId/whep-source',
+    {
+      schema: {
+        description:
+          'Pin a single participant as the WHEP egress source for this line. Pass `null` to clear and restore forward-all behaviour.',
+        body: SetLineWhepSourceRequest,
+        response: {
+          200: SetLineWhepSourceResponse,
+          404: ErrorResponse,
+          500: Type.String()
+        }
+      }
+    },
+    async (request, reply) => {
+      try {
+        const { productionId, lineId } = request.params;
+        const { pinnedSessionId: rawPinned } = request.body;
+        const pinnedSessionId: string | null =
+          rawPinned === '' ? null : rawPinned;
+
+        let production;
+        try {
+          production = await productionManager.requireProduction(
+            parseInt(productionId, 10)
+          );
+        } catch {
+          reply
+            .code(404)
+            .send({ message: `Production with id ${productionId} not found` });
+          return;
+        }
+
+        const line = productionManager.getLine(production.lines, lineId);
+        if (!line) {
+          reply.code(404).send({ message: `Line with id ${lineId} not found` });
+          return;
+        }
+
+        const updated = await productionManager.setLineWhepSource(
+          production,
+          lineId,
+          pinnedSessionId
+        );
+        if (!updated) {
+          reply.code(500).send('Failed to update WHEP source pin');
+          return;
+        }
+
+        reply.code(200).send({ lineId, pinnedSessionId });
+      } catch (err) {
+        Log().error(err);
+        reply
+          .code(500)
+          .send('Exception thrown when trying to set WHEP source: ' + err);
+      }
+    }
+  );
+
+  fastify.patch<{
+    Params: { sessionId: string };
+    Body: Static<typeof SetSessionVideoSourceRequest>;
+    Reply:
+      | Static<typeof SetSessionVideoSourceResponse>
+      | ErrorResponse
+      | string;
+  }>(
+    '/session/:sessionId/video-source',
+    {
+      schema: {
+        description:
+          'Pin a single publisher as this session’s video source. SMB egress filter updates in place via the `reconfigure` action. Pass `null` to clear.',
+        body: SetSessionVideoSourceRequest,
+        response: {
+          200: SetSessionVideoSourceResponse,
+          404: ErrorResponse,
+          409: ErrorResponse,
+          425: ErrorResponse,
+          500: Type.String()
+        }
+      }
+    },
+    async (request, reply) => {
+      try {
+        const { sessionId } = request.params;
+        const { pinnedSessionId: rawPinned } = request.body;
+        const pinnedSessionId: string | null =
+          rawPinned === '' ? null : rawPinned;
+
+        const userSession = await dbManager.getSession(sessionId);
+        if (!userSession) {
+          reply.code(404).send({ message: `Session ${sessionId} not found` });
+          return;
+        }
+
+        const endpointId = userSession.endpointId;
+        const endpointDescription = userSession.sessionDescription;
+        if (!endpointId || !endpointDescription) {
+          reply.code(409).send({
+            message:
+              'Session has no SMB endpoint yet (still negotiating). Try again after PATCH /session.'
+          });
+          return;
+        }
+
+        let whitelist: number[] = [];
+        if (pinnedSessionId) {
+          const sourceSession = await dbManager.getSession(pinnedSessionId);
+          const sourceVideo: any = sourceSession?.sessionDescription?.video;
+          const ssrcs: number[] = Array.isArray(sourceVideo?.ssrcs)
+            ? sourceVideo.ssrcs
+            : [];
+          whitelist = Array.from(new Set(ssrcs))
+            .filter((n) => Number.isFinite(n))
+            .slice(0, 2);
+          if (whitelist.length === 0) {
+            reply.code(425).send({
+              message:
+                `Pin source ${pinnedSessionId} has no video SSRCs yet ` +
+                `(still negotiating). Retry shortly.`
+            });
+            return;
+          }
+        }
+
+        const updatedDescription: SmbEndpointDescription = JSON.parse(
+          JSON.stringify(endpointDescription)
+        );
+        if (updatedDescription.video) {
+          if (whitelist.length > 0) {
+            updatedDescription.video['ssrc-whitelist'] = whitelist;
+          } else {
+            delete updatedDescription.video['ssrc-whitelist'];
+          }
+        }
+
+        const productionIdNum = parseInt(userSession.productionId, 10);
+        let production;
+        try {
+          production = await productionManager.requireProduction(
+            productionIdNum
+          );
+        } catch {
+          reply.code(404).send({ message: 'Production not found' });
+          return;
+        }
+        const line = productionManager.requireLine(
+          production.lines,
+          userSession.lineId
+        );
+
+        try {
+          await smb.reconfigureEndpoint(
+            smbServerUrl,
+            line.smbConferenceId,
+            endpointId,
+            updatedDescription,
+            smbServerApiKey
+          );
+        } catch (err) {
+          if (
+            err instanceof SmbEndpointActionError &&
+            err.isEndpointNotConfiguredYet
+          ) {
+            reply.code(425).send({
+              message:
+                `Session ${sessionId} has no configured SMB endpoint yet ` +
+                `(still negotiating). Retry shortly.`
+            });
+            return;
+          }
+          throw err;
+        }
+
+        const pinChanged =
+          pinnedSessionId !== null &&
+          pinnedSessionId !== (userSession.pinnedVideoSessionId ?? null);
+        if (pinChanged) {
+          await smb.requestKeyframe(
+            smbServerUrl,
+            line.smbConferenceId,
+            endpointId,
+            updatedDescription,
+            smbServerApiKey
+          );
+        }
+
+        await productionManager.updateSessionVideoPin(
+          sessionId,
+          updatedDescription,
+          pinnedSessionId
+        );
+
+        reply.code(200).send({ sessionId, pinnedSessionId });
+      } catch (err) {
+        Log().error(err);
+        reply
+          .code(500)
+          .send(
+            'Exception thrown when trying to set session video source: ' + err
+          );
       }
     }
   );
@@ -717,6 +940,13 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           lineId
         );
 
+        // Look up videoEnabled from the line configuration
+        const production = await productionManager.requireProduction(
+          parseInt(productionId, 10)
+        );
+        const line = productionManager.requireLine(production.lines, lineId);
+        const videoEnabled = line.videoEnabled ?? false;
+
         await productionManager.createUserSession(
           smbConferenceId,
           productionId,
@@ -735,10 +965,12 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           smbConferenceId,
           endpointId,
           true, // audio
+          videoEnabled, // video
           true, // data
           true, // iceControlling
-          'ssrc-rewrite', // relayType
-          isNaN(idleTimeout) ? 60 : idleTimeout
+          'ssrc-rewrite', // audio relay type
+          isNaN(idleTimeout) ? 60 : idleTimeout,
+          'ssrc-rewrite'
         );
         if (!endpoint.audio) {
           throw new Error('Missing audio when creating sdp offer for endpoint');
@@ -761,7 +993,8 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           endpoint,
           username,
           endpointId,
-          sessionId
+          sessionId,
+          videoEnabled
         );
 
         if (sdpOffer) {
@@ -797,6 +1030,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         response: {
           204: Type.Null(),
           400: Type.String(),
+          410: ErrorResponse,
           500: Type.String()
         }
       }
@@ -854,6 +1088,53 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           throw new Error('Could not get connection endpoint id');
         }
 
+        let subscribeToVideo:
+          | { ssrcs: number[]; endpointId: string }
+          | undefined;
+        try {
+          const productionIdNum = parseInt(userSession.productionId, 10);
+          if (!Number.isNaN(productionIdNum)) {
+            const production = await productionManager.getProduction(
+              productionIdNum
+            );
+            const lineForPin = production?.lines.find(
+              (l) => l.id === userSession.lineId
+            );
+            let pinnedSessionId: string | null =
+              lineForPin?.whepSourceSessionId ?? null;
+
+            if (!pinnedSessionId) {
+              const whipCandidates = (await dbManager.getSessionsByQuery({
+                productionId: userSession.productionId,
+                lineId: userSession.lineId,
+                isActive: true,
+                isWhip: true,
+                hasVideo: true
+              } as Partial<UserSession>)) as UserSession[];
+              if (whipCandidates.length === 1) {
+                pinnedSessionId =
+                  (
+                    whipCandidates[0] as UserSession & { _id?: unknown }
+                  )._id?.toString?.() ?? null;
+              }
+            }
+
+            if (pinnedSessionId) {
+              const sourceSession = await dbManager.getSession(pinnedSessionId);
+              const sourceVideo: any = sourceSession?.sessionDescription?.video;
+              const sourceEndpointId = sourceSession?.endpointId;
+              const ssrcs: number[] = Array.isArray(sourceVideo?.ssrcs)
+                ? sourceVideo.ssrcs
+                : [];
+              if (sourceEndpointId && ssrcs.length > 0) {
+                subscribeToVideo = { ssrcs, endpointId: sourceEndpointId };
+              }
+            }
+          }
+        } catch {
+          // Pin resolution failed — fall back to default rotation.
+        }
+
         await coreFunctions.handleAnswerRequest(
           smb,
           smbServerUrl,
@@ -861,8 +1142,29 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           line.smbConferenceId,
           endpointId,
           connectionEndpointDescription,
-          request.body.sdpAnswer
+          request.body.sdpAnswer,
+          subscribeToVideo
         );
+
+        await productionManager.updateUserEndpoint(
+          sessionId,
+          endpointId,
+          connectionEndpointDescription
+        );
+
+        try {
+          const sendingSsrcs = connectionEndpointDescription.video?.ssrcs ?? [];
+          await productionManager.updateSessionHasVideo(
+            sessionId,
+            sendingSsrcs.length > 0
+          );
+        } catch (hasVideoErr) {
+          Log().warn(
+            `Could not determine hasVideo for session=${sessionId} from ` +
+              `endpoint: ${hasVideoErr}`
+          );
+        }
+
         reply.code(204).send();
       } catch (err) {
         Log().error(err);
@@ -933,10 +1235,59 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     async (request, reply) => {
       const sessionId = request.params.sessionId;
       try {
-        const deletedSessionId = await dbManager.deleteUserSession(sessionId);
-        if (!deletedSessionId) {
+        await productionManager.clearWhepSourceIfPinned(sessionId);
+
+        try {
+          const affected = await productionManager.getReceiversPinnedToSession(
+            sessionId
+          );
+          if (affected.length > 0) {
+            const production = await productionManager.getProduction(
+              parseInt(affected[0].productionId, 10)
+            );
+            const line = production?.lines.find(
+              (l) => l.id === affected[0].lineId
+            );
+            if (line) {
+              await Promise.all(
+                affected.map(async (receiver) => {
+                  const receiverId = (receiver as any)._id?.toString?.();
+                  const endpointId = receiver.endpointId;
+                  const endpointDescription = receiver.sessionDescription;
+                  if (!receiverId || !endpointId || !endpointDescription)
+                    return;
+                  const updatedDescription: SmbEndpointDescription = JSON.parse(
+                    JSON.stringify(endpointDescription)
+                  );
+                  if (updatedDescription.video) {
+                    delete updatedDescription.video['ssrc-whitelist'];
+                  }
+                  await smb.reconfigureEndpoint(
+                    smbServerUrl,
+                    line.smbConferenceId,
+                    endpointId,
+                    updatedDescription,
+                    smbServerApiKey
+                  );
+                  await productionManager.updateSessionVideoPin(
+                    receiverId,
+                    updatedDescription,
+                    null
+                  );
+                })
+              );
+            }
+          }
+        } catch {
+          // Never let pin reconciliation block the session delete itself.
+        }
+
+        const ok = await dbManager.deleteUserSession(sessionId);
+        if (!ok) {
           throw new Error(`Could not delete connection ${sessionId}`);
         }
+        productionManager.removeUserSession(sessionId);
+        productionManager.emit('users:change');
         reply.code(200).send(`Deleted connection ${sessionId}`);
       } catch (err) {
         Log().error(err);
@@ -1019,8 +1370,10 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           sessionId: s._id.toString(),
           endpointId: s.endpointId,
           name: s.name,
-          isActive: !!s.isActive,
-          isWhip: !!s.isWhip
+          isActive: s.isWhip ? true : Boolean(s.isActive),
+          isWhip: Boolean(s.isWhip),
+          isWhepReceiver: Boolean(s.isWhepReceiver),
+          hasVideo: Boolean(s.hasVideo)
         }));
 
         reply.code(200).send(sortParticipants(participants));
@@ -1071,6 +1424,33 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       } else {
         reply.code(410).send(`User session id "${sessionId}" not found.`);
       }
+    }
+  );
+
+  fastify.get<{ Params: { sessionId: string } }>(
+    '/session/:sessionId/name',
+    {
+      schema: {
+        description: 'Get the display name of a session.',
+        params: SessionIdParams,
+        response: {
+          200: Type.Object({
+            sessionId: Type.String(),
+            name: Type.String()
+          }),
+          404: ErrorResponse
+        }
+      }
+    },
+    async (request, reply) => {
+      const name = await productionManager.getUserNameBySessionId(
+        request.params.sessionId
+      );
+      if (name == null) {
+        reply.code(404).send({ message: 'Session not found' });
+        return;
+      }
+      reply.code(200).send({ sessionId: request.params.sessionId, name });
     }
   );
 

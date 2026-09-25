@@ -10,6 +10,23 @@ interface AllocateConferenceResponse {
   id: string;
 }
 
+export class SmbEndpointActionError extends Error {
+  constructor(
+    readonly action: 'configure' | 'reconfigure',
+    readonly status: number,
+    readonly body: string
+  ) {
+    super(`Failed to ${action} endpoint: status=${status} body=${body}`);
+    this.name = 'SmbEndpointActionError';
+  }
+
+  get isEndpointNotConfiguredYet(): boolean {
+    return (
+      this.status === 400 && /not configured in first place/i.test(this.body)
+    );
+  }
+}
+
 interface BaseAllocationRequest {
   action: string;
   'bundle-transport': {
@@ -32,17 +49,23 @@ interface AudioAllocationRequest {
 }
 
 export interface ISmbProtocol {
-  allocateConference(smbUrl: string, smbKey: string): Promise<string>;
+  allocateConference(
+    smbUrl: string,
+    smbKey: string,
+    lastN?: number
+  ): Promise<string>;
   allocateEndpoint(
     smbUrl: string,
     conferenceId: string,
     endpointId: string,
     audio: boolean,
+    video: boolean,
     data: boolean,
     iceControlling: boolean,
     relayType: 'ssrc-rewrite' | 'forwarder' | 'mixed',
     idleTimeout: number,
-    smbKey: string
+    smbKey: string,
+    videoRelayType?: 'ssrc-rewrite' | 'forwarder' | 'mixed'
   ): Promise<SmbEndpointDescription>;
   allocateAudioEndpoint(
     smbUrl: string,
@@ -53,6 +76,20 @@ export interface ISmbProtocol {
     smbKey: string
   ): Promise<SmbAudioEndpointDescription>;
   configureEndpoint(
+    smbUrl: string,
+    conferenceId: string,
+    endpointId: string,
+    endpointDescription: SmbEndpointDescription,
+    smbKey: string
+  ): Promise<void>;
+  reconfigureEndpoint(
+    smbUrl: string,
+    conferenceId: string,
+    endpointId: string,
+    endpointDescription: SmbEndpointDescription,
+    smbKey: string
+  ): Promise<void>;
+  requestKeyframe(
     smbUrl: string,
     conferenceId: string,
     endpointId: string,
@@ -72,14 +109,22 @@ export interface ISmbProtocol {
 }
 
 export class SmbProtocol implements ISmbProtocol {
-  async allocateConference(smbUrl: string, smbKey: string): Promise<string> {
+  async allocateConference(
+    smbUrl: string,
+    smbKey: string,
+    lastN?: number
+  ): Promise<string> {
+    const requestBody: Record<string, unknown> = {};
+    if (typeof lastN === 'number' && lastN > 0) {
+      requestBody['last-n'] = lastN;
+    }
     const allocateResponse = await fetch(smbUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...(smbKey !== '' && { Authorization: `Bearer ${smbKey}` })
       },
-      body: '{}'
+      body: JSON.stringify(requestBody)
     });
 
     if (!allocateResponse.ok) {
@@ -100,11 +145,13 @@ export class SmbProtocol implements ISmbProtocol {
     conferenceId: string,
     endpointId: string,
     audio: boolean,
+    video: boolean,
     data: boolean,
     iceControlling: boolean,
     relayType: 'ssrc-rewrite' | 'forwarder' | 'mixed',
     idleTimeout: number,
-    smbKey: string
+    smbKey: string,
+    videoRelayType?: 'ssrc-rewrite' | 'forwarder' | 'mixed'
   ): Promise<SmbEndpointDescription> {
     const request: BaseAllocationRequest = {
       action: 'allocate',
@@ -113,17 +160,15 @@ export class SmbProtocol implements ISmbProtocol {
         ice: true,
         dtls: true,
         sdes: false
-      },
-      audio: {
-        ssrcs: []
-      },
-      video: {
-        ssrcs: []
       }
     };
 
     if (audio) {
       request['audio'] = { 'relay-type': relayType };
+    }
+
+    if (video) {
+      request['video'] = { 'relay-type': videoRelayType ?? relayType };
     }
 
     if (data) {
@@ -207,7 +252,8 @@ export class SmbProtocol implements ISmbProtocol {
     return smbEndpointDescription;
   }
 
-  async configureEndpoint(
+  private async sendEndpointAction(
+    action: 'configure' | 'reconfigure',
     smbUrl: string,
     conferenceId: string,
     endpointId: string,
@@ -215,8 +261,9 @@ export class SmbProtocol implements ISmbProtocol {
     smbKey: string
   ): Promise<void> {
     const request = JSON.parse(JSON.stringify(endpointDescription));
-    request['action'] = 'configure';
+    request['action'] = action;
     const url = smbUrl + conferenceId + '/' + endpointId;
+
     const response = await fetch(url, {
       method: 'PUT',
       headers: {
@@ -227,21 +274,84 @@ export class SmbProtocol implements ISmbProtocol {
     });
 
     if (!response.ok) {
-      const contentType = response.headers.get('content-type');
-
-      let text;
-      let json;
-
-      if (contentType && contentType.indexOf('text/plain') > -1) {
-        text = await response.text();
-      } else if (contentType && contentType.indexOf('application/json') > -1) {
-        json = await response.json();
-      }
-
-      throw new Error(
-        `Failed to configure endpoint ${text ? text : JSON.stringify(json)}`
-      );
+      const body = await response.text();
+      throw new SmbEndpointActionError(action, response.status, body);
     }
+  }
+
+  async configureEndpoint(
+    smbUrl: string,
+    conferenceId: string,
+    endpointId: string,
+    endpointDescription: SmbEndpointDescription,
+    smbKey: string
+  ): Promise<void> {
+    return this.sendEndpointAction(
+      'configure',
+      smbUrl,
+      conferenceId,
+      endpointId,
+      endpointDescription,
+      smbKey
+    );
+  }
+
+  async reconfigureEndpoint(
+    smbUrl: string,
+    conferenceId: string,
+    endpointId: string,
+    endpointDescription: SmbEndpointDescription,
+    smbKey: string
+  ): Promise<void> {
+    return this.sendEndpointAction(
+      'reconfigure',
+      smbUrl,
+      conferenceId,
+      endpointId,
+      endpointDescription,
+      smbKey
+    );
+  }
+
+  async requestKeyframe(
+    smbUrl: string,
+    conferenceId: string,
+    endpointId: string,
+    endpointDescription: SmbEndpointDescription,
+    smbKey: string
+  ): Promise<void> {
+    const targetWhitelist = endpointDescription.video?.['ssrc-whitelist'];
+    // Nothing to refresh if there is no video block or no pinned source.
+    if (!endpointDescription.video || !targetWhitelist) {
+      return;
+    }
+
+    // Step 1: clear the whitelist so SMB drops the current forwarding context.
+    const cleared: SmbEndpointDescription = JSON.parse(
+      JSON.stringify(endpointDescription)
+    );
+    if (cleared.video) {
+      delete cleared.video['ssrc-whitelist'];
+    }
+    await this.sendEndpointAction(
+      'reconfigure',
+      smbUrl,
+      conferenceId,
+      endpointId,
+      cleared,
+      smbKey
+    );
+
+    // Step 2: re-apply the target whitelist. The freshly initialized
+    // forwarding context triggers a PLI to the publisher -> fresh keyframe.
+    await this.sendEndpointAction(
+      'reconfigure',
+      smbUrl,
+      conferenceId,
+      endpointId,
+      endpointDescription,
+      smbKey
+    );
   }
 
   async getConferences(smbUrl: string, smbKey: string): Promise<string[]> {

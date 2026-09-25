@@ -17,7 +17,49 @@ import {
 import { Log } from './log';
 import { LineResponse, Production, SmbEndpointDescription } from './models';
 import { ProductionManager } from './production_manager';
+import {
+  NORMALIZED_VIDEO_PT_MAIN,
+  NORMALIZED_VIDEO_PT_RTX
+} from './sfu/constants';
 import { ISmbProtocol } from './smb';
+
+/** Video codecs supported through the pipeline, in preference order. */
+const SUPPORTED_VIDEO_CODECS = ['H264', 'VP8'];
+
+/**
+ * The video codec names SMB advertised for this endpoint, RTX excluded.
+ * Empty when the allocation carried no video payload-types.
+ */
+export function smbAdvertisedVideoCodecs(
+  endpoint: SmbEndpointDescription
+): string[] {
+  return (endpoint.video?.['payload-types'] ?? [])
+    .map((pt) => pt.name?.toUpperCase())
+    .filter((name): name is string => !!name && name !== 'RTX');
+}
+
+/**
+ * The most preferred video codec present in both the offer and SMB's
+ * advertised codecs. Falls back to the pipeline preference order when SMB
+ * advertised none. Undefined when the two share no supported codec.
+ */
+export function selectVideoCodec(
+  offered: RtpCodec[],
+  smbCodecs: string[]
+): RtpCodec | undefined {
+  const allowed =
+    smbCodecs.length > 0
+      ? SUPPORTED_VIDEO_CODECS.filter((codec) => smbCodecs.includes(codec))
+      : SUPPORTED_VIDEO_CODECS;
+
+  for (const name of allowed) {
+    const match = offered.find(
+      (rtp: RtpCodec) => rtp.codec.toUpperCase() === name
+    );
+    if (match) return match;
+  }
+  return undefined;
+}
 
 export class CoreFunctions {
   private productionManager: ProductionManager;
@@ -38,7 +80,8 @@ export class CoreFunctions {
     endpoint: SmbEndpointDescription,
     username: string,
     endpointId: string,
-    sessionId: string
+    sessionId: string,
+    videoEnabled = false
   ): Promise<string> {
     if (!endpoint.audio) {
       throw new Error('Missing audio when creating offer');
@@ -54,10 +97,21 @@ export class CoreFunctions {
       });
     });
 
+    const videoSsrcs: MediaStreamsInfoSsrc[] =
+      videoEnabled && endpoint.video?.ssrcs?.length
+        ? endpoint.video.ssrcs.map((ssrcNr) => ({
+            ssrc: ssrcNr.toString(),
+            cname: uuidv4(),
+            mslabel: uuidv4(),
+            label: uuidv4()
+          }))
+        : [];
+
     const endpointMediaStreamInfo = {
       audio: {
         ssrcs: ssrcs
-      }
+      },
+      ...(videoEnabled && endpoint.video && { video: { ssrcs: videoSsrcs } })
     };
 
     const connection = new Connection(
@@ -95,22 +149,56 @@ export class CoreFunctions {
     lineId: string,
     endpointId: string,
     audio: boolean,
+    video: boolean,
     data: boolean,
     iceControlling: boolean,
     relayType: 'ssrc-rewrite' | 'forwarder' | 'mixed',
-    endpointIdleTimeout: number
+    endpointIdleTimeout: number,
+    videoRelayType?: 'ssrc-rewrite' | 'forwarder' | 'mixed'
   ): Promise<SmbEndpointDescription> {
     const endpoint: SmbEndpointDescription = await smb.allocateEndpoint(
       smbServerUrl,
       lineId,
       endpointId,
       audio,
+      video,
       data,
       iceControlling,
       relayType,
       endpointIdleTimeout,
-      smbServerApiKey
+      smbServerApiKey,
+      videoRelayType
     );
+
+    // Normalize video payload type numbers to stable values so the SDP offer,
+    // browser answer, and SMB configure body all agree. Both H264 and VP8
+    // normalize to PT 96/97 — they are mutually exclusive. Using PT 96 matches
+    // whip-mpegts's native H264 PT so forwarder-mode receivers see a consistent PT.
+    // Also corrects SMB's RTX apt which may point to the wrong PT.
+    const pts = endpoint.video?.['payload-types'];
+    if (pts) {
+      const h264 = pts.find((pt) => pt.name.toUpperCase() === 'H264');
+      const vp8 = pts.find((pt) => pt.name.toUpperCase() === 'VP8');
+      const preferred = h264 ?? vp8;
+      if (preferred) {
+        const mainPt = NORMALIZED_VIDEO_PT_MAIN;
+        const rtxPt = NORMALIZED_VIDEO_PT_RTX;
+        preferred.id = mainPt;
+        const rtx = pts.find((pt) => pt.name.toLowerCase() === 'rtx');
+        if (rtx) {
+          rtx.id = rtxPt;
+          if (rtx.parameters?.['apt'] !== undefined)
+            rtx.parameters['apt'] = String(mainPt);
+        }
+      }
+      // Force H264 profile-level-id to Constrained Baseline (42e01f). SMB
+      // reports pure Baseline (42001f) which Safari's WebRTC stack rejects,
+      // collapsing the video m-line to port 0 in the answer. CBP is the only
+      // H264 profile WebRTC mandates (RFC 7742) and is universally decodable.
+      if (h264?.parameters) {
+        h264.parameters['profile-level-id'] = '42e01f';
+      }
+    }
 
     return endpoint;
   }
@@ -122,7 +210,20 @@ export class CoreFunctions {
     smbServerUrl: string,
     smbServerApiKey: string,
     smbConferenceId: string,
-    endpointId: string
+    endpointId: string,
+    receiveOnly = false,
+    /**
+     * When set on a receive-only (WHEP) endpoint, declare to SMB that this
+     * endpoint subscribes to the named publisher's video stream — limiting
+     * forwarding to that one source instead of the SFU-default forward-all.
+     *
+     * Ignored when `receiveOnly` is false.
+     */
+    subscribeToVideo?: {
+      streams: any[];
+      ssrcs: number[];
+      endpointId: string;
+    }
   ): Promise<void> {
     const offer: SessionDescription = JSON.parse(JSON.stringify(sdpOffer));
     const endpoint: SmbEndpointDescription = JSON.parse(
@@ -141,25 +242,42 @@ export class CoreFunctions {
       throw new Error('Missing ice in endpointDescription');
     }
 
-    const audioMedia = {
-      ...offer.media.find((media) => media.type === 'audio')
-    } as MediaDescription;
+    // The bundle-transport (ICE/DTLS) is carried on whichever m-line has
+    // fingerprint/iceUfrag — usually audio, but a port-0 audio reject or
+    // a data-first ordering can shift it. Original code used
+    // `{...find(...)}` which spreads to `{}` (always truthy) so the
+    // short-circuit incorrectly fell through to offer.media[0] (data
+    // m-line) and emptied transport. Find by attribute presence instead.
+    const transportMedia =
+      (offer.media.find((m) => m.fingerprint || m.iceUfrag) as
+        | MediaDescription
+        | undefined) ?? (offer.media[0] as MediaDescription | undefined);
 
-    transport.ice.ufrag = offer.iceUfrag ?? audioMedia?.iceUfrag ?? '';
-    transport.ice.pwd = offer.icePwd ?? audioMedia?.icePwd ?? '';
+    transport.ice.ufrag = offer.iceUfrag ?? transportMedia?.iceUfrag ?? '';
+    transport.ice.pwd = offer.icePwd ?? transportMedia?.icePwd ?? '';
     transport.dtls.hash =
-      offer.fingerprint?.hash ?? audioMedia?.fingerprint?.hash ?? '';
+      offer.fingerprint?.hash ?? transportMedia?.fingerprint?.hash ?? '';
     transport.dtls.type =
-      offer.fingerprint?.type ?? audioMedia?.fingerprint?.type ?? '';
-    transport.dtls.setup = offer.setup ?? audioMedia?.setup ?? '';
+      offer.fingerprint?.type ?? transportMedia?.fingerprint?.type ?? '';
+    transport.dtls.setup = offer.setup ?? transportMedia?.setup ?? '';
+
+    if (!transport.dtls.hash || !transport.dtls.type) {
+      throw new Error(
+        `Missing DTLS fingerprint in offer (would result in null cipher). ` +
+          `offer.fingerprint=${JSON.stringify(offer.fingerprint)}, ` +
+          `mediaFingerprints=${JSON.stringify(
+            offer.media.map((m) => m.fingerprint)
+          )}`
+      );
+    }
 
     if (!transport.ice.candidates || transport.ice.candidates.length === 0) {
       throw new Error('ICE candidates missing in transport');
     }
 
-    transport.ice.candidates = !audioMedia.candidates
+    transport.ice.candidates = !transportMedia?.candidates
       ? []
-      : audioMedia.candidates.flatMap((element) => {
+      : transportMedia.candidates.flatMap((element) => {
           return {
             generation: element.generation ? element.generation : 0,
             component: element.component,
@@ -184,6 +302,12 @@ export class CoreFunctions {
         media.ssrcs
           ?.filter((ssrc) => ssrc.attribute === 'msid')
           .forEach((ssrc) => endpoint.audio.ssrcs.push(parseInt(`${ssrc.id}`)));
+        if (!media.rtp?.[0]) {
+          throw new Error(
+            'Audio m-line in offer has no rtp payload entries — rejected ' +
+              'or malformed audio m-line cannot be configured.'
+          );
+        }
         endpoint.audio['payload-type'].id = media.rtp[0].payload;
         endpoint.audio['rtp-hdrexts'] = [];
         media.ext?.forEach((ext: RtpHeaderExt) =>
@@ -201,7 +325,7 @@ export class CoreFunctions {
             if (!smbVideoStream) {
               smbVideoStream = {
                 sources: [],
-                id: mediaStreamId,
+                id: receiveOnly ? mediaStreamId : endpointId,
                 content: 'video'
               };
               streamsMap.set(mediaStreamId, smbVideoStream);
@@ -215,11 +339,13 @@ export class CoreFunctions {
             if (feedbackGroup) {
               const ssrcsSplit = feedbackGroup.ssrcs.split(' ');
               if (`${ssrc.id}` === ssrcsSplit[0]) {
+                const main = parseInt(ssrcsSplit[0]);
+                // Skip feedback when the FID group has only one SSRC —
+                // otherwise parseInt(undefined) ships feedback: NaN to SMB.
                 smbVideoStream.sources = [
-                  {
-                    main: parseInt(ssrcsSplit[0]),
-                    feedback: parseInt(ssrcsSplit[1])
-                  }
+                  ssrcsSplit.length >= 2
+                    ? { main, feedback: parseInt(ssrcsSplit[1]) }
+                    : { main }
                 ];
               }
             } else {
@@ -231,8 +357,57 @@ export class CoreFunctions {
             }
           });
 
-        streamsMap.forEach((value) => videoStreams.push(value));
-        const supportedCodecs = ['VP8', 'H264', 'VP9'];
+        // Only collect sender SSRCs into videoStreams for WHIP endpoints.
+        // WHEP offers may include a=ssrc: lines (Chrome UA hints for receive
+        // tracks) that must not be treated as sender streams.
+        if (!receiveOnly) {
+          // Fallback for publishers whose offer has no `a=ssrc:N msid:...`
+          // lines (common with hardware/native WHIP encoders, some OBS
+          // configurations). Without the msid loop populating streamsMap,
+          // SMB never gets a `streams` declaration and receivers' SDPs
+          // end up with no usable msid — so the frontend can't match the
+          // tile to a participant. Synthesize one stream entry tagged with
+          // the publisher's endpointId, gathering all video ssrcs from the
+          // offer (deduped, primary SSRCs of FID groups preferred).
+          if (streamsMap.size === 0) {
+            const allVideoSsrcs = (media.ssrcs ?? []).map((s) =>
+              parseInt(`${s.id}`, 10)
+            );
+            const dedupedSsrcs = Array.from(new Set(allVideoSsrcs));
+            // If FID groups are present, take the first ssrc of each as
+            // main and the second as feedback. Otherwise treat each ssrc
+            // as a primary with no feedback pair.
+            const fidGroups = (media.ssrcGroups ?? []).filter(
+              (g) => g.semantics === 'FID'
+            );
+            const sources =
+              fidGroups.length > 0
+                ? fidGroups.map((g) => {
+                    const [mainStr, feedbackStr] = g.ssrcs.split(' ');
+                    return {
+                      main: parseInt(mainStr, 10),
+                      ...(feedbackStr
+                        ? { feedback: parseInt(feedbackStr, 10) }
+                        : {})
+                    };
+                  })
+                : dedupedSsrcs.map((id) => ({ main: id }));
+            if (sources.length > 0) {
+              streamsMap.set(endpointId, {
+                sources,
+                id: endpointId,
+                content: 'video'
+              });
+            }
+          }
+          streamsMap.forEach((value) => videoStreams.push(value));
+        }
+        // Only H264 and VP8 are fully supported through the pipeline (codec
+        // normalization, profile-level-id pinning, FID/RTX handling). VP9
+        // used to be in this list but the downstream code never grew
+        // VP9-specific paths, so it would silently fall through
+        // misconfigured.
+        const supportedCodecs = ['VP8', 'H264'];
         const matchingCodecs =
           media.rtp?.filter((rtp: RtpCodec) =>
             supportedCodecs.includes(rtp.codec.toUpperCase())
@@ -275,13 +450,42 @@ export class CoreFunctions {
 
         endpoint.video = endpoint.video || {};
 
-        const selectedCodec = media.rtp[0];
+        // Negotiate a codec both the client offered and SMB advertised. A
+        // codec the bridge cannot carry leaves receivers with audio and no
+        // video, so reject explicitly when there is no overlap.
+        const smbCodecs = smbAdvertisedVideoCodecs(endpoint);
+        const selectedCodec = selectVideoCodec(media.rtp, smbCodecs);
+
+        if (!selectedCodec) {
+          throw new Error(
+            `No video codec in common between the offer and SMB. ` +
+              `Offered: ${
+                media.rtp.map((r) => r.codec).join(', ') || '(none)'
+              }. ` +
+              `SMB advertises: ${smbCodecs.join(', ') || '(none)'}.`
+          );
+        }
+
+        // Log both sides; a codec mismatch is otherwise silent.
+        Log().info(
+          `[video-codec] endpoint=${endpointId} ` +
+            `selected=${selectedCodec.codec}@${selectedCodec.payload} ` +
+            `offered=[${media.rtp.map((r) => r.codec).join(', ')}] ` +
+            `smb=[${smbCodecs.join(', ') || 'unadvertised'}]`
+        );
+
         if (typeof selectedCodec.rate !== 'number') {
           throw new Error('Selected video codec is missing a valid clockrate');
         }
 
+        // Always use the offer's actual PT for both WHIP publishers and WHEP
+        // receivers. whip-mpegts natively offers H264@PT96 so it is unaffected;
+        // browser WHIP clients offer H264@PT103 and must configure at PT103 so
+        // SMB knows which PT to forward. WHEP receivers keep their native PT.
+        const normalizedId = selectedCodec.payload;
+
         const payload = {
-          id: selectedCodec.payload,
+          id: normalizedId,
           name: selectedCodec.codec,
           clockrate: selectedCodec.rate,
           parameters: {},
@@ -316,8 +520,67 @@ export class CoreFunctions {
           uri: ext.uri
         }));
 
-        endpoint.video.ssrcs =
-          media.ssrcs?.map((ssrc) => Number(ssrc.id)) ?? [];
+        // Sync payload-types (plural, from allocation, normalized to PT 96) to
+        // match the actual offer PT so both fields in the configure body agree.
+        // Applies to all endpoints — WHIP publishers and WHEP receivers alike.
+        // whip-mpegts already uses PT 96, so no-op for that path.
+        const payloadTypesArr = endpoint.video['payload-types'];
+        if (payloadTypesArr && payloadTypesArr.length > 0) {
+          const mainEntry = payloadTypesArr.find(
+            (pt) => pt.name.toLowerCase() !== 'rtx'
+          );
+          if (mainEntry) {
+            mainEntry.id = normalizedId;
+          }
+          const rtxEntry = payloadTypesArr.find(
+            (pt) => pt.name.toLowerCase() === 'rtx'
+          );
+          if (rtxEntry?.parameters?.apt !== undefined) {
+            rtxEntry.parameters.apt = String(normalizedId);
+          }
+        }
+
+        if (!receiveOnly && videoStreams.length > 0) {
+          // WHIP/camera sender: declare the SSRCs being transmitted and the
+          // stream so SMB knows what to forward to other endpoints.
+          endpoint.video.ssrcs =
+            media.ssrcs?.map((ssrc) => Number(ssrc.id)) ?? [];
+          endpoint.video.streams = videoStreams;
+
+          // Block all video EGRESS to this publisher. An empty-but-present
+          // ssrc-whitelist is the one setting SMB reads as "forward nothing" —
+          // deleting the key instead means last-N, i.e. forward everything.
+          //
+          // A WHIP publisher such as whip-mpegts negotiates recvonly on SMB's
+          // side and builds no video receive path, so any video SMB forwards
+          // here arrives at a webrtcbin transport with nothing linked
+          // downstream. That is a fatal GST_FLOW_NOT_LINKED: the whole
+          // pipeline errors out and the publisher's own outbound video
+          // freezes. Triggered by any video sender in the conference — one
+          // already present when the publisher connects, or one joining later.
+          //
+          // Ingress is unaffected: the endpoint is still allocated with video
+          // and still declares its own ssrcs/streams above, so SMB keeps
+          // receiving this publisher's video and relaying it to subscribers.
+          // Egress and ingress are independent here.
+          endpoint.video['ssrc-whitelist'] = [];
+        } else if (receiveOnly && subscribeToVideo) {
+          // Keep the pre-allocated receive SSRCs from the allocation (they
+          // define this endpoint's ssrc-rewrite receive pool).
+          delete endpoint.video.streams;
+          const whitelist = subscribeToVideo.ssrcs.slice(0, 2);
+          if (whitelist.length > 0) {
+            endpoint.video['ssrc-whitelist'] = whitelist;
+          }
+        } else {
+          // Receive-only WHEP endpoint (ssrc-rewrite mode): keep the pre-
+          // allocated receive SSRCs from the allocation — SMB needs them to
+          // set up the ssrc-rewrite forwarding path for this subscriber.
+          // Only delete 'streams' (this endpoint does not publish video).
+          // Old forwarder mode deleted both, but ssrc-rewrite requires the
+          // receive pool to be declared so SMB maps publisher SSRCs to it.
+          delete endpoint.video.streams;
+        }
       }
     }
 
@@ -460,32 +723,32 @@ export class CoreFunctions {
 
         media.ext = audioExts.map((ext) => ({ value: ext.id, uri: ext.uri }));
       } else if (media.type === 'video') {
-        const vp8Codec = media.rtp.find(
-          (rtp: RtpCodec) => rtp.codec.toUpperCase() === 'VP8'
+        // Same rule as configureEndpointForWhipWhep: the answer decides what
+        // the publisher encodes and the configure what SMB expects, so the two
+        // must agree.
+        const primaryCodec = selectVideoCodec(
+          media.rtp,
+          smbAdvertisedVideoCodecs(endpoint)
         );
-        if (vp8Codec) {
-          const vp8PayloadType = vp8Codec.payload;
+
+        if (primaryCodec) {
+          const primaryPt = primaryCodec.payload;
 
           const rtxFmtp = media.fmtp.find(
-            (fmtp: Fmtp) => fmtp.config === `apt=${vp8PayloadType}`
+            (fmtp: Fmtp) => fmtp.config === `apt=${primaryPt}`
           );
-          const vp8RtxPayloadType = rtxFmtp?.payload;
+          const rtxPt = rtxFmtp?.payload;
 
           media.rtp = media.rtp.filter(
             (rtp: RtpCodec) =>
-              rtp.payload === vp8PayloadType ||
-              rtp.payload === vp8RtxPayloadType
+              rtp.payload === primaryPt || rtp.payload === rtxPt
           );
 
           media.fmtp = media.fmtp.filter(
-            (fmtp: Fmtp) =>
-              fmtp.payload === vp8PayloadType ||
-              fmtp.payload === vp8RtxPayloadType
+            (fmtp: Fmtp) => fmtp.payload === primaryPt || fmtp.payload === rtxPt
           );
 
-          media.payloads = [vp8PayloadType, vp8RtxPayloadType]
-            .filter(Boolean)
-            .join(' ');
+          media.payloads = [primaryPt, rtxPt].filter(Boolean).join(' ');
           media.ext =
             media.ext?.filter(
               (ext: RtpHeaderExt) =>
@@ -494,19 +757,38 @@ export class CoreFunctions {
                 ext.uri === 'urn:ietf:params:rtp-hdrext:sdes:rtp-stream-id'
             ) ?? [];
 
+          // Keep nack (incl. nack pli for keyframe requests), ccm fir, and
+          // goog-remb. PLI is what lets a WHEP consumer ask the publisher for
+          // an IDR — without it, a consumer that joins mid-stream or loses
+          // the reference frame has nothing decodable until the next
+          // keyframe.
           media.rtcpFb = media.rtcpFb?.filter(
             (fb: RtcpFb) =>
-              fb.payload === vp8PayloadType &&
-              (fb.type === 'goog-remb' || fb.type === 'nack')
+              fb.payload === primaryPt &&
+              (fb.type === 'goog-remb' ||
+                fb.type === 'nack' ||
+                (fb.type === 'ccm' && fb.subtype === 'fir'))
+          );
+          Log().debug(
+            `[whipwhep-answer] video rtcp-fb negotiated mid=${
+              media.mid
+            } pt=${primaryPt} fb=${JSON.stringify(media.rtcpFb)}`
           );
 
           media.setup = 'active';
           media.direction =
             media.direction === 'recvonly' ? 'sendonly' : 'recvonly';
           media.ssrcGroups = undefined;
+          // Do not declare a specific a=ssrc: in the WHEP answer. SMB sends
+          // two SSRCs (main video + RTX); declaring ssrcs[0] risks picking the
+          // RTX SSRC, which causes Chrome to bind the video track to the repair
+          // stream (framesDecoded=0) while the actual video arrives on the
+          // undeclared main SSRC. Without a=ssrc: Chrome accepts all SSRCs on
+          // this m-line and fires ontrack when real video frames arrive.
+          media.ssrcs = [];
         } else {
           Log().warn(
-            'No VP8 codec found in offer video media. Skipping VP8-specific filtering.'
+            'No H264 or VP8 codec found in offer video media. Skipping video codec filtering.'
           );
           media.setup = 'active';
           media.direction =
@@ -539,7 +821,11 @@ export class CoreFunctions {
     lineId: string,
     endpointId: string,
     endpointDescription: SmbEndpointDescription,
-    answer: string
+    answer: string,
+    // Optional pin: when provided, the browser endpoint's video receive
+    // is gated to packets whose inbound SSRC is in the whitelist.
+    // Without it, SMB rotates senders through the single video m-line
+    subscribeToVideo?: { ssrcs: number[]; endpointId: string }
   ): Promise<void> {
     if (!endpointDescription) {
       throw new Error(
@@ -572,8 +858,83 @@ export class CoreFunctions {
 
     if (endpointDescription.audio.ssrcs.length === 0) {
       throw new Error(
-        'Missing audio ssrcs when handling sdp answer from endpoint'
+        'Missing audio ssrcs in SDP answer — answer had no a=ssrc on the ' +
+          'audio m-line (mic muted or track removed before negotiation).'
       );
+    }
+
+    const videoMedia =
+      parsedAnswer.media.find(
+        (m) => m.type === 'video' && (m.ssrcs?.length ?? 0) > 0
+      ) ?? parsedAnswer.media.find((m) => m.type === 'video');
+    if (endpointDescription.video) {
+      const video = endpointDescription.video;
+      const videoSsrcs: number[] = [];
+      video.ssrcs = videoSsrcs;
+
+      if (videoMedia) {
+        // Extract sender SSRCs from the answer (empty for recvonly/no-camera clients)
+        if (videoMedia.ssrcs?.length) {
+          const seen = new Set<number>();
+          videoMedia.ssrcs.forEach((ssrc) => {
+            const id =
+              typeof ssrc.id === 'string' ? parseInt(ssrc.id, 10) : ssrc.id;
+            if (!seen.has(id)) {
+              seen.add(id);
+              videoSsrcs.push(id);
+            }
+          });
+        }
+
+        const videoPayloadInfo = this.extractVideoPayloadInfo(videoMedia);
+        if (videoPayloadInfo) {
+          endpointDescription.video['payload-type'] =
+            videoPayloadInfo.payloadType;
+          endpointDescription.video['rtp-hdrexts'] =
+            videoPayloadInfo.rtpHdrexts;
+        }
+      }
+
+      // Replace the allocate's 'streams' (pre-allocated SSRCs) with the actual
+      // SSRCs the client is sending. In forwarder mode SMB routes based on the
+      // SSRC reported in 'streams', so it must match what the browser sends.
+      // For receive-only (no-camera) clients, streams is empty.
+      if (videoSsrcs.length > 0) {
+        // Camera client: build a stream entry from the FID group (main + RTX)
+        const fidGroup = (videoMedia as any)?.ssrcGroups?.find(
+          (g: { semantics: string; ssrcs: string }) => g.semantics === 'FID'
+        );
+        let sources: { main: number; feedback?: number }[];
+        if (fidGroup) {
+          const parts = fidGroup.ssrcs.split(' ');
+          const main = parseInt(parts[0], 10);
+          const feedback =
+            parts.length >= 2 ? parseInt(parts[1], 10) : undefined;
+          sources = [
+            feedback !== undefined && Number.isFinite(feedback)
+              ? { main, feedback }
+              : { main }
+          ];
+          // Store BOTH main and RTX SSRCs. Receivers pinned to this
+          // publisher build their ssrc-whitelist from this list — if
+          // RTX is missing, SMB drops retransmission packets and any
+          // network jitter freezes the receiver's video.
+          endpointDescription.video.ssrcs =
+            feedback !== undefined && Number.isFinite(feedback)
+              ? [main, feedback]
+              : [main];
+        } else {
+          sources = [{ main: videoSsrcs[0] }];
+        }
+        const msidEntry = videoMedia?.ssrcs?.find(
+          (s) => Number(s.id) === sources[0].main && s.attribute === 'msid'
+        );
+        const streamId = msidEntry?.value?.split(' ')[0] ?? 'video';
+        video.streams = [{ id: streamId, content: 'video', sources }];
+      } else {
+        // No-camera client: not sending any video
+        video.streams = [];
+      }
     }
 
     const transport = endpointDescription['bundle-transport'];
@@ -622,6 +983,36 @@ export class CoreFunctions {
           };
         });
 
+    Log().debug(
+      `[handleAnswer-video] ssrcs=${JSON.stringify(
+        endpointDescription.video?.ssrcs
+      )} streams=${JSON.stringify(endpointDescription.video?.streams)}`
+    );
+
+    // Apply ssrc-whitelist so SMB only forwards the pinned publisher's
+    // packets into this browser's single inbound video slot. SMB caps
+    // the whitelist at 2 SSRCs (main + RTX), so dedupe and slice.
+    if (subscribeToVideo && endpointDescription.video) {
+      const whitelist = Array.from(new Set(subscribeToVideo.ssrcs))
+        .filter((n) => Number.isFinite(n))
+        .slice(0, 2);
+      if (whitelist.length > 0) {
+        endpointDescription.video['ssrc-whitelist'] = whitelist;
+        Log().debug(
+          `[handleAnswer-pin] browser endpoint=${endpointId} pinned to ` +
+            `source endpointId=${subscribeToVideo.endpointId} ` +
+            `whitelist=${JSON.stringify(whitelist)}`
+        );
+      } else {
+        Log().warn(
+          `[handleAnswer-pin] browser endpoint=${endpointId} pin requested ` +
+            `for source endpointId=${subscribeToVideo.endpointId} but ` +
+            `the source has no stored ssrcs to whitelist with — falling ` +
+            `back to default rotation`
+        );
+      }
+    }
+
     return await smb.configureEndpoint(
       smbServerUrl,
       lineId,
@@ -660,9 +1051,21 @@ export class CoreFunctions {
       return line.smbConferenceId;
     }
 
+    // SMB's video receive pool size for ssrc-rewrite endpoints. Each
+    // endpoint in this conference gets `last-n + 2` simultaneous video
+    // slots (capped at 16 server-side). Default 9 → 11 slots, which is
+    // generous enough for our typical conferences while leaving SMB's
+    // simulcast headroom intact. Env-tunable for ops without a rebuild.
+    // Required for the WHEP single-source pin to work — without it,
+    // ssrc-rewrite receivers get zero slots and SMB falls back to last-N
+    // forwarding (which is what the dynamic-source bug looked like).
+    const parsedLastN = parseInt(process.env.SMB_CONFERENCE_LAST_N ?? '9', 10);
+    const lastN =
+      Number.isFinite(parsedLastN) && parsedLastN >= 1 ? parsedLastN : 9;
     const newConferenceId = await smb.allocateConference(
       smbServerUrl,
-      smbServerApiKey
+      smbServerApiKey,
+      lastN
     );
 
     if (
@@ -704,7 +1107,13 @@ export class CoreFunctions {
 
     const allLinesResponse = await Promise.all(
       production.lines.map(
-        async ({ name, id, smbConferenceId, programOutputLine }) => {
+        async ({
+          name,
+          id,
+          smbConferenceId,
+          programOutputLine,
+          videoEnabled
+        }) => {
           const participants = await this.productionManager.getUsersForLine(
             stringifiedProdId,
             id
@@ -715,7 +1124,8 @@ export class CoreFunctions {
             id,
             smbConferenceId,
             participants,
-            programOutputLine: programOutputLine ?? false
+            programOutputLine: programOutputLine ?? false,
+            videoEnabled: videoEnabled ?? false
           } as LineResponse;
         }
       )
@@ -732,5 +1142,69 @@ export class CoreFunctions {
     } else {
       throw new Error(`${value} has incorrect type`);
     }
+  }
+
+  private extractVideoPayloadInfo(media: MediaDescription): {
+    payloadType: {
+      id: number;
+      name: string;
+      clockrate: number;
+      parameters: Record<string, string>;
+      'rtcp-fbs': { type: string; subtype?: string }[];
+    };
+    rtpHdrexts: { id: number; uri: string }[];
+  } | null {
+    // Match the H264-preferred selection used in configureEndpointForWhipWhep.
+    // Previously this function included VP9 and picked
+    // matchingRtp[0], so a browser answer listing VP8 before H264 would set
+    // the receiver's payload-type to VP8's PT while SMB expected H264 — the
+    // exact PT mismatch addVideoMid normalization was preventing.
+    if (!media.rtp?.length) return null;
+    const selectedCodec =
+      media.rtp.find((rtp: RtpCodec) => rtp.codec.toUpperCase() === 'H264') ??
+      media.rtp.find((rtp: RtpCodec) => rtp.codec.toUpperCase() === 'VP8');
+    if (!selectedCodec) return null;
+    if (typeof selectedCodec.rate !== 'number') return null;
+
+    const fmtp = media.fmtp?.find(
+      (f: Fmtp) => f.payload === selectedCodec.payload
+    );
+    const parameters: Record<string, string> = fmtp?.config
+      ? Object.fromEntries(
+          fmtp.config.split(';').map((kv) => {
+            const [key, val] = kv.trim().split('=');
+            return [key, val ?? ''];
+          })
+        )
+      : {};
+
+    const rtcpFbs = (
+      media.rtcpFb?.filter(
+        (f: RtcpFb) => f.payload === selectedCodec.payload
+      ) ?? []
+    ).map((fb: RtcpFb) => ({
+      type: fb.type,
+      subtype: fb.subtype ?? undefined
+    }));
+
+    const allowedExts = [
+      'http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time',
+      'urn:ietf:params:rtp-hdrext:sdes:rtp-stream-id'
+    ];
+    const rtpHdrexts = (
+      media.ext?.filter((ext: RtpHeaderExt) => allowedExts.includes(ext.uri)) ??
+      []
+    ).map((ext: RtpHeaderExt) => ({ id: ext.value, uri: ext.uri }));
+
+    return {
+      payloadType: {
+        id: selectedCodec.payload,
+        name: selectedCodec.codec,
+        clockrate: selectedCodec.rate,
+        parameters,
+        'rtcp-fbs': rtcpFbs
+      },
+      rtpHdrexts
+    };
   }
 }
