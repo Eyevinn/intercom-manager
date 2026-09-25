@@ -80,7 +80,7 @@ const apiGroups: FastifyPluginCallback<ApiGroupsOptions> = (
     '/preset/:id',
     {
       schema: {
-        params: Type.Object({ id: Type.String() }),
+        params: Type.Object({ id: Type.String({ maxLength: 128 }) }),
         response: {
           200: Preset,
           404: ErrorResponse
@@ -99,7 +99,7 @@ const apiGroups: FastifyPluginCallback<ApiGroupsOptions> = (
     '/preset/:id',
     {
       schema: {
-        params: Type.Object({ id: Type.String() }),
+        params: Type.Object({ id: Type.String({ maxLength: 128 }) }),
         body: UpdatePreset,
         response: {
           200: Preset,
@@ -143,7 +143,7 @@ const apiGroups: FastifyPluginCallback<ApiGroupsOptions> = (
     '/preset/:id',
     {
       schema: {
-        params: Type.Object({ id: Type.String() }),
+        params: Type.Object({ id: Type.String({ maxLength: 128 }) }),
         response: {
           204: Type.Null(),
           404: ErrorResponse

@@ -136,7 +136,11 @@ const apiIngests: FastifyPluginCallback<ApiIngestsOptions> = (
       schema: {
         description: 'Retrieves an ingest.',
         params: Type.Object({
-          ingestId: Type.String({ minLength: 1, pattern: '^[0-9]+$' })
+          ingestId: Type.String({
+            minLength: 1,
+            maxLength: 128,
+            pattern: '^[0-9]+$'
+          })
         }),
         response: {
           200: Ingest,
@@ -179,7 +183,11 @@ const apiIngests: FastifyPluginCallback<ApiIngestsOptions> = (
         description:
           'Modify an existing Ingest. By changing the label, the deviceOutput or the deviceInput, the ingest is updated and the new ingest is returned.',
         params: Type.Object({
-          ingestId: Type.String({ minLength: 1, pattern: '^[0-9]+$' })
+          ingestId: Type.String({
+            minLength: 1,
+            maxLength: 128,
+            pattern: '^[0-9]+$'
+          })
         }),
         body: PatchIngest,
         response: {
@@ -254,7 +262,11 @@ const apiIngests: FastifyPluginCallback<ApiIngestsOptions> = (
       schema: {
         description: 'Deletes a Ingest.',
         params: Type.Object({
-          ingestId: Type.String({ minLength: 1, pattern: '^[0-9]+$' })
+          ingestId: Type.String({
+            minLength: 1,
+            maxLength: 128,
+            pattern: '^[0-9]+$'
+          })
         }),
         response: {
           200: Type.String(),
