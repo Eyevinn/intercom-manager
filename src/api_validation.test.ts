@@ -563,4 +563,71 @@ describe('Input Validation', () => {
       expect(response.statusCode).toBe(501);
     });
   });
+
+  // ── maxLength constraints (defence-in-depth, #239) ─────────────
+  // Unbounded Type.String() schemas now carry maxLength so oversized
+  // payloads are rejected by AJV with 400 before reaching handlers.
+
+  describe('maxLength constraints (#239)', () => {
+    test('GET /production/:productionId rejects an oversized productionId', async () => {
+      const response = await server.inject({
+        method: 'GET',
+        url: `/api/v1/production/${'1'.repeat(129)}`
+      });
+      // Rejected before the handler: Fastify caps params at maxParamLength
+      // (default 100) → 414, and the schema maxLength (128) would otherwise
+      // yield 400. Either way the oversized value never reaches the handler.
+      expect([400, 414]).toContain(response.statusCode);
+    });
+
+    test('POST /session rejects productionId exceeding 128 chars', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/v1/session',
+        body: {
+          productionId: '1'.repeat(129),
+          lineId: 'lid-1',
+          username: 'user'
+        }
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
+    test('POST /session accepts a valid productionId within bounds', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/v1/session',
+        body: { productionId: '1', lineId: 'lid-1', username: 'user' }
+      });
+      // Param/body are valid — the request proceeds past schema validation.
+      expect(response.statusCode).not.toBe(400);
+    });
+
+    test('POST /ingest rejects label exceeding 200 chars (400, not 501)', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/v1/ingest',
+        body: { label: 'x'.repeat(201), ipAddress: '127.0.0.1' }
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
+    test('POST /ingest rejects ipAddress exceeding 128 chars (400, not 501)', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/v1/ingest',
+        body: { label: 'valid', ipAddress: 'x'.repeat(129) }
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
+    test('POST /ingest with valid body passes validation (501, not 400)', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/v1/ingest',
+        body: { label: 'valid', ipAddress: '127.0.0.1' }
+      });
+      expect(response.statusCode).toBe(501);
+    });
+  });
 });

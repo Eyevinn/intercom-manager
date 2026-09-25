@@ -66,11 +66,19 @@ function sortParticipants(participants: UserResponse[]): UserResponse[] {
 // ── Param schemas for route validation ──────────────────────────────────
 
 const ProductionIdParams = Type.Object({
-  productionId: Type.String({ minLength: 1, pattern: '^[0-9]+$' })
+  productionId: Type.String({
+    minLength: 1,
+    maxLength: 128,
+    pattern: '^[0-9]+$'
+  })
 });
 
 const ProductionLineParams = Type.Object({
-  productionId: Type.String({ minLength: 1, pattern: '^[0-9]+$' }),
+  productionId: Type.String({
+    minLength: 1,
+    maxLength: 128,
+    pattern: '^[0-9]+$'
+  }),
   lineId: Type.String({ minLength: 1, maxLength: 200 })
 });
 

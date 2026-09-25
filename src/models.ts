@@ -259,7 +259,7 @@ export const Conference = Type.Object({
 });
 
 export const Line = Type.Object({
-  name: Type.String(),
+  name: Type.String({ maxLength: 200 }),
   id: Type.String(),
   smbConferenceId: Type.String(),
   programOutputLine: Type.Optional(Type.Boolean())
@@ -278,7 +278,7 @@ export const PatchLineResponse = Type.Omit(Line, ['smbConferenceId']);
 
 export const Production = Type.Object({
   _id: Type.Number(),
-  name: Type.String(),
+  name: Type.String({ maxLength: 200 }),
   lines: Type.Array(Line)
 });
 
@@ -305,7 +305,11 @@ export const DetailedProductionResponse = Type.Object({
 });
 
 export const NewSession = Type.Object({
-  productionId: Type.String({ minLength: 1, pattern: '^[0-9]+$' }),
+  productionId: Type.String({
+    minLength: 1,
+    maxLength: 128,
+    pattern: '^[0-9]+$'
+  }),
   lineId: Type.String({ minLength: 1, maxLength: 200 }),
   username: Type.String({ minLength: 1, maxLength: 200 })
 });
@@ -346,8 +350,11 @@ export const ReAuthResponse = Type.Object({
 export type ReAuthResponse = Static<typeof ReAuthResponse>;
 
 // WHIP/WHEP endpoint request body schema
+// SDP offers are large multi-line blobs; 65536 matches the SdpAnswer bound and
+// leaves ample room for real offers while rejecting abusive oversized payloads.
 export const WhipWhepRequest = Type.String({
-  description: 'WebRTC SDP offer'
+  description: 'WebRTC SDP offer',
+  maxLength: 65536
 });
 
 // WHIP/WHEP endpoint response schema
@@ -356,8 +363,8 @@ export const WhipWhepResponse = Type.String({
 });
 
 export const NewIngest = Type.Object({
-  label: Type.String(),
-  ipAddress: Type.String()
+  label: Type.String({ maxLength: 200 }),
+  ipAddress: Type.String({ maxLength: 128 })
 });
 
 export const Ingest = Type.Object({
@@ -386,17 +393,17 @@ export const IngestListResponse = Type.Object({
 });
 
 export const PatchIngest = Type.Union([
-  Type.Object({ label: Type.String() }),
+  Type.Object({ label: Type.String({ maxLength: 200 }) }),
   Type.Object({
     deviceOutput: Type.Object({
-      name: Type.String(),
-      label: Type.String()
+      name: Type.String({ maxLength: 200 }),
+      label: Type.String({ maxLength: 200 })
     })
   }),
   Type.Object({
     deviceInput: Type.Object({
-      name: Type.String(),
-      label: Type.String()
+      name: Type.String({ maxLength: 200 }),
+      label: Type.String({ maxLength: 200 })
     })
   })
 ]);
@@ -404,11 +411,11 @@ export const PatchIngest = Type.Union([
 export const PatchIngestResponse = Type.Omit(Ingest, ['ipAddress']);
 
 export const PresetCall = Type.Object({
-  productionId: Type.String({ minLength: 1 }),
-  lineId: Type.String({ minLength: 1 }),
+  productionId: Type.String({ minLength: 1, maxLength: 128 }),
+  lineId: Type.String({ minLength: 1, maxLength: 128 }),
   lineUsedForProgramOutput: Type.Optional(Type.Boolean()),
   isProgramUser: Type.Optional(Type.Boolean()),
-  lineName: Type.Optional(Type.String())
+  lineName: Type.Optional(Type.String({ maxLength: 200 }))
 });
 
 export const NewPreset = Type.Object({
