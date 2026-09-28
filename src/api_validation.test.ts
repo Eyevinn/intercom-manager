@@ -629,5 +629,35 @@ describe('Input Validation', () => {
       });
       expect(response.statusCode).toBe(501);
     });
+
+    test('POST /ingest accepts a valid IPv6 ipAddress (501, not 400)', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/v1/ingest',
+        body: { label: 'valid', ipAddress: '2001:db8::1' }
+      });
+      expect(response.statusCode).toBe(501);
+    });
+
+    test.each([
+      'not-an-ip',
+      'http://127.0.0.1',
+      '127.0.0.1/../admin',
+      '127.0.0.1:8080',
+      'localhost',
+      '999.999.999.999',
+      '127.0.0.1 ',
+      '127.0.0.1\r\nHost: evil'
+    ])(
+      'POST /ingest rejects malformed ipAddress %j (400, not 501)',
+      async (ip) => {
+        const response = await server.inject({
+          method: 'POST',
+          url: '/api/v1/ingest',
+          body: { label: 'valid', ipAddress: ip }
+        });
+        expect(response.statusCode).toBe(400);
+      }
+    );
   });
 });
