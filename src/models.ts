@@ -362,9 +362,21 @@ export const WhipWhepResponse = Type.String({
   description: 'Created'
 });
 
+// Strict IPv4/IPv6 validation for the ingest device address. This is a security
+// boundary: the value is later used for outbound device communication (see
+// IngestManager.fetchDeviceData) so it must reject URL schemes, paths,
+// credentials, whitespace and other injection vectors that could enable SSRF.
+// `format` is not used because ajv-formats is not registered, so it would not be
+// enforced — `pattern` is a core JSON Schema keyword and is always applied.
+const IPV4_ADDRESS =
+  '(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])';
+const IPV6_ADDRESS =
+  '(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,7}:|(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,5}(?::[0-9a-fA-F]{1,4}){1,2}|(?:[0-9a-fA-F]{1,4}:){1,4}(?::[0-9a-fA-F]{1,4}){1,3}|(?:[0-9a-fA-F]{1,4}:){1,3}(?::[0-9a-fA-F]{1,4}){1,4}|(?:[0-9a-fA-F]{1,4}:){1,2}(?::[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:(?::[0-9a-fA-F]{1,4}){1,6}|:(?:(?::[0-9a-fA-F]{1,4}){1,7}|:))';
+const IP_ADDRESS_PATTERN = `^(?:${IPV4_ADDRESS}|${IPV6_ADDRESS})$`;
+
 export const NewIngest = Type.Object({
   label: Type.String({ maxLength: 200 }),
-  ipAddress: Type.String({ maxLength: 128 })
+  ipAddress: Type.String({ maxLength: 128, pattern: IP_ADDRESS_PATTERN })
 });
 
 export const Ingest = Type.Object({
