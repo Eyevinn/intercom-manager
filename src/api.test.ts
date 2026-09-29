@@ -102,3 +102,45 @@ describe('api', () => {
     expect(response.body).toBe('Hello, world! I am my awesome service');
   });
 });
+
+describe('security headers (CSP)', () => {
+  const buildServer = () =>
+    api({
+      title: 'my awesome service',
+      smbServerBaseUrl: 'http://localhost',
+      endpointIdleTimeout: '60',
+      publicHost: 'http://localhost',
+      dbManager: mockDbManager,
+      productionManager: mockProductionManager,
+      ingestManager: mockIngestManager,
+      coreFunctions: new CoreFunctions(
+        mockProductionManager,
+        new ConnectionQueue()
+      )
+    });
+
+  // The global helmet CSP is registered via an onRequest hook; swagger-ui's
+  // `staticCSP: true` registers an encapsulated onSend hook scoped to
+  // /api/docs that overrides it there only. These two tests lock in both
+  // halves of that interaction so a future refactor cannot silently weaken
+  // the API policy or break the docs page.
+  it('applies the strict baseline CSP to API routes', async () => {
+    const server = await buildServer();
+    const response = await server.inject({ method: 'GET', url: '/' });
+    const csp = response.headers['content-security-policy'] as string;
+    expect(csp).toContain("default-src 'none'");
+    expect(csp).toContain("base-uri 'none'");
+    expect(csp).toContain("form-action 'none'");
+    expect(csp).toContain("frame-ancestors 'none'");
+  });
+
+  it('does not leak the strict policy onto the Swagger docs page', async () => {
+    const server = await buildServer();
+    const response = await server.inject({ method: 'GET', url: '/api/docs/' });
+    const csp = response.headers['content-security-policy'] as string;
+    expect(response.statusCode).toBe(200);
+    // Swagger UI emits its own policy so the docs page keeps working.
+    expect(csp).toContain("default-src 'self'");
+    expect(csp).not.toContain("default-src 'none'");
+  });
+});
