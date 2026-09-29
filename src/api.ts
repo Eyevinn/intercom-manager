@@ -74,8 +74,19 @@ export default async (opts: ApiOptions) => {
   api.register(fastifyCookie);
 
   // register security headers
+  // Enable a strict baseline CSP. This is a JSON API and does not serve
+  // application HTML, so the policy can lock everything down to 'none'. The
+  // one HTML surface, the Swagger UI at /api/docs, emits its own compatible
+  // CSP via `staticCSP: true` below, which overrides this on that route.
   api.register(helmet, {
-    contentSecurityPolicy: false // CSP managed per-deployment
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'none'"],
+        baseUri: ["'none'"],
+        formAction: ["'none'"],
+        frameAncestors: ["'none'"]
+      }
+    }
   });
 
   // Dynamic CORS: permissive for WHIP/WHEP routes, restrictive for everything else
@@ -117,7 +128,10 @@ export default async (opts: ApiOptions) => {
     }
   });
   api.register(swaggerUI, {
-    routePrefix: '/api/docs'
+    routePrefix: '/api/docs',
+    // Emit a CSP tailored to Swagger UI's own assets so the docs page keeps
+    // working under the strict global helmet CSP registered above.
+    staticCSP: true
   });
 
   api.register(healthcheck, { title: opts.title });
