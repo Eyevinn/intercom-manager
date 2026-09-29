@@ -9,10 +9,8 @@ import {
   NewIngest
 } from './models';
 import { IngestManager } from './ingest_manager';
-import dotenv from 'dotenv';
 import { Log } from './log';
 import { DbManager } from './db/interface';
-dotenv.config();
 
 export interface ApiIngestsOptions {
   dbManager: DbManager;
