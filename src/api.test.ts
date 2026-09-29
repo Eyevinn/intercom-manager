@@ -144,3 +144,60 @@ describe('security headers (CSP)', () => {
     expect(csp).not.toContain("default-src 'none'");
   });
 });
+
+describe('Swagger docs gating', () => {
+  const buildServer = () =>
+    api({
+      title: 'my awesome service',
+      smbServerBaseUrl: 'http://localhost',
+      endpointIdleTimeout: '60',
+      publicHost: 'http://localhost',
+      dbManager: mockDbManager,
+      productionManager: mockProductionManager,
+      ingestManager: mockIngestManager,
+      coreFunctions: new CoreFunctions(
+        mockProductionManager,
+        new ConnectionQueue()
+      )
+    });
+
+  const originalNodeEnv = process.env.NODE_ENV;
+  const originalEnableSwagger = process.env.ENABLE_SWAGGER;
+
+  afterEach(() => {
+    if (originalNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = originalNodeEnv;
+    }
+    if (originalEnableSwagger === undefined) {
+      delete process.env.ENABLE_SWAGGER;
+    } else {
+      process.env.ENABLE_SWAGGER = originalEnableSwagger;
+    }
+  });
+
+  it('registers /api/docs by default (non-production)', async () => {
+    delete process.env.NODE_ENV;
+    delete process.env.ENABLE_SWAGGER;
+    const server = await buildServer();
+    const response = await server.inject({ method: 'GET', url: '/api/docs/' });
+    expect(response.statusCode).toBe(200);
+  });
+
+  it('does not register /api/docs when NODE_ENV=production', async () => {
+    process.env.NODE_ENV = 'production';
+    delete process.env.ENABLE_SWAGGER;
+    const server = await buildServer();
+    const response = await server.inject({ method: 'GET', url: '/api/docs/' });
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('registers /api/docs in production when ENABLE_SWAGGER=true', async () => {
+    process.env.NODE_ENV = 'production';
+    process.env.ENABLE_SWAGGER = 'true';
+    const server = await buildServer();
+    const response = await server.inject({ method: 'GET', url: '/api/docs/' });
+    expect(response.statusCode).toBe(200);
+  });
+});

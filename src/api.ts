@@ -117,22 +117,31 @@ export default async (opts: ApiOptions) => {
     global: false // Only apply to specific routes
   });
 
-  // register the swagger plugins, it will automagically do magic
-  api.register(swagger, {
-    swagger: {
-      info: {
-        title: opts.title,
-        description: 'Intercom Manager API',
-        version: 'v1'
+  // Gate the Swagger/OpenAPI docs so the full API surface is not exposed
+  // unauthenticated in production. The docs are registered when NOT running in
+  // production, or when explicitly opted in via ENABLE_SWAGGER=true (an escape
+  // hatch to enable the docs in a production deployment when desired).
+  const enableSwagger =
+    process.env.NODE_ENV !== 'production' ||
+    process.env.ENABLE_SWAGGER === 'true';
+  if (enableSwagger) {
+    // register the swagger plugins, it will automagically do magic
+    api.register(swagger, {
+      swagger: {
+        info: {
+          title: opts.title,
+          description: 'Intercom Manager API',
+          version: 'v1'
+        }
       }
-    }
-  });
-  api.register(swaggerUI, {
-    routePrefix: '/api/docs',
-    // Emit a CSP tailored to Swagger UI's own assets so the docs page keeps
-    // working under the strict global helmet CSP registered above.
-    staticCSP: true
-  });
+    });
+    api.register(swaggerUI, {
+      routePrefix: '/api/docs',
+      // Emit a CSP tailored to Swagger UI's own assets so the docs page keeps
+      // working under the strict global helmet CSP registered above.
+      staticCSP: true
+    });
+  }
 
   api.register(healthcheck, { title: opts.title });
   // register other API routes here
