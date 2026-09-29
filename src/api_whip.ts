@@ -85,6 +85,13 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
       tokenBuf.length === keyBuf.length && timingSafeEqual(tokenBuf, keyBuf);
 
     if (!authHeader || typeof authHeader !== 'string' || !isValid) {
+      // Log auth failures (without the token) so brute-force/credential-stuffing
+      // attempts are visible for abuse detection. See #238.
+      Log().warn(
+        `WHIP authentication failed - IP: ${request.ip}, path: ${sanitizeForLog(
+          request.url
+        )}`
+      );
       reply
         .header('WWW-Authenticate', 'Bearer realm="whip", charset="UTF-8"')
         .code(401)
