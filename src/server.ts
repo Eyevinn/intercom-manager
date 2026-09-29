@@ -1,3 +1,4 @@
+import './config/load-env';
 import api from './api';
 import { CoreFunctions } from './api_productions_core_functions';
 import { ConnectionQueue } from './connection_queue';
