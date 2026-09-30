@@ -30,6 +30,7 @@ describe('validateRequiredEnv (startup env validation)', () => {
     process.env.DB_CONNECTION_STRING =
       'mongodb://localhost:27017/intercom-manager';
     delete process.env.MONGODB_CONNECTION_STRING;
+    delete process.env.OSC_HOSTNAME;
 
     // process.exit must be mocked so the test runner is not torn down and so we
     // can assert on the exit behaviour. Throw so control flow stops like the
@@ -60,19 +61,35 @@ describe('validateRequiredEnv (startup env validation)', () => {
     expect(exitSpy).toHaveBeenCalledWith(1);
   });
 
-  it('exits(1) when CORS_ORIGIN is missing', () => {
+  it('exits(1) when neither CORS_ORIGIN nor OSC_HOSTNAME is set', () => {
     delete process.env.CORS_ORIGIN;
+    delete process.env.OSC_HOSTNAME;
     expect(() => validateRequiredEnv()).toThrow('process.exit:1');
     expect(exitSpy).toHaveBeenCalledWith(1);
   });
 
-  it('exits(1) when CORS_ORIGIN is empty', () => {
+  it('exits(1) when both CORS_ORIGIN and OSC_HOSTNAME are empty', () => {
     process.env.CORS_ORIGIN = '';
+    process.env.OSC_HOSTNAME = '   ';
     expect(() => validateRequiredEnv()).toThrow('process.exit:1');
     expect(exitSpy).toHaveBeenCalledWith(1);
   });
 
   it('does not exit when both SMB_ADDRESS and CORS_ORIGIN are set', () => {
+    expect(() => validateRequiredEnv()).not.toThrow();
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not exit when CORS_ORIGIN is unset but OSC_HOSTNAME is set', () => {
+    delete process.env.CORS_ORIGIN;
+    process.env.OSC_HOSTNAME = 'myinstance.eyevinn.technology';
+    expect(() => validateRequiredEnv()).not.toThrow();
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not exit when CORS_ORIGIN is empty but OSC_HOSTNAME is set', () => {
+    process.env.CORS_ORIGIN = '';
+    process.env.OSC_HOSTNAME = 'myinstance.eyevinn.technology';
     expect(() => validateRequiredEnv()).not.toThrow();
     expect(exitSpy).not.toHaveBeenCalled();
   });
