@@ -84,6 +84,45 @@ describe('share api', () => {
     });
   });
 
+  test('rejects a malformed OSC_ACCESS_TOKEN with 500 (#226)', async () => {
+    const originalToken = process.env.OSC_ACCESS_TOKEN;
+    const originalFetch = global.fetch;
+    process.env.OSC_ACCESS_TOKEN = 'not-a-jwt';
+    const fetchMock = jest.fn();
+    global.fetch = fetchMock as unknown as typeof global.fetch;
+    try {
+      const server = await api({
+        title: 'my awesome service',
+        smbServerBaseUrl: 'http://localhost',
+        endpointIdleTimeout: '60',
+        publicHost: 'https://example.com',
+        dbManager: mockDbManager,
+        productionManager: mockProductionManager,
+        ingestManager: mockIngestManager,
+        coreFunctions: new CoreFunctions(
+          mockProductionManager,
+          new ConnectionQueue()
+        )
+      });
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/v1/share',
+        body: {
+          path: '/mypath/to/share'
+        }
+      });
+      expect(response.statusCode).toBe(500);
+      expect(response.json()).toEqual({
+        message: 'OSC_ACCESS_TOKEN is missing or malformed'
+      });
+      // The malformed token must never reach the OSC token service.
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      process.env.OSC_ACCESS_TOKEN = originalToken;
+      global.fetch = originalFetch;
+    }
+  });
+
   test.each([
     '//evil.com/x',
     '/\\evil.com',
