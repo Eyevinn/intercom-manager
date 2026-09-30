@@ -1,4 +1,5 @@
 import {
+  isValidJwt,
   oscPlatformEnvironment,
   oscTokenServiceBaseUrl,
   sanitizeForLog
@@ -37,6 +38,46 @@ describe('oscPlatformEnvironment', () => {
     expect(oscPlatformEnvironment('prod')).toBe('prod');
     expect(oscPlatformEnvironment('stage')).toBe('stage');
     expect(oscPlatformEnvironment('dev')).toBe('dev');
+  });
+});
+
+describe('isValidJwt (#226)', () => {
+  it('accepts a structurally valid JWT (header.payload.signature)', () => {
+    expect(
+      isValidJwt('eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.dummy-signature')
+    ).toBe(true);
+  });
+
+  it('accepts base64url segments (with - and _)', () => {
+    expect(isValidJwt('ab-cd.ef_gh.ij-_kl')).toBe(true);
+  });
+
+  it('accepts an empty signature segment (unsecured JWT)', () => {
+    expect(isValidJwt('abc.def.')).toBe(true);
+  });
+
+  it('rejects a missing token (empty string)', () => {
+    expect(isValidJwt('')).toBe(false);
+  });
+
+  it('rejects a token with too few segments', () => {
+    expect(isValidJwt('not-a-jwt')).toBe(false);
+    expect(isValidJwt('only.two')).toBe(false);
+  });
+
+  it('rejects a token with too many segments', () => {
+    expect(isValidJwt('a.b.c.d')).toBe(false);
+  });
+
+  it('rejects a token with an empty header or payload segment', () => {
+    expect(isValidJwt('.b.c')).toBe(false);
+    expect(isValidJwt('a..c')).toBe(false);
+  });
+
+  it('rejects segments containing invalid characters', () => {
+    expect(isValidJwt('ab+cd.ef.gh')).toBe(false);
+    expect(isValidJwt('ab.ef/gh.ij')).toBe(false);
+    expect(isValidJwt('a b.c.d')).toBe(false);
   });
 });
 

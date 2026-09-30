@@ -2,7 +2,7 @@ import { timingSafeEqual } from 'crypto';
 import { FastifyPluginCallback } from 'fastify';
 import { Type } from '@sinclair/typebox';
 import { ErrorResponse, ReAuthResponse } from './models';
-import { oscTokenServiceBaseUrl } from './utils';
+import { isValidJwt, oscTokenServiceBaseUrl } from './utils';
 
 export interface ApiReAuthOptions {
   reAuthKey?: string;
@@ -105,6 +105,15 @@ const apiReAuth: FastifyPluginCallback<ApiReAuthOptions> = (
         return;
       }
       if (OSC_ACCESS_TOKEN) {
+        // A configured token that is not a structurally valid JWT (e.g.
+        // truncated or misconfigured) would only fail with an opaque error at
+        // the OSC token service. Reject it up front. See #226.
+        if (!isValidJwt(OSC_ACCESS_TOKEN)) {
+          reply
+            .code(500)
+            .send({ message: 'OSC_ACCESS_TOKEN is missing or malformed' });
+          return;
+        }
         const url = `${oscTokenServiceBaseUrl(OSC_ENVIRONMENT)}/servicetoken`;
         const options = {
           method: 'POST' as const,

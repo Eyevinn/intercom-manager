@@ -39,6 +39,16 @@ export function oscTokenServiceBaseUrl(rawEnvironment: string): string {
   return `https://token.svc.${oscPlatformEnvironment(rawEnvironment)}.osaas.io`;
 }
 
+// OSC Personal Access Tokens are JWTs: three base64url segments separated by
+// dots (`header.payload.signature`). This is a minimal *structural* check, not
+// a signature/expiry verification. Its purpose is to reject a missing,
+// truncated or otherwise misconfigured `OSC_ACCESS_TOKEN` before it is sent to
+// the OSC token service as an `x-pat-jwt` credential, where it would only fail
+// with an opaque upstream error. See #226.
+export function isValidJwt(token: string): boolean {
+  return /^[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]*$/.test(token);
+}
+
 export function getIceServers(): string[] {
   const defaultStun = 'stun:stun.l.google.com:19302';
   const raw = process.env.ICE_SERVERS || '';
