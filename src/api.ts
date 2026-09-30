@@ -17,6 +17,7 @@ import apiWhep, { ApiWhepOptions } from './api_whep';
 import { DbManager } from './db/interface';
 import { IngestManager } from './ingest_manager';
 import { ProductionManager } from './production_manager';
+import { resolveCorsOrigin } from './config/cors-origin';
 
 const HelloWorld = Type.String({
   description: 'The magical words!'
@@ -89,8 +90,11 @@ export default async (opts: ApiOptions) => {
     }
   });
 
-  // Dynamic CORS: permissive for WHIP/WHEP routes, restrictive for everything else
-  const corsOrigin = process.env.CORS_ORIGIN;
+  // Dynamic CORS: permissive for WHIP/WHEP routes, restrictive for everything else.
+  // The allowed origin is resolved from CORS_ORIGIN, falling back to OSC_HOSTNAME
+  // (see src/config/cors-origin.ts). When neither is configured, deny all cross-
+  // origin requests (origin: false).
+  const corsOrigin = resolveCorsOrigin();
   api.register(cors, {
     delegator: (req, callback) => {
       const url = req.url || '';
@@ -104,7 +108,7 @@ export default async (opts: ApiOptions) => {
         });
       } else {
         callback(null, {
-          origin: corsOrigin ? corsOrigin.split(',') : false,
+          origin: corsOrigin ?? false,
           methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
           allowedHeaders: ['Content-Type', 'Authorization'],
           exposedHeaders: ['Content-Type', 'Location', 'ETag', 'Link']
