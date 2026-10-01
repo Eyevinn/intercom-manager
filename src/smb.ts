@@ -10,6 +10,8 @@ interface AllocateConferenceResponse {
   id: string;
 }
 
+const SMB_ENDPOINT_ACTION_TIMEOUT_MS = 10_000;
+
 export class SmbEndpointActionError extends Error {
   constructor(
     readonly action: 'configure' | 'reconfigure',
@@ -270,7 +272,8 @@ export class SmbProtocol implements ISmbProtocol {
         'Content-Type': 'application/json',
         ...(smbKey !== '' && { Authorization: `Bearer ${smbKey}` })
       },
-      body: JSON.stringify(request)
+      body: JSON.stringify(request),
+      signal: AbortSignal.timeout(SMB_ENDPOINT_ACTION_TIMEOUT_MS)
     });
 
     if (!response.ok) {

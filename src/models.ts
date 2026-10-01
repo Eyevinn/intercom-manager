@@ -222,6 +222,10 @@ export const SmbEndpointDescription = Type.Object({
   idleTimeout: Type.Optional(Type.Number())
 });
 
+export type SmbVideoStream = NonNullable<
+  NonNullable<SmbEndpointDescription['video']>['streams']
+>[number];
+
 export const SmbAudioEndpointDescription = Type.Object({
   audio: Type.Object({
     ssrcs: Type.Array(Type.Number()),

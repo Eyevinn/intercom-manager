@@ -376,8 +376,8 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
               );
             }
           }
-        } catch {
-          // Never let pin reconciliation block the WHIP delete itself.
+        } catch (pinErr) {
+          Log().warn(pinErr);
         }
 
         await opts.dbManager.deleteUserSession(sessionId);

@@ -5,7 +5,12 @@ import sdpTransform, { parse } from 'sdp-transform';
 import { v4 as uuidv4 } from 'uuid';
 import { CoreFunctions } from './api_productions_core_functions';
 import { Log } from './log';
-import { Line, WhipWhepRequest, WhipWhepResponse } from './models';
+import {
+  Line,
+  SmbVideoStream,
+  WhipWhepRequest,
+  WhipWhepResponse
+} from './models';
 import { ProductionManager } from './production_manager';
 import { ISmbProtocol, SmbProtocol } from './smb';
 import { getIceServers } from './utils';
@@ -144,7 +149,7 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
         const offerHasVideo = sdpOffer.media.some((m) => m.type === 'video');
 
         let subscribeToVideo:
-          | { streams: any[]; ssrcs: number[]; endpointId: string }
+          | { streams: SmbVideoStream[]; ssrcs: number[]; endpointId: string }
           | undefined;
         try {
           const productionIdNum = parseInt(productionId, 10);
@@ -158,9 +163,11 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
               const sourceSession = await opts.dbManager.getSession(
                 pinnedSessionId
               );
-              const sourceVideo: any = sourceSession?.sessionDescription?.video;
+              const sourceVideo = sourceSession?.sessionDescription?.video;
               const sourceEndpointId = sourceSession?.endpointId;
-              const streams: any[] = Array.isArray(sourceVideo?.streams)
+              const streams: SmbVideoStream[] = Array.isArray(
+                sourceVideo?.streams
+              )
                 ? sourceVideo.streams
                 : [];
               const ssrcs: number[] = Array.isArray(sourceVideo?.ssrcs)

@@ -15,7 +15,12 @@ import {
   RtpHeaderExt
 } from './media_streams_info';
 import { Log } from './log';
-import { LineResponse, Production, SmbEndpointDescription } from './models';
+import {
+  LineResponse,
+  Production,
+  SmbEndpointDescription,
+  SmbVideoStream
+} from './models';
 import { ProductionManager } from './production_manager';
 import {
   NORMALIZED_VIDEO_PT_MAIN,
@@ -220,7 +225,7 @@ export class CoreFunctions {
      * Ignored when `receiveOnly` is false.
      */
     subscribeToVideo?: {
-      streams: any[];
+      streams: SmbVideoStream[];
       ssrcs: number[];
       endpointId: string;
     }
@@ -293,7 +298,7 @@ export class CoreFunctions {
           };
         });
 
-    const videoStreams: any[] = [];
+    const videoStreams: SmbVideoStream[] = [];
     const streamsMap = new Map();
 
     for (const media of offer.media) {
@@ -301,7 +306,9 @@ export class CoreFunctions {
         endpoint.audio.ssrcs = [];
         media.ssrcs
           ?.filter((ssrc) => ssrc.attribute === 'msid')
-          .forEach((ssrc) => endpoint.audio.ssrcs.push(parseInt(`${ssrc.id}`)));
+          .forEach((ssrc) =>
+            endpoint.audio.ssrcs.push(parseInt(`${ssrc.id}`, 10))
+          );
         if (!media.rtp?.[0]) {
           throw new Error(
             'Audio m-line in offer has no rtp payload entries — rejected ' +
@@ -339,44 +346,30 @@ export class CoreFunctions {
             if (feedbackGroup) {
               const ssrcsSplit = feedbackGroup.ssrcs.split(' ');
               if (`${ssrc.id}` === ssrcsSplit[0]) {
-                const main = parseInt(ssrcsSplit[0]);
+                const main = parseInt(ssrcsSplit[0], 10);
                 // Skip feedback when the FID group has only one SSRC —
                 // otherwise parseInt(undefined) ships feedback: NaN to SMB.
                 smbVideoStream.sources = [
                   ssrcsSplit.length >= 2
-                    ? { main, feedback: parseInt(ssrcsSplit[1]) }
+                    ? { main, feedback: parseInt(ssrcsSplit[1], 10) }
                     : { main }
                 ];
               }
             } else {
               smbVideoStream.sources = [
                 {
-                  main: parseInt(`${ssrc.id}`)
+                  main: parseInt(`${ssrc.id}`, 10)
                 }
               ];
             }
           });
 
-        // Only collect sender SSRCs into videoStreams for WHIP endpoints.
-        // WHEP offers may include a=ssrc: lines (Chrome UA hints for receive
-        // tracks) that must not be treated as sender streams.
         if (!receiveOnly) {
-          // Fallback for publishers whose offer has no `a=ssrc:N msid:...`
-          // lines (common with hardware/native WHIP encoders, some OBS
-          // configurations). Without the msid loop populating streamsMap,
-          // SMB never gets a `streams` declaration and receivers' SDPs
-          // end up with no usable msid — so the frontend can't match the
-          // tile to a participant. Synthesize one stream entry tagged with
-          // the publisher's endpointId, gathering all video ssrcs from the
-          // offer (deduped, primary SSRCs of FID groups preferred).
           if (streamsMap.size === 0) {
             const allVideoSsrcs = (media.ssrcs ?? []).map((s) =>
               parseInt(`${s.id}`, 10)
             );
             const dedupedSsrcs = Array.from(new Set(allVideoSsrcs));
-            // If FID groups are present, take the first ssrc of each as
-            // main and the second as feedback. Otherwise treat each ssrc
-            // as a primary with no feedback pair.
             const fidGroups = (media.ssrcGroups ?? []).filter(
               (g) => g.semantics === 'FID'
             );

@@ -341,7 +341,7 @@ export class ProductionManager extends EventEmitter {
     return sessions.filter(
       (s) =>
         (s as any)._id?.toString?.() !== leaverSessionId &&
-        (s as any).pinnedVideoSessionId === leaverSessionId
+        s.pinnedVideoSessionId === leaverSessionId
     );
   }
 
@@ -552,7 +552,7 @@ export class ProductionManager extends EventEmitter {
     const userSession = this.userSessions[sessionId];
     if (userSession) {
       userSession.sessionDescription = sessionDescription;
-      (userSession as any).pinnedVideoSessionId = pinnedVideoSessionId;
+      userSession.pinnedVideoSessionId = pinnedVideoSessionId ?? undefined;
     }
 
     if (ok) this.emit('users:change');

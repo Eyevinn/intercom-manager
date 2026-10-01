@@ -518,7 +518,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           sessionId: (s._id ?? '').toString(),
           endpointId: s.endpointId,
           name: s.name,
-          isActive: s.isWhip ? true : Boolean(s.isActive),
+          isActive: Boolean(s.isActive),
           isWhip: Boolean(s.isWhip),
           isWhepReceiver: Boolean(s.isWhepReceiver),
           hasVideo: Boolean(s.hasVideo)
@@ -723,7 +723,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         let whitelist: number[] = [];
         if (pinnedSessionId) {
           const sourceSession = await dbManager.getSession(pinnedSessionId);
-          const sourceVideo: any = sourceSession?.sessionDescription?.video;
+          const sourceVideo = sourceSession?.sessionDescription?.video;
           const ssrcs: number[] = Array.isArray(sourceVideo?.ssrcs)
             ? sourceVideo.ssrcs
             : [];
@@ -1080,7 +1080,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
 
             if (pinnedSessionId) {
               const sourceSession = await dbManager.getSession(pinnedSessionId);
-              const sourceVideo: any = sourceSession?.sessionDescription?.video;
+              const sourceVideo = sourceSession?.sessionDescription?.video;
               const sourceEndpointId = sourceSession?.endpointId;
               const ssrcs: number[] = Array.isArray(sourceVideo?.ssrcs)
                 ? sourceVideo.ssrcs
@@ -1228,8 +1228,8 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
               );
             }
           }
-        } catch {
-          // Never let pin reconciliation block the session delete itself.
+        } catch (pinErr) {
+          Log().warn(pinErr);
         }
 
         const ok = await dbManager.deleteUserSession(sessionId);
@@ -1294,7 +1294,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           sessionId: s._id.toString(),
           endpointId: s.endpointId,
           name: s.name,
-          isActive: s.isWhip ? true : Boolean(s.isActive),
+          isActive: Boolean(s.isActive),
           isWhip: Boolean(s.isWhip),
           isWhepReceiver: Boolean(s.isWhepReceiver),
           hasVideo: Boolean(s.hasVideo)
