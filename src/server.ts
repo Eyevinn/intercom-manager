@@ -1,4 +1,6 @@
+import './config/load-env';
 import api from './api';
+import { hasCorsConfig } from './config/cors-origin';
 import { CoreFunctions } from './api_productions_core_functions';
 import { ConnectionQueue } from './connection_queue';
 import { DbManagerCouchDb } from './db/couchdb';
@@ -50,7 +52,7 @@ const ENDPOINT_IDLE_TIMEOUT_S: string =
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8000;
 
-const REQUIRED_ENV = ['SMB_ADDRESS', 'CORS_ORIGIN'] as const;
+const REQUIRED_ENV = ['SMB_ADDRESS'] as const;
 
 /**
  * Validate that all required environment variables are set and non-empty.
@@ -63,6 +65,17 @@ export function validateRequiredEnv(): void {
       Log().error(`Missing required environment variable: ${key}`);
       process.exit(1);
     }
+  }
+
+  // A CORS origin must be resolvable: either CORS_ORIGIN is set (comma-separated)
+  // or OSC_HOSTNAME is set (auto-injected on Open Source Cloud) and used as a
+  // fallback. When neither is configured the server fails fast rather than
+  // starting with CORS effectively disabled. See src/config/cors-origin.ts.
+  if (!hasCorsConfig()) {
+    Log().error(
+      'Missing required CORS configuration: set CORS_ORIGIN (comma-separated allowed origins) or OSC_HOSTNAME'
+    );
+    process.exit(1);
   }
 
   // A database connection string is required; no hardcoded localhost fallback is

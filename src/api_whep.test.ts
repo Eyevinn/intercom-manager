@@ -370,6 +370,32 @@ describe('apiWhep', () => {
       expect(res.headers['www-authenticate']).toMatch(/Bearer.*realm="whep"/i);
     });
 
+    it('should log a warning (without the token) on auth failure for abuse detection', async () => {
+      const fastify = await createAuthServer();
+      const res = await fastify.inject({
+        method: 'POST',
+        url: '/whep/123/456/testuser',
+        headers: {
+          'content-type': 'application/sdp',
+          authorization: 'Bearer super-secret-token'
+        },
+        payload:
+          'v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\nm=audio 0 RTP/AVP 0\r\na=mid:0\r\n'
+      });
+      expect(res.statusCode).toBe(401);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringMatching(/WHEP authentication failed/i)
+      );
+      // The token value must never be logged.
+      for (const call of mockLogger.warn.mock.calls) {
+        for (const arg of call) {
+          if (typeof arg === 'string') {
+            expect(arg).not.toContain('super-secret-token');
+          }
+        }
+      }
+    });
+
     it('should return 401 with wrong token auth key', async () => {
       const fastify = await createAuthServer();
       const res = await fastify.inject({

@@ -56,7 +56,11 @@ export class IngestManager extends EventEmitter {
   ): Promise<{ deviceOutput: any[]; deviceInput: any[] } | undefined> {
     try {
       // TODO: Implement actual device communication
-      // This is a placeholder that will be replaced with actual device communication
+      // This is a placeholder that will be replaced with actual device communication.
+      // SECURITY: ipAddress is format-validated at the schema boundary (see
+      // NewIngest in models.ts), but any real implementation must additionally
+      // reject private/reserved/loopback/link-local ranges before making outbound
+      // requests to prevent SSRF against internal services.
       Log().info('fetching device data for ip address', ipAddress);
       return {
         deviceOutput: [],

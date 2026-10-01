@@ -2,7 +2,7 @@ import { timingSafeEqual } from 'crypto';
 import { FastifyPluginCallback } from 'fastify';
 import { Type } from '@sinclair/typebox';
 import { ErrorResponse, ReAuthResponse } from './models';
-import { oscTokenServiceBaseUrl } from './utils';
+import { isValidJwt, oscTokenServiceBaseUrl } from './utils';
 
 export interface ApiReAuthOptions {
   reAuthKey?: string;
@@ -26,8 +26,9 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * scoped by OSC environment so Dev and Prod do not share it), which lives for
  * two hours, so that API calls keep working as the previous token approaches
  * expiry. With no
- * `OSC_ACCESS_TOKEN` configured the service is not running in an OSC context
- * and the route responds with 405.
+ * `OSC_ACCESS_TOKEN` configured the service is not running in an OSC context, so
+ * there is nothing to renew and the route responds with 200 `{ success: false }`
+ * rather than treating the request as an error. See #228.
  *
  * Access to this route is protected: when a `reAuthKey` is configured the
  * request must present a matching `Authorization: Bearer <key>` header,
@@ -79,7 +80,6 @@ const apiReAuth: FastifyPluginCallback<ApiReAuthOptions> = (
           200: ReAuthResponse,
           400: ErrorResponse,
           401: ErrorResponse,
-          405: ErrorResponse,
           429: Type.Object({ error: Type.String() }),
           500: ErrorResponse
         }
@@ -105,6 +105,15 @@ const apiReAuth: FastifyPluginCallback<ApiReAuthOptions> = (
         return;
       }
       if (OSC_ACCESS_TOKEN) {
+        // A configured token that is not a structurally valid JWT (e.g.
+        // truncated or misconfigured) would only fail with an opaque error at
+        // the OSC token service. Reject it up front. See #226.
+        if (!isValidJwt(OSC_ACCESS_TOKEN)) {
+          reply
+            .code(500)
+            .send({ message: 'OSC_ACCESS_TOKEN is missing or malformed' });
+          return;
+        }
         const url = `${oscTokenServiceBaseUrl(OSC_ENVIRONMENT)}/servicetoken`;
         const options = {
           method: 'POST' as const,
@@ -156,9 +165,11 @@ const apiReAuth: FastifyPluginCallback<ApiReAuthOptions> = (
             ' attempts'
         });
       } else {
-        reply
-          .code(405)
-          .send({ error: 'No OSC_ACCESS_TOKEN set, method not allowed' });
+        // No OSC_ACCESS_TOKEN configured: the service is not running in an OSC
+        // context, so there is no service access token to renew. This is not an
+        // error, so respond with 200 and signal that no new SAT was issued
+        // rather than returning 405 Method Not Allowed. See #228.
+        reply.send({ success: false });
       }
     }
   );

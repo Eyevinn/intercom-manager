@@ -17,6 +17,7 @@ import apiWhep, { ApiWhepOptions } from './api_whep';
 import { DbManager } from './db/interface';
 import { IngestManager } from './ingest_manager';
 import { ProductionManager } from './production_manager';
+import { resolveCorsOrigin } from './config/cors-origin';
 
 const HelloWorld = Type.String({
   description: 'The magical words!'
@@ -74,12 +75,26 @@ export default async (opts: ApiOptions) => {
   api.register(fastifyCookie);
 
   // register security headers
+  // Enable a strict baseline CSP. This is a JSON API and does not serve
+  // application HTML, so the policy can lock everything down to 'none'. The
+  // one HTML surface, the Swagger UI at /api/docs, emits its own compatible
+  // CSP via `staticCSP: true` below, which overrides this on that route.
   api.register(helmet, {
-    contentSecurityPolicy: false // CSP managed per-deployment
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'none'"],
+        baseUri: ["'none'"],
+        formAction: ["'none'"],
+        frameAncestors: ["'none'"]
+      }
+    }
   });
 
-  // Dynamic CORS: permissive for WHIP/WHEP routes, restrictive for everything else
-  const corsOrigin = process.env.CORS_ORIGIN;
+  // Dynamic CORS: permissive for WHIP/WHEP routes, restrictive for everything else.
+  // The allowed origin is resolved from CORS_ORIGIN, falling back to OSC_HOSTNAME
+  // (see src/config/cors-origin.ts). When neither is configured, deny all cross-
+  // origin requests (origin: false).
+  const corsOrigin = resolveCorsOrigin();
   api.register(cors, {
     delegator: (req, callback) => {
       const url = req.url || '';
@@ -93,7 +108,7 @@ export default async (opts: ApiOptions) => {
         });
       } else {
         callback(null, {
-          origin: corsOrigin ? corsOrigin.split(',') : false,
+          origin: corsOrigin ?? false,
           methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
           allowedHeaders: ['Content-Type', 'Authorization'],
           exposedHeaders: ['Content-Type', 'Location', 'ETag', 'Link']
@@ -106,19 +121,31 @@ export default async (opts: ApiOptions) => {
     global: false // Only apply to specific routes
   });
 
-  // register the swagger plugins, it will automagically do magic
-  api.register(swagger, {
-    swagger: {
-      info: {
-        title: opts.title,
-        description: 'Intercom Manager API',
-        version: 'v1'
+  // Gate the Swagger/OpenAPI docs so the full API surface is not exposed
+  // unauthenticated in production. The docs are registered when NOT running in
+  // production, or when explicitly opted in via ENABLE_SWAGGER=true (an escape
+  // hatch to enable the docs in a production deployment when desired).
+  const enableSwagger =
+    process.env.NODE_ENV !== 'production' ||
+    process.env.ENABLE_SWAGGER === 'true';
+  if (enableSwagger) {
+    // register the swagger plugins, it will automagically do magic
+    api.register(swagger, {
+      swagger: {
+        info: {
+          title: opts.title,
+          description: 'Intercom Manager API',
+          version: 'v1'
+        }
       }
-    }
-  });
-  api.register(swaggerUI, {
-    routePrefix: '/api/docs'
-  });
+    });
+    api.register(swaggerUI, {
+      routePrefix: '/api/docs',
+      // Emit a CSP tailored to Swagger UI's own assets so the docs page keeps
+      // working under the strict global helmet CSP registered above.
+      staticCSP: true
+    });
+  }
 
   api.register(healthcheck, { title: opts.title });
   // register other API routes here

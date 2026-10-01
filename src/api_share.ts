@@ -1,6 +1,6 @@
 import { FastifyPluginCallback } from 'fastify';
 import { ErrorResponse, ShareRequest, ShareResponse } from './models';
-import { oscTokenServiceBaseUrl } from './utils';
+import { isValidJwt, oscTokenServiceBaseUrl } from './utils';
 
 export interface ApiShareOptions {
   publicHost: string;
@@ -23,7 +23,8 @@ const apiShare: FastifyPluginCallback<ApiShareOptions> = (
         body: ShareRequest,
         response: {
           200: ShareResponse,
-          400: ErrorResponse
+          400: ErrorResponse,
+          500: ErrorResponse
         }
       }
     },
@@ -35,6 +36,14 @@ const apiShare: FastifyPluginCallback<ApiShareOptions> = (
         });
       }
       if (process.env.OSC_ACCESS_TOKEN) {
+        // A configured token that is not a structurally valid JWT (e.g.
+        // truncated or misconfigured) would only fail with an opaque error at
+        // the OSC token service. Reject it up front. See #226.
+        if (!isValidJwt(process.env.OSC_ACCESS_TOKEN)) {
+          return reply
+            .code(500)
+            .send({ message: 'OSC_ACCESS_TOKEN is missing or malformed' });
+        }
         const response = await fetch(
           `${oscTokenServiceBaseUrl(
             OSC_ENVIRONMENT
