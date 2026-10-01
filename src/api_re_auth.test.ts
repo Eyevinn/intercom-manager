@@ -323,3 +323,51 @@ describe('reAuth OSC_ACCESS_TOKEN validation (#226)', () => {
     await server.close();
   });
 });
+
+describe('reAuth without an OSC_ACCESS_TOKEN (#228)', () => {
+  const originalToken = process.env.OSC_ACCESS_TOKEN;
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    process.env.OSC_ACCESS_TOKEN = originalToken;
+    global.fetch = originalFetch;
+    jest.resetModules();
+    jest.restoreAllMocks();
+  });
+
+  // api_re_auth reads OSC_ACCESS_TOKEN at module load, so load a fresh copy of
+  // the plugin with no token in the environment (non-OSC context).
+  const createReAuthServerWithoutToken = async () => {
+    delete process.env.OSC_ACCESS_TOKEN;
+    let apiReAuth: any;
+    jest.isolateModules(() => {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      apiReAuth = require('./api_re_auth').default;
+    });
+    const fastify = Fastify();
+    fastify.decorateReply('cookie', function (this: any) {
+      return this;
+    });
+    fastify.register(apiReAuth, { prefix: 'api/v1' });
+    await fastify.ready();
+    return fastify;
+  };
+
+  test('returns 200 { success: false } instead of 405 when no token is set', async () => {
+    const fetchMock = jest.fn();
+    global.fetch = fetchMock as unknown as typeof global.fetch;
+    const server = await createReAuthServerWithoutToken();
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/api/v1/reauth'
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ success: false });
+    // No OSC context means the token service must not be contacted.
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    await server.close();
+  });
+});
