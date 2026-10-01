@@ -1,18 +1,8 @@
-jest.mock('./log', () => ({
-  Log: () => ({
-    error: jest.fn(),
-    warn: jest.fn(),
-    info: jest.fn(),
-    debug: jest.fn()
-  })
-}));
-
 import rateLimit from '@fastify/rate-limit';
 import Fastify from 'fastify';
 import { CoreFunctions } from './api_productions_core_functions';
-import apiWhip from './api_whip';
+import apiWhep from './api_whep';
 import { ConnectionQueue } from './connection_queue';
-import { UserSession } from './models';
 import { Log } from './log';
 
 // A valid UUID v4 used as the generated session id in tests. Session ids are
@@ -176,7 +166,7 @@ const createTestServer = async () => {
     global: false
   });
 
-  fastify.register(apiWhip, defaultOptions);
+  fastify.register(apiWhep, defaultOptions);
   await fastify.ready();
   return fastify;
 };
@@ -188,23 +178,23 @@ const createAuthServer = async () => {
     _id: MOCK_SESSION_ID
   } as any);
 
-  fastify.register(apiWhip, { ...defaultOptions, whipAuthKey: 'secret-123' });
+  fastify.register(apiWhep, { ...defaultOptions, whipAuthKey: 'secret-123' });
   await fastify.ready();
   return fastify;
 };
 
-describe('apiWhip', () => {
+describe('apiWhep', () => {
   afterEach(() => {
     jest.clearAllMocks();
   });
 
-  describe('POST /whip/:productionId/:lineId/:username', () => {
+  describe('POST /whep/:productionId/:lineId/:username', () => {
     it('should return 201 with SDP answer and proper headers', async () => {
       const fastify = await createTestServer();
 
       const response = await fastify.inject({
         method: 'POST',
-        url: '/whip/123/456/testuser',
+        url: '/whep/123/456/testuser',
         headers: {
           'content-type': 'application/sdp'
         },
@@ -215,7 +205,7 @@ describe('apiWhip', () => {
       expect(response.statusCode).toBe(201);
       expect(response.headers['content-type']).toBe('application/sdp');
       expect(response.headers['location']).toContain(
-        `/whip/123/456/${MOCK_SESSION_ID}`
+        `/whep/123/456/${MOCK_SESSION_ID}`
       );
       expect(response.payload).toContain('v=0');
     });
@@ -229,7 +219,7 @@ describe('apiWhip', () => {
 
       const response = await fastify.inject({
         method: 'POST',
-        url: '/whip/123/456/testuser',
+        url: '/whep/123/456/testuser',
         headers: {
           'content-type': 'application/sdp'
         },
@@ -251,7 +241,7 @@ describe('apiWhip', () => {
 
       const response = await fastify.inject({
         method: 'POST',
-        url: '/whip/123/456/testuser',
+        url: '/whep/123/456/testuser',
         headers: {
           'content-type': 'application/json'
         },
@@ -272,7 +262,7 @@ describe('apiWhip', () => {
 
         const response = await fastify.inject({
           method: 'POST',
-          url: '/whip/123/456/' + encodeURIComponent(payload),
+          url: '/whep/123/456/' + encodeURIComponent(payload),
           headers: {
             'content-type': 'application/sdp'
           },
@@ -289,7 +279,7 @@ describe('apiWhip', () => {
 
       const response = await fastify.inject({
         method: 'POST',
-        url: '/whip/123/456/' + encodeURIComponent('Ada B. Lovelace-1_2'),
+        url: '/whep/123/456/' + encodeURIComponent('Ada B. Lovelace-1_2'),
         headers: {
           'content-type': 'application/sdp'
         },
@@ -305,7 +295,7 @@ describe('apiWhip', () => {
 
       const response = await fastify.inject({
         method: 'POST',
-        url: '/whip/abc/456/testuser',
+        url: '/whep/abc/456/testuser',
         headers: {
           'content-type': 'application/sdp'
         },
@@ -323,7 +313,7 @@ describe('apiWhip', () => {
 
       const response = await fastify.inject({
         method: 'POST',
-        url: `/whip/${'1'.repeat(201)}/456/testuser`,
+        url: `/whep/${'1'.repeat(201)}/456/testuser`,
         headers: {
           'content-type': 'application/sdp'
         },
@@ -340,7 +330,7 @@ describe('apiWhip', () => {
       for (let i = 0; i < 10; i++) {
         await fastify.inject({
           method: 'POST',
-          url: '/whip/123/456/testuser',
+          url: '/whep/123/456/testuser',
           headers: {
             'content-type': 'application/sdp'
           },
@@ -351,7 +341,7 @@ describe('apiWhip', () => {
       // The 11th request should exceed the rate limit
       const response = await fastify.inject({
         method: 'POST',
-        url: '/whip/123/456/testuser',
+        url: '/whep/123/456/testuser',
         headers: {
           'content-type': 'application/sdp'
         },
@@ -367,24 +357,24 @@ describe('apiWhip', () => {
     });
   });
 
-  describe('POST /whip/:productionId/:lineId/:username (WHIP authentication)', () => {
+  describe('POST /whep/:productionId/:lineId/:username (WHEP authentication)', () => {
     it('should return 401 when auth enabled and authorization header missing', async () => {
       const fastify = await createAuthServer();
       const res = await fastify.inject({
         method: 'POST',
-        url: '/whip/123/456/testuser',
+        url: '/whep/123/456/testuser',
         headers: { 'content-type': 'application/sdp' },
         payload: 'v=0\r\n'
       });
       expect(res.statusCode).toBe(401);
-      expect(res.headers['www-authenticate']).toMatch(/Bearer.*realm="whip"/i);
+      expect(res.headers['www-authenticate']).toMatch(/Bearer.*realm="whep"/i);
     });
 
     it('should log a warning (without the token) on auth failure for abuse detection', async () => {
       const fastify = await createAuthServer();
       const res = await fastify.inject({
         method: 'POST',
-        url: '/whip/123/456/testuser',
+        url: '/whep/123/456/testuser',
         headers: {
           'content-type': 'application/sdp',
           authorization: 'Bearer super-secret-token'
@@ -394,7 +384,7 @@ describe('apiWhip', () => {
       });
       expect(res.statusCode).toBe(401);
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringMatching(/WHIP authentication failed/i)
+        expect.stringMatching(/WHEP authentication failed/i)
       );
       // The token value must never be logged.
       for (const call of mockLogger.warn.mock.calls) {
@@ -410,7 +400,7 @@ describe('apiWhip', () => {
       const fastify = await createAuthServer();
       const res = await fastify.inject({
         method: 'POST',
-        url: '/whip/123/456/testuser',
+        url: '/whep/123/456/testuser',
         headers: {
           'content-type': 'application/sdp',
           authorization: 'Bearer wrong'
@@ -425,7 +415,7 @@ describe('apiWhip', () => {
       const fastify = await createAuthServer();
       const res = await fastify.inject({
         method: 'POST',
-        url: '/whip/123/456/testuser',
+        url: '/whep/123/456/testuser',
         headers: {
           'content-type': 'application/sdp',
           authorization: 'Bearer secret-123'
@@ -437,12 +427,12 @@ describe('apiWhip', () => {
     });
   });
 
-  describe('DELETE /whip/:productionId/:lineId/:sessionId', () => {
-    it('should return 401 when trying to delete WHIP session when it is not active', async () => {
+  describe('DELETE /whep/:productionId/:lineId/:sessionId', () => {
+    it('should return 401 when trying to delete WHEP session when it is not active', async () => {
       const fastify = await createAuthServer();
       const res = await fastify.inject({
         method: 'DELETE',
-        url: `/whip/123/456/${MOCK_SESSION_ID}`
+        url: `/whep/123/456/${MOCK_SESSION_ID}`
       });
       expect(res.statusCode).toBe(401);
     });
@@ -451,7 +441,7 @@ describe('apiWhip', () => {
       const fastify = await createAuthServer();
       const res = await fastify.inject({
         method: 'DELETE',
-        url: `/whip/123/456/${MOCK_SESSION_ID}`,
+        url: `/whep/123/456/${MOCK_SESSION_ID}`,
         headers: { authorization: 'Bearer secret-123' }
       });
       expect(res.statusCode).toBe(200);
@@ -466,7 +456,7 @@ describe('apiWhip', () => {
 
       const response = await fastify.inject({
         method: 'DELETE',
-        url: `/whip/123/456/${MOCK_SESSION_ID}`
+        url: `/whep/123/456/${MOCK_SESSION_ID}`
       });
 
       expect(response.statusCode).toBe(200);
@@ -479,11 +469,11 @@ describe('apiWhip', () => {
 
       const response = await fastify.inject({
         method: 'DELETE',
-        url: '/whip/123/456/00000000-0000-4000-8000-000000000000'
+        url: '/whep/123/456/00000000-0000-4000-8000-000000000000'
       });
 
       expect(response.statusCode).toBe(404);
-      expect(response.json()).toEqual({ error: 'WHIP session not found' });
+      expect(response.json()).toEqual({ error: 'WHEP session not found' });
     });
 
     it.each([
@@ -500,7 +490,7 @@ describe('apiWhip', () => {
 
         const response = await fastify.inject({
           method: 'DELETE',
-          url: '/whip/123/456/' + encodeURIComponent(sessionId)
+          url: '/whep/123/456/' + encodeURIComponent(sessionId)
         });
 
         expect(response.statusCode).toBe(400);
@@ -509,13 +499,13 @@ describe('apiWhip', () => {
     );
   });
 
-  describe('OPTIONS /whip/:productionId/:lineId', () => {
+  describe('OPTIONS /whep/:productionId/:lineId', () => {
     it('should return 200 for valid line and production', async () => {
       const fastify = await createTestServer();
 
       const response = await fastify.inject({
         method: 'OPTIONS',
-        url: '/whip/123/line1'
+        url: '/whep/123/line1'
       });
 
       expect(response.statusCode).toBe(200);
@@ -531,7 +521,7 @@ describe('apiWhip', () => {
 
       const response = await fastify.inject({
         method: 'OPTIONS',
-        url: '/whip/123/line1'
+        url: '/whep/123/line1'
       });
 
       expect(response.statusCode).toBe(404);
@@ -543,7 +533,7 @@ describe('apiWhip', () => {
 
       const response = await fastify.inject({
         method: 'OPTIONS',
-        url: '/whip/invalid/line1'
+        url: '/whep/invalid/line1'
       });
 
       expect(response.statusCode).toBe(400);
@@ -551,13 +541,13 @@ describe('apiWhip', () => {
     });
   });
 
-  describe('PATCH /whip/:productionId/:lineId/:sessionId', () => {
+  describe('PATCH /whep/:productionId/:lineId/:sessionId', () => {
     it('should return 405 method not allowed for valid params', async () => {
       const fastify = await createTestServer();
 
       const response = await fastify.inject({
         method: 'PATCH',
-        url: `/whip/123/456/${MOCK_SESSION_ID}`,
+        url: `/whep/123/456/${MOCK_SESSION_ID}`,
         headers: { 'content-type': 'application/trickle-ice-sdpfrag' },
         payload: 'a=candidate:1 1 UDP 12345 192.168.1.2 54321 typ host'
       });
@@ -566,32 +556,29 @@ describe('apiWhip', () => {
       expect(response.payload).toBe('Method not allowed');
     });
 
-    it('should return 400 when productionId param is empty string', async () => {
+    it('should return 405 for single-char params (minLength:1 boundary)', async () => {
       const fastify = await createTestServer();
 
-      // Route will not match an empty segment — use a single-char string to stay
-      // at minimum length boundary and verify schema rejects a zero-length value
-      // by patching the URL with an explicitly empty segment (Fastify resolves to
-      // a 404 for empty path segments, so instead test a one-char boundary check
-      // by verifying valid one-char params still reach the handler).
       const response = await fastify.inject({
         method: 'PATCH',
-        url: '/whip/p/l/s',
+        url: '/whep/p/l/s',
         headers: { 'content-type': 'application/trickle-ice-sdpfrag' },
         payload: 'a=candidate:1 1 UDP 12345 192.168.1.2 54321 typ host'
       });
 
-      // Single-char params satisfy minLength:1 — handler returns 405
+      // The PATCH stub keeps the permissive minLength:1/maxLength:200 schema —
+      // it is not constrained to numeric ids or a UUID sessionId like the live
+      // POST/DELETE routes, so single-char params validate and reach the 405.
       expect(response.statusCode).toBe(405);
     });
 
-    it('should return 400 when a param exceeds maxLength of 200', async () => {
+    it('should return 400 when productionId param exceeds maxLength of 200', async () => {
       const fastify = await createTestServer();
       const longParam = 'a'.repeat(201);
 
       const response = await fastify.inject({
         method: 'PATCH',
-        url: `/whip/${longParam}/line1/mock-session-id`,
+        url: `/whep/${longParam}/456/${MOCK_SESSION_ID}`,
         headers: { 'content-type': 'application/trickle-ice-sdpfrag' },
         payload: 'a=candidate:1 1 UDP 12345 192.168.1.2 54321 typ host'
       });
@@ -605,7 +592,7 @@ describe('apiWhip', () => {
 
       const response = await fastify.inject({
         method: 'PATCH',
-        url: `/whip/prod1/${longParam}/mock-session-id`,
+        url: `/whep/123/${longParam}/${MOCK_SESSION_ID}`,
         headers: { 'content-type': 'application/trickle-ice-sdpfrag' },
         payload: 'a=candidate:1 1 UDP 12345 192.168.1.2 54321 typ host'
       });
@@ -619,7 +606,7 @@ describe('apiWhip', () => {
 
       const response = await fastify.inject({
         method: 'PATCH',
-        url: `/whip/prod1/line1/${longParam}`,
+        url: `/whep/123/456/${longParam}`,
         headers: { 'content-type': 'application/trickle-ice-sdpfrag' },
         payload: 'a=candidate:1 1 UDP 12345 192.168.1.2 54321 typ host'
       });

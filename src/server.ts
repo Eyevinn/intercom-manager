@@ -1,42 +1,50 @@
+import './config/load-env';
 import api from './api';
+import { hasCorsConfig } from './config/cors-origin';
 import { CoreFunctions } from './api_productions_core_functions';
 import { ConnectionQueue } from './connection_queue';
 import { DbManagerCouchDb } from './db/couchdb';
 import { DbManagerMongoDb } from './db/mongodb';
+import { DbManager } from './db/interface';
 import { IngestManager } from './ingest_manager';
 import { Log } from './log';
 import { ProductionManager } from './production_manager';
 
-const SMB_ADDRESS: string = process.env.SMB_ADDRESS ?? 'http://localhost:8080';
+// SMB_ADDRESS is required (validated in validateRequiredEnv); no default is
+// provided so that a missing value is caught by startup validation rather than
+// silently falling back to localhost.
+const SMB_ADDRESS: string = process.env.SMB_ADDRESS ?? '';
 const PUBLIC_HOST: string = process.env.PUBLIC_HOST ?? 'http://localhost:8000';
-
-if (!process.env.SMB_ADDRESS) {
-  Log().warn('SMB_ADDRESS environment variable not set, using defaults');
-}
 
 if (!process.env.PUBLIC_HOST) {
   Log().warn('PUBLIC_HOST is not set — falling back to localhost default');
 }
 
-if (
-  !process.env.DB_CONNECTION_STRING &&
-  !process.env.MONGODB_CONNECTION_STRING
-) {
-  Log().warn(
-    'DB_CONNECTION_STRING is not set — using localhost MongoDB default'
-  );
+if (SMB_ADDRESS) {
+  try {
+    const smbUrl = new URL(SMB_ADDRESS);
+    const localHosts = ['localhost', '127.0.0.1', '::1'];
+    if (smbUrl.protocol === 'http:' && !localHosts.includes(smbUrl.hostname)) {
+      Log().warn(
+        `SMB_ADDRESS uses plaintext http:// to a remote host (${smbUrl.hostname}); SDP/ICE data will be sent unencrypted. Use https:// in production.`
+      );
+    }
+  } catch (err) {
+    Log().warn(`SMB_ADDRESS could not be parsed as a URL: ${SMB_ADDRESS}`);
+  }
 }
 
-try {
-  const smbUrl = new URL(SMB_ADDRESS);
-  const localHosts = ['localhost', '127.0.0.1', '::1'];
-  if (smbUrl.protocol === 'http:' && !localHosts.includes(smbUrl.hostname)) {
-    Log().warn(
-      `SMB_ADDRESS uses plaintext http:// to a remote host (${smbUrl.hostname}); SDP/ICE data will be sent unencrypted. Use https:// in production.`
-    );
-  }
-} catch (err) {
-  Log().warn(`SMB_ADDRESS could not be parsed as a URL: ${SMB_ADDRESS}`);
+const REAUTH_AUTH_KEY =
+  process.env.REAUTH_AUTH_KEY ?? process.env.WHIP_AUTH_KEY;
+
+if (process.env.OSC_ACCESS_TOKEN && !REAUTH_AUTH_KEY?.trim()) {
+  const reason =
+    REAUTH_AUTH_KEY === undefined
+      ? 'no REAUTH_AUTH_KEY or WHIP_AUTH_KEY is set'
+      : 'REAUTH_AUTH_KEY/WHIP_AUTH_KEY is set but empty or whitespace only, which disables auth - this is most likely a configuration error';
+  Log().warn(
+    `SECURITY: GET /api/v1/reauth is UNAUTHENTICATED - anyone who can reach this server can obtain a valid OSC service access token. Reason: ${reason}. Set REAUTH_AUTH_KEY to a non-empty secret to require a Bearer token.`
+  );
 }
 
 const ENDPOINT_IDLE_TIMEOUT_S: string =
@@ -44,21 +52,62 @@ const ENDPOINT_IDLE_TIMEOUT_S: string =
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8000;
 
-const DB_CONNECTION_STRING: string =
-  process.env.DB_CONNECTION_STRING ??
-  process.env.MONGODB_CONNECTION_STRING ??
-  'mongodb://localhost:27017/intercom-manager';
-let dbManager;
-const dbUrl = new URL(DB_CONNECTION_STRING);
-if (dbUrl.protocol === 'mongodb:' || dbUrl.protocol === 'mongodb+srv:') {
-  dbManager = new DbManagerMongoDb(dbUrl);
-} else if (dbUrl.protocol === 'http:' || dbUrl.protocol === 'https:') {
-  dbManager = new DbManagerCouchDb(dbUrl);
-} else {
-  throw new Error('Unsupported database protocol');
+const REQUIRED_ENV = ['SMB_ADDRESS'] as const;
+
+/**
+ * Validate that all required environment variables are set and non-empty.
+ * Exits the process with code 1 on the first missing/empty variable so that
+ * the server never starts in a misconfigured state.
+ */
+export function validateRequiredEnv(): void {
+  for (const key of REQUIRED_ENV) {
+    if (!process.env[key]) {
+      Log().error(`Missing required environment variable: ${key}`);
+      process.exit(1);
+    }
+  }
+
+  // A CORS origin must be resolvable: either CORS_ORIGIN is set (comma-separated)
+  // or OSC_HOSTNAME is set (auto-injected on Open Source Cloud) and used as a
+  // fallback. When neither is configured the server fails fast rather than
+  // starting with CORS effectively disabled. See src/config/cors-origin.ts.
+  if (!hasCorsConfig()) {
+    Log().error(
+      'Missing required CORS configuration: set CORS_ORIGIN (comma-separated allowed origins) or OSC_HOSTNAME'
+    );
+    process.exit(1);
+  }
+
+  // A database connection string is required; no hardcoded localhost fallback is
+  // provided so that a missing value fails fast at startup rather than silently
+  // connecting to a local MongoDB. Local development supplies the localhost
+  // default via .env/.env.example/docker-compose, not in production code.
+  if (
+    !process.env.DB_CONNECTION_STRING &&
+    !process.env.MONGODB_CONNECTION_STRING
+  ) {
+    Log().error('Missing required environment variable: DB_CONNECTION_STRING');
+    process.exit(1);
+  }
 }
 
-(async function startServer() {
+async function startServer() {
+  validateRequiredEnv();
+
+  const dbConnectionString =
+    process.env.DB_CONNECTION_STRING ||
+    process.env.MONGODB_CONNECTION_STRING ||
+    '';
+  const dbUrl = new URL(dbConnectionString);
+  let dbManager: DbManager;
+  if (dbUrl.protocol === 'mongodb:' || dbUrl.protocol === 'mongodb+srv:') {
+    dbManager = new DbManagerMongoDb(dbUrl);
+  } else if (dbUrl.protocol === 'http:' || dbUrl.protocol === 'https:') {
+    dbManager = new DbManagerCouchDb(dbUrl);
+  } else {
+    throw new Error('Unsupported database protocol');
+  }
+
   await dbManager.connect();
   const productionManager = new ProductionManager(dbManager);
   await productionManager.load();
@@ -74,6 +123,7 @@ if (dbUrl.protocol === 'mongodb:' || dbUrl.protocol === 'mongodb+srv:') {
     smbServerApiKey: process.env.SMB_APIKEY,
     publicHost: PUBLIC_HOST,
     whipAuthKey: process.env.WHIP_AUTH_KEY,
+    reAuthKey: REAUTH_AUTH_KEY,
     dbManager: dbManager,
     productionManager: productionManager,
     ingestManager: ingestManager,
@@ -106,4 +156,13 @@ if (dbUrl.protocol === 'mongodb:' || dbUrl.protocol === 'mongodb+srv:') {
     Log().error('Uncaught exception:', err);
     process.exit(1);
   });
-})();
+}
+
+// Only start the server when this module is executed directly (e.g. via
+// `ts-node src/server.ts`), not when it is imported (e.g. by unit tests).
+if (require.main === module) {
+  startServer().catch((err) => {
+    Log().error('Fatal error during startup:', err);
+    process.exit(1);
+  });
+}

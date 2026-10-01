@@ -66,11 +66,19 @@ function sortParticipants(participants: UserResponse[]): UserResponse[] {
 // ── Param schemas for route validation ──────────────────────────────────
 
 const ProductionIdParams = Type.Object({
-  productionId: Type.String({ minLength: 1, pattern: '^[0-9]+$' })
+  productionId: Type.String({
+    minLength: 1,
+    maxLength: 128,
+    pattern: '^[0-9]+$'
+  })
 });
 
 const ProductionLineParams = Type.Object({
-  productionId: Type.String({ minLength: 1, pattern: '^[0-9]+$' }),
+  productionId: Type.String({
+    minLength: 1,
+    maxLength: 128,
+    pattern: '^[0-9]+$'
+  }),
   lineId: Type.String({ minLength: 1, maxLength: 200 })
 });
 
@@ -483,7 +491,23 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           200: LineResponse,
           400: Type.String(),
           404: ErrorResponse,
+          429: Type.Object({ error: Type.String() }),
           500: Type.String()
+        }
+      },
+      config: {
+        rateLimit: {
+          max: 90,
+          timeWindow: '1 minute',
+          hook: 'onRequest',
+          errorResponseBuilder: (_req, context) => {
+            return {
+              statusCode: 429,
+              error: 'Too Many Requests',
+              message: 'Too many requests, please try again later',
+              expiresIn: context.after
+            };
+          }
         }
       }
     },
@@ -660,7 +684,23 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         response: {
           201: SessionResponse,
           400: ErrorResponse,
+          429: Type.Object({ error: Type.String() }),
           500: Type.String()
+        }
+      },
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: '1 minute',
+          hook: 'onRequest',
+          errorResponseBuilder: (_req, context) => {
+            return {
+              statusCode: 429,
+              error: 'Too Many Requests',
+              message: 'Too many requests, please try again later',
+              expiresIn: context.after
+            };
+          }
         }
       }
     },
@@ -753,6 +793,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         description:
           'Provide client local SDP description as request body to finalize connection protocol.',
         params: SessionIdParams,
+        body: SdpAnswer,
         response: {
           204: Type.Null(),
           400: Type.String(),
@@ -842,6 +883,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         response: {
           200: Type.String(),
           400: Type.String(),
+          409: Type.String(),
           500: Type.String()
         }
       }
@@ -849,6 +891,14 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     async (request, reply) => {
       const { productionId } = request.params;
       try {
+        if (await productionManager.hasActiveSessions(productionId)) {
+          reply
+            .code(409)
+            .send(
+              `Cannot delete production ${productionId} with active sessions`
+            );
+          return;
+        }
         if (
           !(await productionManager.deleteProduction(
             parseInt(productionId, 10)
@@ -908,7 +958,23 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         response: {
           200: Type.Array(UserResponse),
           400: Type.String(),
+          429: Type.Object({ error: Type.String() }),
           500: Type.String()
+        }
+      },
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: '1 minute',
+          hook: 'onRequest',
+          errorResponseBuilder: (_req, context) => {
+            return {
+              statusCode: 429,
+              error: 'Too Many Requests',
+              message: 'Too many requests, please try again later',
+              expiresIn: context.after
+            };
+          }
         }
       }
     },
@@ -977,7 +1043,23 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         response: {
           200: Type.String(),
           400: Type.String(),
-          410: Type.String()
+          410: Type.String(),
+          429: Type.Object({ error: Type.String() })
+        }
+      },
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: '1 minute',
+          hook: 'onRequest',
+          errorResponseBuilder: (_req, context) => {
+            return {
+              statusCode: 429,
+              error: 'Too Many Requests',
+              message: 'Too many requests, please try again later',
+              expiresIn: context.after
+            };
+          }
         }
       }
     },

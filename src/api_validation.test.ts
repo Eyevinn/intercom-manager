@@ -101,6 +101,7 @@ const mockProductionManager = {
   updateUserLastSeen: jest.fn().mockReturnValue(true),
   deleteProductionLine: jest.fn().mockResolvedValue(undefined),
   deleteProduction: jest.fn().mockResolvedValue(true),
+  hasActiveSessions: jest.fn().mockResolvedValue(false),
   removeUserSession: jest.fn(),
   createUserSession: jest.fn().mockResolvedValue(undefined),
   getActiveUsers: jest.fn().mockResolvedValue([]),
@@ -256,6 +257,35 @@ describe('Input Validation', () => {
       });
       expect(response.statusCode).toBe(204);
       expect(response.body).toBe('');
+    });
+
+    test('PATCH /session/:sessionId rejects missing sdpAnswer with 400', async () => {
+      const response = await server.inject({
+        method: 'PATCH',
+        url: '/api/v1/session/valid-session-id',
+        body: {}
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
+    test('PATCH /session/:sessionId rejects wrong-type sdpAnswer with 400', async () => {
+      // Use a non-coercible type (object) — Fastify/AJV coerces scalar
+      // primitives like numbers to strings, but not objects/arrays.
+      const response = await server.inject({
+        method: 'PATCH',
+        url: '/api/v1/session/valid-session-id',
+        body: { sdpAnswer: { unexpected: 'object' } }
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
+    test('PATCH /session/:sessionId rejects sdpAnswer exceeding maxLength with 400', async () => {
+      const response = await server.inject({
+        method: 'PATCH',
+        url: '/api/v1/session/valid-session-id',
+        body: { sdpAnswer: 'x'.repeat(65537) }
+      });
+      expect(response.statusCode).toBe(400);
     });
 
     test('DELETE /session/:sessionId accepts non-empty sessionId', async () => {
@@ -532,5 +562,102 @@ describe('Input Validation', () => {
       });
       expect(response.statusCode).toBe(501);
     });
+  });
+
+  // ── maxLength constraints (defence-in-depth, #239) ─────────────
+  // Unbounded Type.String() schemas now carry maxLength so oversized
+  // payloads are rejected by AJV with 400 before reaching handlers.
+
+  describe('maxLength constraints (#239)', () => {
+    test('GET /production/:productionId rejects an oversized productionId', async () => {
+      const response = await server.inject({
+        method: 'GET',
+        url: `/api/v1/production/${'1'.repeat(129)}`
+      });
+      // Rejected before the handler: Fastify caps params at maxParamLength
+      // (default 100) → 414, and the schema maxLength (128) would otherwise
+      // yield 400. Either way the oversized value never reaches the handler.
+      expect([400, 414]).toContain(response.statusCode);
+    });
+
+    test('POST /session rejects productionId exceeding 128 chars', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/v1/session',
+        body: {
+          productionId: '1'.repeat(129),
+          lineId: 'lid-1',
+          username: 'user'
+        }
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
+    test('POST /session accepts a valid productionId within bounds', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/v1/session',
+        body: { productionId: '1', lineId: 'lid-1', username: 'user' }
+      });
+      // Param/body are valid — the request proceeds past schema validation.
+      expect(response.statusCode).not.toBe(400);
+    });
+
+    test('POST /ingest rejects label exceeding 200 chars (400, not 501)', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/v1/ingest',
+        body: { label: 'x'.repeat(201), ipAddress: '127.0.0.1' }
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
+    test('POST /ingest rejects ipAddress exceeding 128 chars (400, not 501)', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/v1/ingest',
+        body: { label: 'valid', ipAddress: 'x'.repeat(129) }
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
+    test('POST /ingest with valid body passes validation (501, not 400)', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/v1/ingest',
+        body: { label: 'valid', ipAddress: '127.0.0.1' }
+      });
+      expect(response.statusCode).toBe(501);
+    });
+
+    test('POST /ingest accepts a valid IPv6 ipAddress (501, not 400)', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/v1/ingest',
+        body: { label: 'valid', ipAddress: '2001:db8::1' }
+      });
+      expect(response.statusCode).toBe(501);
+    });
+
+    test.each([
+      'not-an-ip',
+      'http://127.0.0.1',
+      '127.0.0.1/../admin',
+      '127.0.0.1:8080',
+      'localhost',
+      '999.999.999.999',
+      '127.0.0.1 ',
+      '127.0.0.1\r\nHost: evil'
+    ])(
+      'POST /ingest rejects malformed ipAddress %j (400, not 501)',
+      async (ip) => {
+        const response = await server.inject({
+          method: 'POST',
+          url: '/api/v1/ingest',
+          body: { label: 'valid', ipAddress: ip }
+        });
+        expect(response.statusCode).toBe(400);
+      }
+    );
   });
 });

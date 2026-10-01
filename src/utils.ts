@@ -9,6 +9,46 @@ export function assert(condition: any, message: string): asserts condition {
   }
 }
 
+// Strip CR/LF and other control characters (keeping regular spaces) to prevent
+// log injection / forging when untrusted values are logged. Defense-in-depth:
+// schema validation should already reject such values, but this guarantees no
+// control chars reach the logger even on error paths.
+// Removes C0 controls (incl. LF \x0a, CR \x0d, ESC \x1b), DEL \x7f and C1
+// controls (\x80-\x9f). Printable characters and spaces are kept.
+export function sanitizeForLog(value: string): string {
+  // eslint-disable-next-line no-control-regex
+  return value.replace(/[\x00-\x1f\x7f-\x9f]/g, '');
+}
+
+// The OSC shared token service is reached at a per-*platform-environment* host
+// (`token.svc.prod.osaas.io`, `token.svc.stage.osaas.io`, ...), NOT at a
+// per-hosting-cluster host. `docker-entrypoint.sh` derives `OSC_ENVIRONMENT`
+// from the instance hostname, which on the Elastx cluster yields the cluster
+// name `prod-se` rather than the platform environment `prod`. Building the
+// token-service URL straight from that produces `token.svc.prod-se.osaas.io`,
+// which does not exist, so reauth/share fail. Strip a trailing per-cluster
+// suffix (e.g. `-se`) so `prod-se` -> `prod` and `stage-se` -> `stage`, while
+// leaving bare platform environments (`prod`, `stage`, `dev`) untouched. See
+// #317. Note: this normalization is applied ONLY when building the shared OSC
+// token-service host; `OSC_ENVIRONMENT` itself is left as-is for any other use.
+export function oscPlatformEnvironment(rawEnvironment: string): string {
+  return rawEnvironment.replace(/-[a-z]+$/, '');
+}
+
+export function oscTokenServiceBaseUrl(rawEnvironment: string): string {
+  return `https://token.svc.${oscPlatformEnvironment(rawEnvironment)}.osaas.io`;
+}
+
+// OSC Personal Access Tokens are JWTs: three base64url segments separated by
+// dots (`header.payload.signature`). This is a minimal *structural* check, not
+// a signature/expiry verification. Its purpose is to reject a missing,
+// truncated or otherwise misconfigured `OSC_ACCESS_TOKEN` before it is sent to
+// the OSC token service as an `x-pat-jwt` credential, where it would only fail
+// with an opaque upstream error. See #226.
+export function isValidJwt(token: string): boolean {
+  return /^[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]*$/.test(token);
+}
+
 export function getIceServers(): string[] {
   const defaultStun = 'stun:stun.l.google.com:19302';
   const raw = process.env.ICE_SERVERS || '';

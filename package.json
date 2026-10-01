@@ -17,17 +17,17 @@
     "node": ">=22.0.0"
   },
   "dependencies": {
-    "@fastify/cookie": "^11.1.2",
+    "@fastify/cookie": "11.0.2",
     "@fastify/cors": "^11.3.0",
-    "@fastify/helmet": "^13.0.2",
+    "@fastify/helmet": "^13.1.1",
     "@fastify/rate-limit": "^10.3.0",
-    "@fastify/swagger": "^9.5.1",
+    "@fastify/swagger": "^9.9.0",
     "@fastify/swagger-ui": "^6.1.1",
     "@fastify/type-provider-typebox": "^5.2.0",
-    "@sinclair/typebox": "^0.32.35",
+    "@sinclair/typebox": "^0.34.52",
     "dotenv": "^16.6.1",
-    "fastify": "^5.12.4",
-    "mongodb": "^6.16.0",
+    "fastify": "^5.12.5",
+    "mongodb": "^6.21.0",
     "nano": "^10.1.4",
     "nodemon": "^3.1.14",
     "sdp-transform": "^2.15.0",
@@ -51,7 +51,7 @@
     "husky": "^8.0.3",
     "jest": "^29.7.0",
     "prettier": "^2.8.8",
-    "ts-jest": "^29.3.2",
-    "typescript": "^5.8.3"
+    "ts-jest": "^29.4.13",
+    "typescript": "^5.9.3"
   }
 }

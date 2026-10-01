@@ -193,6 +193,52 @@ describe('Presets API', () => {
       });
       expect(response.statusCode).toBe(400);
     });
+
+    test('returns 201 for a wss:// companionUrl', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/v1/preset',
+        body: {
+          name: 'My Preset',
+          calls: [{ productionId: '1', lineId: 'line-1' }],
+          companionUrl: 'wss://companion.example.com:8080'
+        }
+      });
+      expect(response.statusCode).toBe(201);
+    });
+
+    test.each([
+      'javascript:alert(1)',
+      'data:text/html,<script>alert(1)</script>',
+      'file:///etc/passwd',
+      'not a url',
+      'ftp://companion.example.com'
+    ])('returns 400 for dangerous/invalid companionUrl %s', async (bad) => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/v1/preset',
+        body: {
+          name: 'My Preset',
+          calls: [{ productionId: '1', lineId: 'line-1' }],
+          companionUrl: bad
+        }
+      });
+      expect(response.statusCode).toBe(400);
+      expect(mockDbManager.addPreset).not.toHaveBeenCalled();
+    });
+
+    test('returns 400 when companionUrl exceeds max length', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/v1/preset',
+        body: {
+          name: 'My Preset',
+          calls: [{ productionId: '1', lineId: 'line-1' }],
+          companionUrl: 'ws://companion.example.com/' + 'a'.repeat(2048)
+        }
+      });
+      expect(response.statusCode).toBe(400);
+    });
   });
 
   describe('PATCH /api/v1/preset/:id', () => {
@@ -285,6 +331,31 @@ describe('Presets API', () => {
         method: 'PATCH',
         url: '/api/v1/preset/preset-uuid-1',
         body: { companionUrl: null }
+      });
+      expect(response.statusCode).toBe(200);
+      expect(mockDbManager.updatePreset).toHaveBeenCalledWith('preset-uuid-1', {
+        companionUrl: null
+      });
+    });
+
+    test('returns 400 for a dangerous companionUrl on update', async () => {
+      const response = await server.inject({
+        method: 'PATCH',
+        url: '/api/v1/preset/preset-uuid-1',
+        body: { companionUrl: 'javascript:alert(1)' }
+      });
+      expect(response.statusCode).toBe(400);
+      expect(mockDbManager.updatePreset).not.toHaveBeenCalled();
+    });
+
+    test('returns 200 and removes companionUrl when empty string sent', async () => {
+      const updatedPreset = { ...mockPreset };
+      delete (updatedPreset as any).companionUrl;
+      mockDbManager.updatePreset.mockResolvedValue(updatedPreset);
+      const response = await server.inject({
+        method: 'PATCH',
+        url: '/api/v1/preset/preset-uuid-1',
+        body: { companionUrl: '' }
       });
       expect(response.statusCode).toBe(200);
       expect(mockDbManager.updatePreset).toHaveBeenCalledWith('preset-uuid-1', {

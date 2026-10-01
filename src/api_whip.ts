@@ -8,8 +8,14 @@ import { Log } from './log';
 import { Line, WhipWhepRequest, WhipWhepResponse } from './models';
 import { ProductionManager } from './production_manager';
 import { ISmbProtocol, SmbProtocol } from './smb';
-import { getIceServers } from './utils';
+import { getIceServers, sanitizeForLog } from './utils';
 import { DbManager } from './db/interface';
+
+// Session IDs are generated as UUID v4 (see uuidv4() below). Constrain the
+// DELETE sessionId path param to this format so malformed/malicious values
+// (e.g. CRLF log-injection payloads) are rejected with 400 before logging.
+const UUID_PATTERN =
+  '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$';
 
 export interface ApiWhipOptions {
   smbServerBaseUrl: string;
@@ -55,9 +61,15 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
   const coreFunctions = opts.coreFunctions;
   const whipAuthKey = opts.whipAuthKey?.trim();
 
+  if (!whipAuthKey) {
+    Log().warn(
+      'SECURITY: WHIP_AUTH_KEY not set - WHIP endpoint (/whip) is UNAUTHENTICATED. Anyone who can reach this server can publish audio streams into live productions. Set WHIP_AUTH_KEY to a non-empty secret to require a Bearer token.'
+    );
+  }
+
   async function requireWhipAuth(request: any, reply: any): Promise<boolean> {
     if (!whipAuthKey) {
-      return true; // auth disabled
+      return true; // auth disabled - a loud SECURITY warning is logged at startup
     }
 
     const authHeader =
@@ -73,6 +85,13 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
       tokenBuf.length === keyBuf.length && timingSafeEqual(tokenBuf, keyBuf);
 
     if (!authHeader || typeof authHeader !== 'string' || !isValid) {
+      // Log auth failures (without the token) so brute-force/credential-stuffing
+      // attempts are visible for abuse detection. See #238.
+      Log().warn(
+        `WHIP authentication failed - IP: ${request.ip}, path: ${sanitizeForLog(
+          request.url
+        )}`
+      );
       reply
         .header('WWW-Authenticate', 'Bearer realm="whip", charset="UTF-8"')
         .code(401)
@@ -92,9 +111,20 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
       schema: {
         description: 'WHIP endpoint for ingesting WebRTC streams',
         params: Type.Object({
-          productionId: Type.String({ maxLength: 200 }),
-          lineId: Type.String({ maxLength: 200 }),
-          username: Type.String({ maxLength: 200 })
+          productionId: Type.String({
+            minLength: 1,
+            maxLength: 200,
+            pattern: '^[0-9]+$'
+          }),
+          lineId: Type.String({
+            minLength: 1,
+            maxLength: 200,
+            pattern: '^[0-9]+$'
+          }),
+          username: Type.String({
+            maxLength: 200,
+            pattern: '^[\\w .-]{1,200}$'
+          })
         }),
         body: WhipWhepRequest,
         response: {
@@ -254,9 +284,17 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
       schema: {
         description: 'Terminate a WHIP connection',
         params: Type.Object({
-          productionId: Type.String({ maxLength: 200 }),
-          lineId: Type.String({ maxLength: 200 }),
-          sessionId: Type.String({ maxLength: 200 })
+          productionId: Type.String({
+            minLength: 1,
+            maxLength: 200,
+            pattern: '^[0-9]+$'
+          }),
+          lineId: Type.String({
+            minLength: 1,
+            maxLength: 200,
+            pattern: '^[0-9]+$'
+          }),
+          sessionId: Type.String({ maxLength: 200, pattern: UUID_PATTERN })
         }),
         response: {
           200: Type.String({ description: 'OK' }),
@@ -268,15 +306,18 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
     async (request, reply) => {
       if (!(await requireWhipAuth(request, reply))) return;
       const { sessionId } = request.params;
+      // Defense-in-depth: sanitize before logging in case the schema pattern
+      // is ever relaxed. Schema validation already rejects control chars.
+      const safeSessionId = sanitizeForLog(sessionId);
       try {
         Log().info(
-          `Received WHIP DELETE request - sessionId: ${sessionId}, IP: ${request.ip}`
+          `Received WHIP DELETE request - sessionId: ${safeSessionId}, IP: ${request.ip}`
         );
 
         const doc = await opts.dbManager.getSession(sessionId);
         if (!doc) {
           Log().warn(
-            `WHIP session not found for deletion - sessionId: ${sessionId}`
+            `WHIP session not found for deletion - sessionId: ${safeSessionId}`
           );
           reply.code(404).send({ error: 'WHIP session not found' });
           return;
@@ -288,12 +329,12 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
         productionManager.emit('users:change');
 
         Log().info(
-          `WHIP session deleted successfully - sessionId: ${sessionId}`
+          `WHIP session deleted successfully - sessionId: ${safeSessionId}`
         );
         reply.code(200).send('OK');
       } catch (err) {
         Log().error(
-          `Failed to delete WHIP session - sessionId: ${sessionId}:`,
+          `Failed to delete WHIP session - sessionId: ${safeSessionId}:`,
           err
         );
         reply.code(500).send({ error: 'Failed to terminate WHIP connection' });
@@ -304,9 +345,25 @@ export const apiWhip: FastifyPluginCallback<ApiWhipOptions> = (
   fastify.patch<{
     Params: { productionId: string; lineId: string; sessionId: string };
     Body: string;
-  }>('/whip/:productionId/:lineId/:sessionId', {}, async (request, reply) => {
-    reply.code(405).send('Method not allowed');
-  });
+  }>(
+    '/whip/:productionId/:lineId/:sessionId',
+    {
+      schema: {
+        description: 'WHIP PATCH stub — not implemented',
+        params: Type.Object({
+          productionId: Type.String({ minLength: 1, maxLength: 200 }),
+          lineId: Type.String({ minLength: 1, maxLength: 200 }),
+          sessionId: Type.String({ minLength: 1, maxLength: 200 })
+        }),
+        response: {
+          405: Type.String({ description: 'Method not allowed' })
+        }
+      }
+    },
+    async (request, reply) => {
+      reply.code(405).send('Method not allowed');
+    }
+  );
 
   fastify.options<{
     Params: { productionId: string; lineId: string };

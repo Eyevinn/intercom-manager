@@ -1,0 +1,50 @@
+name: Sync OSC Fork
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        default: "prod"
+        type: choice
+        options:
+          - prod
+          - dev
+          - stage
+  workflow_call:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        type: string
+
+jobs:
+  sync-fork:
+    name: Sync fork (${{ inputs.environment || 'prod' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: sync-fork-${{ inputs.environment || 'prod' }}
+      cancel-in-progress: false
+    steps:
+      - name: Validate environment
+        env:
+          ENV: ${{ inputs.environment || 'prod' }}
+        run: |
+          case "$ENV" in
+            prod|dev|stage) ;;
+            *) echo "Invalid environment: $ENV"; exit 1 ;;
+          esac
+
+      - name: Install OSC CLI
+        run: npm install -g @osaas/cli
+
+      - name: Trigger sync fork
+        env:
+          OSC_ACCESS_TOKEN: unused
+          OSC_API_KEY: ${{ secrets.OSC_API_KEY }}
+          ENV: ${{ inputs.environment || 'prod' }}
+        run: osc --env "$ENV" admin sync-fork eyevinn-intercom-manager --wait

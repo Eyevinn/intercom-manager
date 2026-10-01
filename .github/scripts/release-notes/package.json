@@ -1,0 +1,10 @@
+{
+  "name": "release-notes",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Script to generate release notes using the Anthropic SDK",
+  "scripts": {},
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0"
+  }
+}

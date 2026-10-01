@@ -1,3 +1,13 @@
+jest.mock('./log', () => ({
+  Log: () => ({
+    error: jest.fn(),
+    warn: jest.fn(),
+    info: jest.fn(),
+    debug: jest.fn()
+  })
+}));
+
+import Fastify from 'fastify';
 import api from './api';
 import { CoreFunctions } from './api_productions_core_functions';
 import { ConnectionQueue } from './connection_queue';
@@ -61,6 +71,7 @@ const mockProductionManager = {
   updateProductionLine: jest.fn().mockResolvedValue({}),
   deleteProductionLine: jest.fn().mockResolvedValue(undefined),
   deleteProduction: jest.fn().mockResolvedValue(true),
+  hasActiveSessions: jest.fn().mockResolvedValue(false),
   removeUserSession: jest.fn().mockResolvedValue('session-id'),
   getUser: jest.fn().mockResolvedValue(undefined),
   requireLine: jest.fn().mockResolvedValue({}),
@@ -79,25 +90,284 @@ const mockIngestManager = {
   startPolling: jest.fn()
 } as any;
 
+const baseOptions = {
+  title: 'my awesome service',
+  smbServerBaseUrl: 'http://localhost',
+  endpointIdleTimeout: '60',
+  publicHost: 'https://example.com',
+  dbManager: mockDbManager,
+  productionManager: mockProductionManager,
+  ingestManager: mockIngestManager
+};
+
+const createServer = (reAuthKey?: string) =>
+  api({
+    ...baseOptions,
+    reAuthKey,
+    coreFunctions: new CoreFunctions(
+      mockProductionManager,
+      new ConnectionQueue()
+    )
+  });
+
+const mockTokenService = () => {
+  const fetchMock = jest.fn().mockResolvedValue({
+    ok: true,
+    status: 200,
+    statusText: 'OK',
+    json: async () => ({ token: 'a-new-sat-token' })
+  });
+  global.fetch = fetchMock as unknown as typeof global.fetch;
+  return fetchMock;
+};
+
 describe('reAuth api', () => {
-  test('can generate a new SAT Token for the OSC Intercom instance', async () => {
-    const server = await api({
-      title: 'my awesome service',
-      smbServerBaseUrl: 'http://localhost',
-      endpointIdleTimeout: '60',
-      publicHost: 'https://example.com',
-      dbManager: mockDbManager,
-      productionManager: mockProductionManager,
-      ingestManager: mockIngestManager,
-      coreFunctions: new CoreFunctions(
-        mockProductionManager,
-        new ConnectionQueue()
-      )
-    });
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    jest.restoreAllMocks();
+  });
+
+  test('returns 401 without credentials when a reauth key is configured', async () => {
+    const fetchMock = mockTokenService();
+    const server = await createServer('secret-123');
+
     const response = await server.inject({
       method: 'GET',
       url: '/api/v1/reauth'
     });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.headers['www-authenticate']).toContain('Bearer');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(response.headers['set-cookie']).toBeUndefined();
+  });
+
+  test('returns 401 with a wrong bearer token', async () => {
+    const fetchMock = mockTokenService();
+    const server = await createServer('secret-123');
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/api/v1/reauth',
+      headers: { authorization: 'Bearer wrong-key' }
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test('returns 401 with an empty bearer token', async () => {
+    const fetchMock = mockTokenService();
+    const server = await createServer('secret-123');
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/api/v1/reauth',
+      headers: { authorization: 'Bearer' }
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test('returns 401 with a malformed authorization header (no Bearer prefix)', async () => {
+    const fetchMock = mockTokenService();
+    const server = await createServer('secret-123');
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/api/v1/reauth',
+      headers: { authorization: 'secret-123' }
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test('returns 401 when the token is a proper prefix of the key', async () => {
+    const fetchMock = mockTokenService();
+    const server = await createServer('secret-123');
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/api/v1/reauth',
+      headers: { authorization: 'Bearer secret-12' }
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test('generates a new SAT token with a correct bearer token', async () => {
+    const fetchMock = mockTokenService();
+    const server = await createServer('secret-123');
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/api/v1/reauth',
+      headers: { authorization: 'Bearer secret-123' }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://token.svc.prod.osaas.io/servicetoken',
+      expect.anything()
+    );
+    expect(response.json()).toEqual({ success: true });
+    expect(response.json().token).toBeUndefined();
+    expect(String(response.headers['set-cookie'])).toContain(
+      'eyevinn-intercom-manager.prod.sat=Bearer%20a-new-sat-token'
+    );
+  });
+
+  test('allows unauthenticated access when no reauth key is configured', async () => {
+    const fetchMock = mockTokenService();
+    const server = await createServer(undefined);
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/api/v1/reauth'
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test('returns 500 when the token service is unavailable', async () => {
+    global.fetch = jest
+      .fn()
+      .mockRejectedValue(new Error('network down')) as unknown as typeof fetch;
+    const server = await createServer(undefined);
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/api/v1/reauth'
+    });
+
     expect(response.statusCode).toBe(500);
+  });
+});
+
+describe('reAuth OSC_ACCESS_TOKEN validation (#226)', () => {
+  const originalToken = process.env.OSC_ACCESS_TOKEN;
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    process.env.OSC_ACCESS_TOKEN = originalToken;
+    global.fetch = originalFetch;
+    jest.resetModules();
+    jest.restoreAllMocks();
+  });
+
+  // api_re_auth reads OSC_ACCESS_TOKEN at module load, so load a fresh copy of
+  // the plugin with a malformed token in the environment.
+  const createReAuthServerWithToken = async (token: string) => {
+    process.env.OSC_ACCESS_TOKEN = token;
+    let apiReAuth: any;
+    jest.isolateModules(() => {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      apiReAuth = require('./api_re_auth').default;
+    });
+    const fastify = Fastify();
+    fastify.decorateReply('cookie', function (this: any) {
+      return this;
+    });
+    fastify.register(apiReAuth, { prefix: 'api/v1' });
+    await fastify.ready();
+    return fastify;
+  };
+
+  test('returns 500 when OSC_ACCESS_TOKEN is malformed', async () => {
+    const fetchMock = jest.fn();
+    global.fetch = fetchMock as unknown as typeof global.fetch;
+    const server = await createReAuthServerWithToken('not-a-jwt');
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/api/v1/reauth'
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(response.json()).toEqual({
+      message: 'OSC_ACCESS_TOKEN is missing or malformed'
+    });
+    // The malformed token must never reach the OSC token service.
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    await server.close();
+  });
+
+  test('proceeds to the token service with a well-formed JWT', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({ token: 'a-new-sat-token' })
+    });
+    global.fetch = fetchMock as unknown as typeof global.fetch;
+    const server = await createReAuthServerWithToken(
+      'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.dummy-signature'
+    );
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/api/v1/reauth'
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await server.close();
+  });
+});
+
+describe('reAuth without an OSC_ACCESS_TOKEN (#228)', () => {
+  const originalToken = process.env.OSC_ACCESS_TOKEN;
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    process.env.OSC_ACCESS_TOKEN = originalToken;
+    global.fetch = originalFetch;
+    jest.resetModules();
+    jest.restoreAllMocks();
+  });
+
+  // api_re_auth reads OSC_ACCESS_TOKEN at module load, so load a fresh copy of
+  // the plugin with no token in the environment (non-OSC context).
+  const createReAuthServerWithoutToken = async () => {
+    delete process.env.OSC_ACCESS_TOKEN;
+    let apiReAuth: any;
+    jest.isolateModules(() => {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      apiReAuth = require('./api_re_auth').default;
+    });
+    const fastify = Fastify();
+    fastify.decorateReply('cookie', function (this: any) {
+      return this;
+    });
+    fastify.register(apiReAuth, { prefix: 'api/v1' });
+    await fastify.ready();
+    return fastify;
+  };
+
+  test('returns 200 { success: false } instead of 405 when no token is set', async () => {
+    const fetchMock = jest.fn();
+    global.fetch = fetchMock as unknown as typeof global.fetch;
+    const server = await createReAuthServerWithoutToken();
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/api/v1/reauth'
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ success: false });
+    // No OSC context means the token service must not be contacted.
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    await server.close();
   });
 });

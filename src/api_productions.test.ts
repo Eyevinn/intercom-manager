@@ -173,6 +173,7 @@ const mockProductionManager = {
     .mockImplementation((sessionId: string) => sessionId === 'alive-session'),
   deleteProductionLine: jest.fn().mockResolvedValue(undefined),
   deleteProduction: jest.fn().mockResolvedValue(true),
+  hasActiveSessions: jest.fn().mockResolvedValue(false),
   removeUserSession: jest
     .fn()
     .mockImplementation((sessionId: string) => sessionId),
@@ -462,6 +463,30 @@ describe('Production API', () => {
         url: '/api/v1/production/1'
       });
       expect(response.statusCode).toBe(500);
+    });
+    test('returns 409 and does not delete when production has active sessions', async () => {
+      mockProductionManager.hasActiveSessions.mockResolvedValueOnce(true);
+      const callsBefore =
+        mockProductionManager.deleteProduction.mock.calls.length;
+      const response = await server.inject({
+        method: 'DELETE',
+        url: '/api/v1/production/1'
+      });
+      expect(response.statusCode).toBe(409);
+      expect(mockProductionManager.deleteProduction.mock.calls.length).toBe(
+        callsBefore
+      );
+    });
+    test('deletes the production when it has no active sessions', async () => {
+      mockProductionManager.hasActiveSessions.mockResolvedValueOnce(false);
+      const response = await server.inject({
+        method: 'DELETE',
+        url: '/api/v1/production/1'
+      });
+      expect(response.statusCode).toBe(200);
+      expect(mockProductionManager.deleteProduction).toHaveBeenLastCalledWith(
+        1
+      );
     });
   });
 
