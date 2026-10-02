@@ -2,9 +2,12 @@ import rateLimit from '@fastify/rate-limit';
 import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Fastify from 'fastify';
 import apiReAuth from './api_re_auth';
+import apiShare from './api_share';
 import { getApiProductions } from './api_productions';
 import { CoreFunctions } from './api_productions_core_functions';
 import { ConnectionQueue } from './connection_queue';
+
+jest.mock('./log');
 
 // These tests exercise the per-route rate limits added for issue #201. They
 // register the plugins directly with @fastify/rate-limit (global: false),
@@ -16,6 +19,9 @@ const mockProductionManager = {
   checkUserStatus: jest.fn().mockResolvedValue(undefined),
   requireProduction: jest.fn().mockResolvedValue({ lines: [] }),
   getLine: jest.fn().mockResolvedValue(undefined),
+  createProduction: jest
+    .fn()
+    .mockResolvedValue({ name: 'test', _id: { toString: () => 'prod-1' } }),
   once: jest.fn(),
   emit: jest.fn()
 } as any;
@@ -59,6 +65,17 @@ const createProductionsServer = async () => {
     dbManager: mockDbManager,
     productionManager: mockProductionManager,
     coreFunctions
+  });
+  await fastify.ready();
+  return fastify;
+};
+
+const createShareServer = async () => {
+  const fastify = Fastify().withTypeProvider<TypeBoxTypeProvider>();
+  await fastify.register(rateLimit, { global: false });
+  fastify.register(apiShare, {
+    prefix: 'api/v1',
+    publicHost: 'https://example.com'
   });
   await fastify.ready();
   return fastify;
@@ -145,6 +162,100 @@ describe('rate limiting (#201)', () => {
       const response = await fastify.inject({
         method: 'GET',
         url: '/api/v1/heartbeat/session-1'
+      });
+
+      expect(response.statusCode).toBe(429);
+      expect(JSON.parse(response.body)).toEqual(
+        expect.objectContaining({
+          error: expect.stringMatching(/Too many/i)
+        })
+      );
+
+      await fastify.close();
+    });
+  });
+});
+
+describe('rate limiting (#256)', () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('POST /api/v1/production', () => {
+    it('allows requests under the 10/min limit', async () => {
+      const fastify = await createProductionsServer();
+
+      for (let i = 0; i < 10; i++) {
+        const response = await fastify.inject({
+          method: 'POST',
+          url: '/api/v1/production',
+          body: { name: 'test', lines: [{ name: 'line-1' }] }
+        });
+        expect(response.statusCode).not.toBe(429);
+      }
+
+      await fastify.close();
+    });
+
+    it('returns 429 once the 10/min limit is exceeded', async () => {
+      const fastify = await createProductionsServer();
+
+      for (let i = 0; i < 10; i++) {
+        await fastify.inject({
+          method: 'POST',
+          url: '/api/v1/production',
+          body: { name: 'test', lines: [{ name: 'line-1' }] }
+        });
+      }
+
+      const response = await fastify.inject({
+        method: 'POST',
+        url: '/api/v1/production',
+        body: { name: 'test', lines: [{ name: 'line-1' }] }
+      });
+
+      expect(response.statusCode).toBe(429);
+      expect(JSON.parse(response.body)).toEqual(
+        expect.objectContaining({
+          error: expect.stringMatching(/Too many/i)
+        })
+      );
+
+      await fastify.close();
+    });
+  });
+
+  describe('POST /api/v1/share', () => {
+    it('allows requests under the 5/min limit', async () => {
+      const fastify = await createShareServer();
+
+      for (let i = 0; i < 5; i++) {
+        const response = await fastify.inject({
+          method: 'POST',
+          url: '/api/v1/share',
+          body: { path: '/mypath/to/share' }
+        });
+        expect(response.statusCode).not.toBe(429);
+      }
+
+      await fastify.close();
+    });
+
+    it('returns 429 once the 5/min limit is exceeded', async () => {
+      const fastify = await createShareServer();
+
+      for (let i = 0; i < 5; i++) {
+        await fastify.inject({
+          method: 'POST',
+          url: '/api/v1/share',
+          body: { path: '/mypath/to/share' }
+        });
+      }
+
+      const response = await fastify.inject({
+        method: 'POST',
+        url: '/api/v1/share',
+        body: { path: '/mypath/to/share' }
       });
 
       expect(response.statusCode).toBe(429);

@@ -1,3 +1,4 @@
+import { Type } from '@sinclair/typebox';
 import { FastifyPluginCallback } from 'fastify';
 import { ErrorResponse, ShareRequest, ShareResponse } from './models';
 import { isValidJwt, oscTokenServiceBaseUrl } from './utils';
@@ -24,7 +25,23 @@ const apiShare: FastifyPluginCallback<ApiShareOptions> = (
         response: {
           200: ShareResponse,
           400: ErrorResponse,
+          429: Type.Object({ error: Type.String() }),
           500: ErrorResponse
+        }
+      },
+      config: {
+        rateLimit: {
+          max: 5,
+          timeWindow: '1 minute',
+          hook: 'onRequest',
+          errorResponseBuilder: (_req, context) => {
+            return {
+              statusCode: 429,
+              error: 'Too Many Requests',
+              message: 'Too many requests, please try again later',
+              expiresIn: context.after
+            };
+          }
         }
       }
     },

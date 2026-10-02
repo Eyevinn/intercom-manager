@@ -125,7 +125,23 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         body: NewProduction,
         response: {
           200: ProductionResponse,
-          400: ErrorResponse
+          400: ErrorResponse,
+          429: Type.Object({ error: Type.String() })
+        }
+      },
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: '1 minute',
+          hook: 'onRequest',
+          errorResponseBuilder: (_req, context) => {
+            return {
+              statusCode: 429,
+              error: 'Too Many Requests',
+              message: 'Too many requests, please try again later',
+              expiresIn: context.after
+            };
+          }
         }
       }
     },
