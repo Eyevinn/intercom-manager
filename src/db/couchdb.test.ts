@@ -457,6 +457,130 @@ describe('DbManagerCouchDb.saveUserSession', () => {
   });
 });
 
+/**
+ * The `session_` prefix belongs to the document id and must never reach the
+ * session id callers hold. When it did, the id returned on join (bare) and the
+ * id listed for the same participant (prefixed) compared unequal, so a client
+ * excluding itself by id never matched and could act on its own session.
+ */
+describe('DbManagerCouchDb session id / document id separation', () => {
+  const RAW_ID = '38ef5a00-4491-4b4e-9f2a-1c0d9d2b7a10';
+  const DOC_ID = `session_${RAW_ID}`;
+
+  it('stores under the prefixed doc id but does not alter the caller id', async () => {
+    const { manager, nanoDb } = createTestManager();
+    const notFound: any = new Error('not_found');
+    notFound.statusCode = 404;
+    nanoDb.get.mockRejectedValueOnce(notFound);
+    nanoDb.insert.mockResolvedValueOnce({ ok: true });
+
+    await manager.saveUserSession(RAW_ID, {
+      name: 'alpha',
+      productionId: '1',
+      lineId: '1',
+      isWhip: false
+    } as any);
+
+    // Looked up and written under the prefixed document id...
+    expect(nanoDb.get).toHaveBeenCalledWith(DOC_ID);
+    expect(nanoDb.insert.mock.calls[0][0]._id).toBe(DOC_ID);
+  });
+
+  it('round-trips a raw session id unchanged through getSession', async () => {
+    const { manager, nanoDb } = createTestManager();
+    nanoDb.get.mockResolvedValueOnce({
+      _id: DOC_ID,
+      _rev: '1-abc',
+      name: 'alpha',
+      productionId: '1',
+      lineId: '1'
+    });
+
+    const session = await manager.getSession(RAW_ID);
+
+    expect(nanoDb.get).toHaveBeenCalledWith(DOC_ID);
+    // ...and read back as the bare id the caller passed in.
+    expect(session?._id).toBe(RAW_ID);
+    expect(session?._id).not.toContain('session_');
+  });
+
+  it('strips the prefix for every session from getSessionsByQuery', async () => {
+    const { manager, nanoDb } = createTestManager();
+    nanoDb.find.mockResolvedValueOnce({
+      docs: [
+        { _id: DOC_ID, name: 'alpha', pinnedVideoSessionId: undefined },
+        { _id: 'session_beta-uuid', name: 'beta' }
+      ]
+    });
+
+    const sessions = await manager.getSessionsByQuery({ lineId: '1' } as any);
+
+    expect(sessions.map((s) => s._id)).toEqual([RAW_ID, 'beta-uuid']);
+  });
+
+  it('self-exclusion by id works across join and list, the bug this prevents', async () => {
+    const { manager, nanoDb } = createTestManager();
+    nanoDb.find.mockResolvedValueOnce({
+      docs: [{ _id: DOC_ID, name: 'alpha' }]
+    });
+
+    // RAW_ID is what the join API handed this client.
+    const sessions = await manager.getSessionsByQuery({ lineId: '1' } as any);
+    const others = sessions.filter((s) => s._id !== RAW_ID);
+
+    expect(others).toHaveLength(0);
+  });
+
+  it('tolerates an already-prefixed id without double-prefixing', async () => {
+    const { manager, nanoDb } = createTestManager();
+    nanoDb.get.mockResolvedValueOnce({ _id: DOC_ID, _rev: '1-abc' });
+
+    const session = await manager.getSession(DOC_ID);
+
+    expect(nanoDb.get).toHaveBeenCalledWith(DOC_ID);
+    expect(session?._id).toBe(RAW_ID);
+  });
+
+  it('deletes by the prefixed doc id when given a raw id', async () => {
+    const { manager, nanoDb } = createTestManager();
+    nanoDb.get.mockResolvedValueOnce({ _id: DOC_ID, _rev: '2-def' });
+    nanoDb.destroy.mockResolvedValueOnce({ ok: true });
+
+    await manager.deleteUserSession(RAW_ID);
+
+    expect(nanoDb.get).toHaveBeenCalledWith(DOC_ID);
+    expect(nanoDb.destroy).toHaveBeenCalledWith(DOC_ID, '2-def');
+  });
+
+  it('updates by the prefixed doc id and keeps it on the written doc', async () => {
+    const { manager, nanoDb } = createTestManager();
+    nanoDb.get.mockResolvedValueOnce({ _id: DOC_ID, _rev: '3-ghi', name: 'a' });
+    nanoDb.insert.mockResolvedValueOnce({ ok: true });
+
+    await manager.updateSession(RAW_ID, { isActive: false } as any);
+
+    expect(nanoDb.get).toHaveBeenCalledWith(DOC_ID);
+    expect(nanoDb.insert.mock.calls[0][0]._id).toBe(DOC_ID);
+  });
+
+  it('does not let a normalized session overwrite the document id on re-save', async () => {
+    const { manager, nanoDb } = createTestManager();
+    nanoDb.get.mockResolvedValueOnce({ _id: DOC_ID, _rev: '1-abc' });
+    nanoDb.insert.mockResolvedValueOnce({ ok: true });
+
+    // A session previously read back (so its _id is bare) written out again.
+    await manager.saveUserSession(RAW_ID, {
+      _id: RAW_ID,
+      name: 'alpha',
+      productionId: '1',
+      lineId: '1',
+      isWhip: false
+    } as any);
+
+    expect(nanoDb.insert.mock.calls[0][0]._id).toBe(DOC_ID);
+  });
+});
+
 describe('DbManagerCouchDb.connect', () => {
   beforeEach(() => {
     jest.useFakeTimers();

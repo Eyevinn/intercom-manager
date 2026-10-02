@@ -3,8 +3,13 @@ import { SessionDescription } from 'sdp-transform';
 import {
   AudioSmbPayloadParameters,
   MediaDescriptionBase,
-  SfuEndpointDescription
+  SfuEndpointDescription,
+  VideoSmbPayloadType
 } from './sfu/interface';
+import {
+  NORMALIZED_VIDEO_PT_MAIN,
+  NORMALIZED_VIDEO_PT_RTX
+} from './sfu/constants';
 import { MediaStreamsInfo } from './media_streams_info';
 import { Log } from './log';
 
@@ -76,6 +81,12 @@ export class Connection {
           (element) => element.mslabel
         );
         msidSemanticToken = `${mslabels.join(' ')}`;
+      }
+      if (this.mediaStreams.video?.ssrcs.length) {
+        const videoMslabels = this.mediaStreams.video.ssrcs.map(
+          (element) => element.mslabel
+        );
+        msidSemanticToken = `${msidSemanticToken} ${videoMslabels.join(' ')}`;
       }
     }
 
@@ -164,6 +175,125 @@ export class Connection {
     return result;
   }
 
+  protected addVideoMid(offer: SessionDescription) {
+    if (!this.endpointDescription?.video) return;
+    if (!this.mediaStreams?.video) return;
+
+    const video = this.endpointDescription.video;
+
+    const rawPayloadTypes: VideoSmbPayloadType[] =
+      video['payload-types'] ??
+      (video['payload-type'] ? [video['payload-type']] : []);
+
+    if (!rawPayloadTypes.length) return;
+
+    // Prefer H264; fall back to VP8 for older SMB deployments.
+    // Restrict to a single codec to prevent Chrome from picking VP9
+    // which would cause a PT mismatch with SMB and dropped video packets.
+    const h264Raw = rawPayloadTypes.find(
+      (pt) => pt.name.toUpperCase() === 'H264'
+    );
+    const vp8Raw = rawPayloadTypes.find(
+      (pt) => pt.name.toUpperCase() === 'VP8'
+    );
+    const preferredCodec = h264Raw ?? vp8Raw;
+    if (!preferredCodec) return;
+
+    const rtxRaw = rawPayloadTypes.find(
+      (pt) => pt.name.toLowerCase() === 'rtx'
+    );
+
+    const mainPt = NORMALIZED_VIDEO_PT_MAIN;
+    const rtxPt = NORMALIZED_VIDEO_PT_RTX;
+
+    const payloadTypes: VideoSmbPayloadType[] = [
+      { ...preferredCodec, id: mainPt },
+      ...(rtxRaw
+        ? [
+            {
+              ...rtxRaw,
+              id: rtxPt,
+              parameters: { ...rtxRaw.parameters, apt: String(mainPt) }
+            }
+          ]
+        : [])
+    ];
+
+    Log().debug(
+      `[addVideoMid] smb rtcp-fbs for ${
+        preferredCodec.name
+      } pt=${mainPt} fbs=${JSON.stringify(preferredCodec['rtcp-fbs'] ?? [])}`
+    );
+
+    // Helper that builds one video m-line with the shared codec/ext block.
+    // Caller decides what ssrcs (if any) to put on it.
+    const buildVideoDescription = () => {
+      const md = this.makeMediaDescription('video');
+      md.payloads = payloadTypes.map((pt) => pt.id).join(' ');
+      md.rtp = payloadTypes.map((pt) => ({
+        payload: pt.id,
+        codec: pt.name,
+        rate: pt.clockrate
+      }));
+      md.fmtp = payloadTypes
+        .filter((pt) => pt.parameters && Object.keys(pt.parameters).length > 0)
+        .map((pt) => ({
+          payload: pt.id,
+          config: Object.entries(pt.parameters)
+            .map(([k, v]) => (v ? `${k}=${v}` : k))
+            .join(';')
+        }));
+      md.rtcpFb = payloadTypes
+        .filter((pt) => pt['rtcp-fbs']?.length)
+        .flatMap((pt) =>
+          pt['rtcp-fbs'].map((fb) => ({
+            payload: pt.id,
+            type: fb.type,
+            subtype: fb.subtype ?? ''
+          }))
+        );
+      if (video['rtp-hdrexts']?.length) {
+        md.ext = video['rtp-hdrexts'].map((ext) => ({
+          value: ext.id,
+          uri: ext.uri
+        }));
+      }
+      return md;
+    };
+
+    const videoSsrcs = this.mediaStreams.video.ssrcs;
+
+    if (videoSsrcs.length === 0) {
+      offer.media.push(buildVideoDescription());
+      return;
+    }
+
+    for (const element of videoSsrcs) {
+      const md = buildVideoDescription();
+      md.ssrcs.push({
+        id: Number(element.ssrc),
+        attribute: 'cname',
+        value: element.cname
+      });
+      md.ssrcs.push({
+        id: Number(element.ssrc),
+        attribute: 'label',
+        value: element.label
+      });
+      md.ssrcs.push({
+        id: Number(element.ssrc),
+        attribute: 'mslabel',
+        value: element.mslabel
+      });
+      md.ssrcs.push({
+        id: Number(element.ssrc),
+        attribute: 'msid',
+        value: `${element.mslabel} ${element.label}`
+      });
+      offer.media.push(md);
+    }
+  }
+
   protected addIngestMids(offer: SessionDescription) {
     if (!this.endpointDescription) {
       throw new Error('Missing endpointDescription');
@@ -236,6 +366,8 @@ export class Connection {
 
       offer.media.push(audioDescription);
     }
+
+    this.addVideoMid(offer);
   }
 
   protected addSFUMids(offer: SessionDescription) {

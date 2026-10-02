@@ -27,11 +27,13 @@ export class MockSmbProtocol implements ISmbProtocol {
     conferenceId: string,
     endpointId: string,
     audio: boolean,
-    _data: boolean,
+    video: boolean,
+    data: boolean,
     _iceControlling: boolean,
     _relayType: 'ssrc-rewrite' | 'forwarder' | 'mixed',
     _idleTimeout: number,
-    _smbKey: string
+    _smbKey: string,
+    _videoRelayType?: 'ssrc-rewrite' | 'forwarder' | 'mixed'
   ): Promise<SmbEndpoint> {
     const endpoint: SmbEndpoint = {
       'bundle-transport': {
@@ -80,18 +82,22 @@ export class MockSmbProtocol implements ISmbProtocol {
           }
         ]
       },
-      video: {
-        ssrcs: [],
-        'payload-type': {
-          id: 100,
-          name: 'VP8',
-          clockrate: 90000,
-          parameters: {},
-          'rtcp-fbs': [{ type: 'nack', subtype: '' }]
-        },
-        'rtp-hdrexts': []
-      },
-      data: _data ? { port: 5000 } : undefined
+      // Mirror real SMB: omit the video block entirely when video=false so
+      // tests for no-video paths don't get a false-positive video allocation.
+      ...(video && {
+        video: {
+          ssrcs: [],
+          'payload-type': {
+            id: 100,
+            name: 'VP8',
+            clockrate: 90000,
+            parameters: {},
+            'rtcp-fbs': [{ type: 'nack', subtype: '' }]
+          },
+          'rtp-hdrexts': []
+        }
+      }),
+      data: data ? { port: 5000 } : undefined
     };
 
     const conf = this.conferences.get(conferenceId);
@@ -179,6 +185,37 @@ export class MockSmbProtocol implements ISmbProtocol {
       );
     }
     conf.set(endpointId, endpointDescription);
+  }
+
+  async reconfigureEndpoint(
+    _smbUrl: string,
+    conferenceId: string,
+    endpointId: string,
+    endpointDescription: SmbEndpoint,
+    _smbKey: string
+  ): Promise<void> {
+    const conf = this.conferences.get(conferenceId);
+    if (!conf) {
+      throw new Error(
+        `Conference ${conferenceId} not found in MockSmbProtocol`
+      );
+    }
+    conf.set(endpointId, endpointDescription);
+  }
+
+  async requestKeyframe(
+    _smbUrl: string,
+    conferenceId: string,
+    endpointId: string,
+    endpointDescription: SmbEndpoint,
+    _smbKey: string
+  ): Promise<void> {
+    // Mirror the real client: leave the endpoint in its target (re-applied)
+    // configuration after the remove -> re-add cycle.
+    const conf = this.conferences.get(conferenceId);
+    if (conf) {
+      conf.set(endpointId, endpointDescription);
+    }
   }
 
   async getConferences(_smbUrl: string, _smbKey: string): Promise<string[]> {

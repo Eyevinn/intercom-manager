@@ -400,6 +400,7 @@ describe('production_manager', () => {
             {
               name: 'newName',
               programOutputLine: false,
+              videoEnabled: false,
               id: '2',
               smbConferenceId: ''
             }
