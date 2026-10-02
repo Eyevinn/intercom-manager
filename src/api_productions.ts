@@ -86,6 +86,16 @@ const SessionIdParams = Type.Object({
   sessionId: Type.String({ minLength: 1, maxLength: 200 })
 });
 
+const ParticipantParams = Type.Object({
+  productionId: Type.String({
+    minLength: 1,
+    maxLength: 128,
+    pattern: '^[0-9]+$'
+  }),
+  lineId: Type.String({ minLength: 1, maxLength: 200 }),
+  sessionId: Type.String({ minLength: 1, maxLength: 200 })
+});
+
 const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   fastify,
   opts,
@@ -1043,6 +1053,108 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       } catch (err) {
         Log().error(err);
         reply.code(500).send('Failed to set connection status');
+      }
+    }
+  );
+
+  fastify.post<{
+    Params: { productionId: string; lineId: string; sessionId: string };
+    Reply: string | ErrorResponse;
+  }>(
+    '/production/:productionId/line/:lineId/participants/:sessionId/disconnect',
+    {
+      schema: {
+        description:
+          'Force-disconnect a participant from a line by backend session id. ' +
+          'Expires the participant SMB endpoint, removes the session and emits ' +
+          'a users:change so the participant leaves the line for everyone.',
+        params: ParticipantParams,
+        response: {
+          200: Type.String(),
+          404: ErrorResponse,
+          500: Type.String()
+        }
+      }
+    },
+    async (request, reply) => {
+      try {
+        const { productionId, lineId, sessionId } = request.params;
+
+        let production;
+        try {
+          production = await productionManager.requireProduction(
+            parseInt(productionId, 10)
+          );
+        } catch (err) {
+          Log().warn(
+            'Trying to disconnect a participant from a production that does not exist'
+          );
+        }
+        if (!production) {
+          reply.code(404).send({
+            message: `Production with id ${productionId} not found`
+          });
+          return;
+        }
+
+        const line = productionManager.getLine(production.lines, lineId);
+        if (!line) {
+          reply.code(404).send({ message: `Line with id ${lineId} not found` });
+          return;
+        }
+
+        const session = await dbManager.getSession(sessionId);
+        if (
+          !session ||
+          session.lineId !== lineId ||
+          session.productionId !== productionId
+        ) {
+          reply.code(404).send({
+            message: `Session with id ${sessionId} not found on line ${lineId}`
+          });
+          return;
+        }
+
+        // Forcibly expire the participant's SMB endpoint. SMB exposes no REST
+        // API to inject a data-channel EndpointMessage addressed to a single
+        // endpoint, so expiring the endpoint (DELETE) is the server-authoritative
+        // teardown signal: it drops the target's ICE/DTLS transport and data
+        // channel, which closes the client's RTCPeerConnection. Best-effort, so a
+        // failure to reach SMB does not block removing the session from the line.
+        if (session.endpointId && session.smbConferenceId) {
+          try {
+            await smb.deleteEndpoint(
+              smbServerUrl,
+              session.smbConferenceId,
+              session.endpointId,
+              smbServerApiKey
+            );
+          } catch (err) {
+            Log().warn(
+              `Failed to expire SMB endpoint for session ${sessionId}`,
+              err
+            );
+          }
+        }
+
+        const removed = await productionManager.disconnectUserSession(
+          sessionId
+        );
+        if (!removed) {
+          // The session existed when we looked it up above but was already
+          // gone by the time we tried to remove it (idempotent no-op / race).
+          // The participant is no longer on the line, so report 404 rather
+          // than a 500 that would suggest the operation failed server-side.
+          reply.code(404).send({
+            message: `Session with id ${sessionId} not found on line ${lineId}`
+          });
+          return;
+        }
+
+        reply.code(200).send(`Disconnected participant ${sessionId}`);
+      } catch (err) {
+        Log().error(err);
+        reply.code(500).send('Failed to disconnect participant');
       }
     }
   );
