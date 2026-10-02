@@ -257,17 +257,25 @@ export class SmbProtocol implements ISmbProtocol {
     smbKey: string
   ): Promise<void> {
     const url = smbUrl + conferenceId + '/' + endpointId;
-    const response = await fetch(url, {
-      method: 'DELETE',
-      headers: {
-        ...(smbKey !== '' && { Authorization: `Bearer ${smbKey}` })
-      }
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10_000);
+    try {
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers: {
+          ...(smbKey !== '' && { Authorization: `Bearer ${smbKey}` })
+        },
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
 
-    if (!response.ok) {
-      throw new Error(
-        `Failed to delete endpoint ${endpointId} in conference ${conferenceId}: ${response.statusText}`
-      );
+      if (!response.ok) {
+        throw new Error(
+          `Failed to delete endpoint ${endpointId} in conference ${conferenceId}: ${response.statusText}`
+        );
+      }
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 

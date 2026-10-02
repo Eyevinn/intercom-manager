@@ -344,12 +344,24 @@ describe('SmbProtocol', () => {
 
       await smb.deleteEndpoint(smbUrl, 'conf-1', 'ep-1', smbKey);
 
-      expect(mockFetch).toHaveBeenCalledWith(smbUrl + 'conf-1/ep-1', {
-        method: 'DELETE',
-        headers: {
-          Authorization: 'Bearer test-api-key'
-        }
-      });
+      expect(mockFetch).toHaveBeenCalledWith(
+        smbUrl + 'conf-1/ep-1',
+        expect.objectContaining({
+          method: 'DELETE',
+          headers: {
+            Authorization: 'Bearer test-api-key'
+          }
+        })
+      );
+    });
+
+    it('should include abort signal with timeout', async () => {
+      mockFetch.mockResolvedValue(mockResponse(200, ''));
+
+      await smb.deleteEndpoint(smbUrl, 'conf-1', 'ep-1', smbKey);
+
+      const callArgs = mockFetch.mock.calls[0][1];
+      expect(callArgs.signal).toBeInstanceOf(AbortSignal);
     });
 
     it('should not include Authorization header when smbKey is empty', async () => {

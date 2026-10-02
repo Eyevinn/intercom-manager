@@ -1080,9 +1080,23 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       try {
         const { productionId, lineId, sessionId } = request.params;
 
-        const production = await productionManager.requireProduction(
-          parseInt(productionId, 10)
-        );
+        let production;
+        try {
+          production = await productionManager.requireProduction(
+            parseInt(productionId, 10)
+          );
+        } catch (err) {
+          Log().warn(
+            'Trying to disconnect a participant from a production that does not exist'
+          );
+        }
+        if (!production) {
+          reply.code(404).send({
+            message: `Production with id ${productionId} not found`
+          });
+          return;
+        }
+
         const line = productionManager.getLine(production.lines, lineId);
         if (!line) {
           reply.code(404).send({ message: `Line with id ${lineId} not found` });
@@ -1127,7 +1141,13 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           sessionId
         );
         if (!removed) {
-          reply.code(500).send('Failed to disconnect participant');
+          // The session existed when we looked it up above but was already
+          // gone by the time we tried to remove it (idempotent no-op / race).
+          // The participant is no longer on the line, so report 404 rather
+          // than a 500 that would suggest the operation failed server-side.
+          reply.code(404).send({
+            message: `Session with id ${sessionId} not found on line ${lineId}`
+          });
           return;
         }
 

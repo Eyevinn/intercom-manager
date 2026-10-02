@@ -200,4 +200,45 @@ describe('POST /production/:id/line/:lineId/participants/:sessionId/disconnect',
 
     expect(response.statusCode).toBe(404);
   });
+
+  it('returns 404 when the production does not exist', async () => {
+    const response = await server.inject({
+      method: 'POST',
+      url: '/api/v1/production/999/line/1/participants/session-1/disconnect'
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(mockDbManager.deleteUserSession).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 when the session belongs to a different production', async () => {
+    mockDbManager.getSession.mockResolvedValueOnce({
+      ...targetSession,
+      productionId: '2'
+    });
+
+    const response = await server.inject({
+      method: 'POST',
+      url: DISCONNECT_URL
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(mockDbManager.deleteUserSession).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 when the session was already removed (idempotent no-op)', async () => {
+    const deleteEndpointSpy = jest
+      .spyOn(smb, 'deleteEndpoint')
+      .mockResolvedValue(undefined);
+    mockDbManager.deleteUserSession.mockResolvedValueOnce(false);
+
+    const response = await server.inject({
+      method: 'POST',
+      url: DISCONNECT_URL
+    });
+
+    expect(response.statusCode).toBe(404);
+
+    deleteEndpointSpy.mockRestore();
+  });
 });
