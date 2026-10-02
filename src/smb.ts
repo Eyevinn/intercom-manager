@@ -59,6 +59,12 @@ export interface ISmbProtocol {
     endpointDescription: SmbEndpointDescription,
     smbKey: string
   ): Promise<void>;
+  deleteEndpoint(
+    smbUrl: string,
+    conferenceId: string,
+    endpointId: string,
+    smbKey: string
+  ): Promise<void>;
   getConferences(smbUrl: string, smbKey: string): Promise<string[]>;
   getConferencesWithUsers(
     smbUrl: string,
@@ -240,6 +246,27 @@ export class SmbProtocol implements ISmbProtocol {
 
       throw new Error(
         `Failed to configure endpoint ${text ? text : JSON.stringify(json)}`
+      );
+    }
+  }
+
+  async deleteEndpoint(
+    smbUrl: string,
+    conferenceId: string,
+    endpointId: string,
+    smbKey: string
+  ): Promise<void> {
+    const url = smbUrl + conferenceId + '/' + endpointId;
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        ...(smbKey !== '' && { Authorization: `Bearer ${smbKey}` })
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to delete endpoint ${endpointId} in conference ${conferenceId}: ${response.statusText}`
       );
     }
   }

@@ -336,6 +336,40 @@ describe('SmbProtocol', () => {
     });
   });
 
+  // ── deleteEndpoint ─────────────────────────────────────────────────
+
+  describe('deleteEndpoint', () => {
+    it('should DELETE the endpoint url with auth header', async () => {
+      mockFetch.mockResolvedValue(mockResponse(200, ''));
+
+      await smb.deleteEndpoint(smbUrl, 'conf-1', 'ep-1', smbKey);
+
+      expect(mockFetch).toHaveBeenCalledWith(smbUrl + 'conf-1/ep-1', {
+        method: 'DELETE',
+        headers: {
+          Authorization: 'Bearer test-api-key'
+        }
+      });
+    });
+
+    it('should not include Authorization header when smbKey is empty', async () => {
+      mockFetch.mockResolvedValue(mockResponse(200, ''));
+
+      await smb.deleteEndpoint(smbUrl, 'conf-1', 'ep-1', '');
+
+      const callArgs = mockFetch.mock.calls[0][1];
+      expect(callArgs.headers).not.toHaveProperty('Authorization');
+    });
+
+    it('should throw on non-OK response', async () => {
+      mockFetch.mockResolvedValue(mockResponse(404, 'not found'));
+
+      await expect(
+        smb.deleteEndpoint(smbUrl, 'conf-1', 'ep-1', smbKey)
+      ).rejects.toThrow('Failed to delete endpoint');
+    });
+  });
+
   // ── getConferences ─────────────────────────────────────────────────
 
   describe('getConferences', () => {

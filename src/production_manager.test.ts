@@ -658,4 +658,31 @@ describe('checkUserStatus resilience', () => {
     await pm.checkUserStatus(smb as any, 'http://smb', '');
     expect(emitSpy).toHaveBeenCalledWith('users:change');
   });
+
+  it('disconnectUserSession deletes the session and emits users:change', async () => {
+    const dbManager = jest.requireMock('./db/interface');
+    dbManager.deleteUserSession.mockResolvedValueOnce(true);
+
+    const pm = new ProductionManager(dbManager);
+    const emitSpy = jest.spyOn(pm, 'emit');
+
+    const ok = await pm.disconnectUserSession('session-1');
+
+    expect(ok).toBe(true);
+    expect(dbManager.deleteUserSession).toHaveBeenCalledWith('session-1');
+    expect(emitSpy).toHaveBeenCalledWith('users:change');
+  });
+
+  it('disconnectUserSession does not emit when nothing was deleted', async () => {
+    const dbManager = jest.requireMock('./db/interface');
+    dbManager.deleteUserSession.mockResolvedValueOnce(false);
+
+    const pm = new ProductionManager(dbManager);
+    const emitSpy = jest.spyOn(pm, 'emit');
+
+    const ok = await pm.disconnectUserSession('missing-session');
+
+    expect(ok).toBe(false);
+    expect(emitSpy).not.toHaveBeenCalledWith('users:change');
+  });
 });

@@ -494,6 +494,27 @@ export class ProductionManager extends EventEmitter {
     return undefined;
   }
 
+  /**
+   * Force-disconnect a participant: remove the session from the database and
+   * the in-memory cache, then emit `users:change` so `getUsersForLine` no
+   * longer returns the participant and long-poll listeners are notified.
+   *
+   * The session is deleted (not just marked expired) so a late heartbeat from
+   * the kicked client cannot resurrect it: `updateSession` on a missing
+   * document returns false, which makes the heartbeat route respond 410 and
+   * the client tear itself down.
+   */
+  async disconnectUserSession(sessionId: string): Promise<boolean> {
+    const ok = await this.dbManager.deleteUserSession(sessionId);
+    if (sessionId in this.userSessions) {
+      delete this.userSessions[sessionId];
+    }
+    if (ok) {
+      this.emit('users:change');
+    }
+    return ok;
+  }
+
   async getUsersForLine(
     productionId: string,
     lineId: string
