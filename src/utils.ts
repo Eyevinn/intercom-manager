@@ -92,3 +92,35 @@ export function getIceServers(): string[] {
 
   return links;
 }
+
+// Reports whether the raw ICE_SERVERS value contains at least one TURN entry
+// carrying credentials (`turn:user:pass@host`). Pure helper mirroring the
+// parsing in getIceServers() so it can be unit-tested without touching
+// process.env. Used at startup to warn when such long-lived credentials would
+// be returned in the unauthenticated WHIP/WHEP Link header (#251).
+export function turnCredentialsConfigured(iceServersRaw: string): boolean {
+  const entries = iceServersRaw
+    .split(',')
+    .map((e) => e.trim())
+    .filter(Boolean);
+
+  for (const entry of entries) {
+    if (!entry.startsWith('turn:')) {
+      continue;
+    }
+
+    const rest = entry.slice('turn:'.length);
+    const atIndex = rest.indexOf('@');
+    if (atIndex === -1) {
+      continue;
+    }
+
+    const creds = rest.slice(0, atIndex);
+    const [username, credential] = creds.split(':');
+    if (username && credential) {
+      return true;
+    }
+  }
+
+  return false;
+}
