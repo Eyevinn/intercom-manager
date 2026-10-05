@@ -2,7 +2,8 @@ import {
   isValidJwt,
   oscPlatformEnvironment,
   oscTokenServiceBaseUrl,
-  sanitizeForLog
+  sanitizeForLog,
+  turnCredentialsConfigured
 } from './utils';
 
 describe('sanitizeForLog', () => {
@@ -92,5 +93,29 @@ describe('oscTokenServiceBaseUrl', () => {
     expect(oscTokenServiceBaseUrl('stage-se')).toBe(
       'https://token.svc.stage.osaas.io'
     );
+  });
+});
+
+describe('turnCredentialsConfigured (#251)', () => {
+  it('returns true for a TURN entry carrying credentials', () => {
+    expect(
+      turnCredentialsConfigured('turn:user:pass@turn.example.com:3478')
+    ).toBe(true);
+  });
+
+  it('returns false when only stun entries are configured', () => {
+    expect(
+      turnCredentialsConfigured(
+        'stun:stun.l.google.com:19302,stuns:stun.example.com:5349'
+      )
+    ).toBe(false);
+  });
+
+  it('returns false for an empty string', () => {
+    expect(turnCredentialsConfigured('')).toBe(false);
+  });
+
+  it('returns false for a malformed turn entry missing credentials', () => {
+    expect(turnCredentialsConfigured('turn:turn.example.com:3478')).toBe(false);
   });
 });

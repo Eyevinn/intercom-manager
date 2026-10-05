@@ -9,6 +9,7 @@ import { DbManager } from './db/interface';
 import { IngestManager } from './ingest_manager';
 import { Log } from './log';
 import { ProductionManager } from './production_manager';
+import { turnCredentialsConfigured } from './utils';
 
 // SMB_ADDRESS is required (validated in validateRequiredEnv); no default is
 // provided so that a missing value is caught by startup validation rather than
@@ -44,6 +45,15 @@ if (process.env.OSC_ACCESS_TOKEN && !REAUTH_AUTH_KEY?.trim()) {
       : 'REAUTH_AUTH_KEY/WHIP_AUTH_KEY is set but empty or whitespace only, which disables auth - this is most likely a configuration error';
   Log().warn(
     `SECURITY: GET /api/v1/reauth is UNAUTHENTICATED - anyone who can reach this server can obtain a valid OSC service access token. Reason: ${reason}. Set REAUTH_AUTH_KEY to a non-empty secret to require a Bearer token.`
+  );
+}
+
+if (
+  turnCredentialsConfigured(process.env.ICE_SERVERS ?? '') &&
+  !process.env.WHIP_AUTH_KEY?.trim()
+) {
+  Log().warn(
+    'SECURITY: TURN credentials are configured in ICE_SERVERS but WHIP_AUTH_KEY is not set — these long-lived TURN credentials are returned in the WHIP/WHEP Link response header to unauthenticated callers. Set WHIP_AUTH_KEY to require a Bearer token.'
   );
 }
 
