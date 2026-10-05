@@ -6,6 +6,7 @@ import {
   NewIngest,
   Production,
   ShareLink,
+  SHARE_LINK_ID_PREFIX,
   UserSession
 } from '../models';
 import { assert } from '../utils';
@@ -652,7 +653,7 @@ export class DbManagerCouchDb implements DbManager {
 
   async addShareLink(shareLink: Omit<ShareLink, '_id'>): Promise<ShareLink> {
     await this.connect();
-    const _id = `sharelink_${uuidv4()}`;
+    const _id = `${SHARE_LINK_ID_PREFIX}${uuidv4()}`;
     const doc = { ...shareLink, _id };
     await this.withRetry(() => this.nanoDb!.insert(doc as nano.MaybeDocument));
     return { ...shareLink, _id };
@@ -660,12 +661,31 @@ export class DbManagerCouchDb implements DbManager {
 
   async getShareLink(id: string): Promise<ShareLink | undefined> {
     await this.connect();
+    // Production ids are sequential integers; without this guard a bare id such
+    // as `1` would resolve a production document and still mint a token. Only
+    // documents stored under the share-link prefix are redeemable. See #316.
+    if (!id.startsWith(SHARE_LINK_ID_PREFIX)) return undefined;
     try {
       return (await this.withRetry(() =>
         this.nanoDb!.get(id)
       )) as unknown as ShareLink;
     } catch (e: any) {
       if (e.statusCode === 404) return undefined;
+      throw e;
+    }
+  }
+
+  async deleteShareLink(id: string): Promise<boolean> {
+    await this.connect();
+    if (!id.startsWith(SHARE_LINK_ID_PREFIX)) return false;
+    try {
+      const doc = (await this.withRetry(() => this.nanoDb!.get(id))) as any;
+      const res = (await this.withRetry(() =>
+        this.nanoDb!.destroy(doc._id, doc._rev)
+      )) as any;
+      return !!res.ok;
+    } catch (e: any) {
+      if (e.statusCode === 404) return false;
       throw e;
     }
   }

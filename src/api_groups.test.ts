@@ -47,7 +47,8 @@ const mockDbManager = {
   deletePreset: jest.fn().mockResolvedValue(true),
   updatePreset: jest.fn().mockResolvedValue(mockPreset),
   addShareLink: jest.fn().mockResolvedValue({}),
-  getShareLink: jest.fn().mockResolvedValue(undefined)
+  getShareLink: jest.fn().mockResolvedValue(undefined),
+  deleteShareLink: jest.fn().mockResolvedValue(true)
 };
 
 const mockIngestManager = {

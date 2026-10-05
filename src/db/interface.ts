@@ -50,4 +50,5 @@ export interface DbManager {
   ): Promise<Preset | undefined>;
   addShareLink(shareLink: Omit<ShareLink, '_id'>): Promise<ShareLink>;
   getShareLink(id: string): Promise<ShareLink | undefined>;
+  deleteShareLink(id: string): Promise<boolean>;
 }

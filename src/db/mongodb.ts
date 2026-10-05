@@ -7,6 +7,7 @@ import {
   NewIngest,
   Production,
   ShareLink,
+  SHARE_LINK_ID_PREFIX,
   UserSession
 } from '../models';
 import { v4 as uuidv4 } from 'uuid';
@@ -322,18 +323,30 @@ export class DbManagerMongoDb implements DbManager {
 
   async addShareLink(shareLink: Omit<ShareLink, '_id'>): Promise<ShareLink> {
     const db = this.client.db();
-    const _id = uuidv4();
+    const _id = `${SHARE_LINK_ID_PREFIX}${uuidv4()}`;
     const doc = { ...shareLink, _id };
     await db.collection('shareLinks').insertOne(doc as any);
     return doc;
   }
 
   async getShareLink(id: string): Promise<ShareLink | undefined> {
+    // Mirror the CouchDB guard: only prefixed ids address share-link documents,
+    // so a bare id can never resolve an unintended document. See #316.
+    if (!id.startsWith(SHARE_LINK_ID_PREFIX)) return undefined;
     const db = this.client.db();
     const result = await db
       .collection('shareLinks')
       .findOne({ _id: id as any });
     return result ? (result as unknown as ShareLink) : undefined;
+  }
+
+  async deleteShareLink(id: string): Promise<boolean> {
+    if (!id.startsWith(SHARE_LINK_ID_PREFIX)) return false;
+    const db = this.client.db();
+    const result = await db
+      .collection('shareLinks')
+      .deleteOne({ _id: id as any });
+    return result.deletedCount === 1;
   }
 
   async updatePreset(

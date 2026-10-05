@@ -362,6 +362,12 @@ export const ShareLink = Type.Object({
 });
 export type ShareLink = Static<typeof ShareLink>;
 
+// Persisted share-link document ids carry this prefix so they are namespaced
+// away from sequential integer production ids. The redeem/revoke DB reads guard
+// on it to avoid resolving (and minting tokens for) arbitrary production
+// documents via the share endpoints. See #316.
+export const SHARE_LINK_ID_PREFIX = 'sharelink_';
+
 export const ReAuthResponse = Type.Object({
   success: Type.Boolean({
     description:
