@@ -11,6 +11,7 @@ import {
 import { IngestManager } from './ingest_manager';
 import { Log } from './log';
 import { DbManager } from './db/interface';
+import { requireApiKey } from './auth';
 
 export interface ApiIngestsOptions {
   dbManager: DbManager;
@@ -35,6 +36,7 @@ const apiIngests: FastifyPluginCallback<ApiIngestsOptions> = (
   }>(
     '/ingest',
     {
+      preHandler: requireApiKey,
       schema: {
         description:
           'Create a new Ingest. The device data will be fetched from the specified IP address.',

@@ -25,6 +25,7 @@ import {
 } from './models';
 import { ProductionManager } from './production_manager';
 import { ISmbProtocol, SmbProtocol } from './smb';
+import { requireApiKey } from './auth';
 
 export interface ApiProductionsOptions {
   smbServerBaseUrl: string;
@@ -130,6 +131,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   }>(
     '/production',
     {
+      preHandler: requireApiKey,
       schema: {
         description: 'Create a new Production.',
         body: NewProduction,
@@ -355,6 +357,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   }>(
     '/production/:productionId',
     {
+      preHandler: requireApiKey,
       schema: {
         description: 'Modify an existing Production line.',
         params: ProductionIdParams,
@@ -703,6 +706,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   }>(
     '/session',
     {
+      preHandler: requireApiKey,
       schema: {
         description:
           'Initiate connection protocol. Generates sdp offer describing remote SMB instance.',
@@ -903,6 +907,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   }>(
     '/production/:productionId',
     {
+      preHandler: requireApiKey,
       schema: {
         description: 'Deletes a Production.',
         params: ProductionIdParams,
@@ -946,6 +951,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   }>(
     '/session/:sessionId',
     {
+      preHandler: requireApiKey,
       schema: {
         description: 'Deletes a Connection from ProductionManager.',
         params: SessionIdParams,
