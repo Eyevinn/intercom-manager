@@ -44,7 +44,7 @@ async function generateReleaseNotes() {
     The release notes should be professional and suitable for a public release.`;
 
     const response = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-opus-5-5',
       max_tokens: 2000,
       messages: [{
         role: 'user',
