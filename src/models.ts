@@ -332,7 +332,17 @@ export const ShareRequest = Type.Object({
     description: 'The application path to share',
     maxLength: 500,
     pattern: '^/(?![/\\\\]).*'
-  })
+  }),
+  reusable: Type.Optional(
+    Type.Boolean({
+      description:
+        'When true, generate a reusable (non-single-use) link that stays ' +
+        'valid for recurring sessions. A fresh single-use OSC delegate token ' +
+        'is minted server-side on each access instead of being embedded once. ' +
+        'Defaults to false (single-use).',
+      default: false
+    })
+  )
 });
 export type ShareRequest = Static<typeof ShareRequest>;
 
@@ -340,6 +350,17 @@ export const ShareResponse = Type.Object({
   url: Type.String({ description: 'The share URL' })
 });
 export type ShareResponse = Static<typeof ShareResponse>;
+
+// A persisted reusable share link. The resolvable application `path` is stored
+// server-side and addressed by an opaque id; the single-use OSC delegate token
+// is minted fresh on each redemption rather than embedded in the link. See
+// #316.
+export const ShareLink = Type.Object({
+  _id: Type.String(),
+  path: Type.String(),
+  createdAt: Type.Number()
+});
+export type ShareLink = Static<typeof ShareLink>;
 
 export const ReAuthResponse = Type.Object({
   success: Type.Boolean({

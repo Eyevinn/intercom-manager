@@ -3,6 +3,15 @@ import { CoreFunctions } from './api_productions_core_functions';
 import { ConnectionQueue } from './connection_queue';
 import { UserSession } from './models';
 
+jest.mock('./log', () => ({
+  Log: () => ({
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn()
+  })
+}));
+
 jest.mock('./db/interface', () => ({
   getIngests: jest.fn().mockResolvedValue([]),
   connect: jest.fn()
@@ -44,7 +53,13 @@ const mockDbManager = {
   getPreset: jest.fn().mockResolvedValue(undefined),
   getPresets: jest.fn().mockResolvedValue([]),
   deletePreset: jest.fn().mockResolvedValue(true),
-  updatePreset: jest.fn().mockResolvedValue(undefined)
+  updatePreset: jest.fn().mockResolvedValue(undefined),
+  addShareLink: jest.fn().mockResolvedValue({
+    _id: 'sharelink_123',
+    path: '/mypath/to/share',
+    createdAt: 1700000000000
+  }),
+  getShareLink: jest.fn().mockResolvedValue(undefined)
 };
 
 const mockProductionManager = {
@@ -152,5 +167,142 @@ describe('share api', () => {
     });
     expect(response.statusCode).toBe(400);
     expect(response.json().url).toBeUndefined();
+  });
+
+  test('generates a reusable link pointing at the redemption endpoint (#316)', async () => {
+    mockDbManager.addShareLink.mockResolvedValueOnce({
+      _id: 'sharelink_abc',
+      path: '/mypath/to/share',
+      createdAt: 1700000000000
+    });
+    const server = await api({
+      title: 'my awesome service',
+      smbServerBaseUrl: 'http://localhost',
+      endpointIdleTimeout: '60',
+      publicHost: 'https://example.com',
+      dbManager: mockDbManager,
+      productionManager: mockProductionManager,
+      ingestManager: mockIngestManager,
+      coreFunctions: new CoreFunctions(
+        mockProductionManager,
+        new ConnectionQueue()
+      )
+    });
+    const response = await server.inject({
+      method: 'POST',
+      url: '/api/v1/share',
+      body: {
+        path: '/mypath/to/share',
+        reusable: true
+      }
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      url: 'https://example.com/api/v1/share/sharelink_abc'
+    });
+    expect(mockDbManager.addShareLink).toHaveBeenCalledWith(
+      expect.objectContaining({ path: '/mypath/to/share' })
+    );
+  });
+
+  test('redeeming an unknown reusable link returns 404 (#316)', async () => {
+    mockDbManager.getShareLink.mockResolvedValueOnce(undefined);
+    const server = await api({
+      title: 'my awesome service',
+      smbServerBaseUrl: 'http://localhost',
+      endpointIdleTimeout: '60',
+      publicHost: 'https://example.com',
+      dbManager: mockDbManager,
+      productionManager: mockProductionManager,
+      ingestManager: mockIngestManager,
+      coreFunctions: new CoreFunctions(
+        mockProductionManager,
+        new ConnectionQueue()
+      )
+    });
+    const response = await server.inject({
+      method: 'GET',
+      url: '/api/v1/share/sharelink_missing'
+    });
+    expect(response.statusCode).toBe(404);
+  });
+
+  test('redeeming a reusable link redirects to the shared path (#316)', async () => {
+    mockDbManager.getShareLink.mockResolvedValueOnce({
+      _id: 'sharelink_abc',
+      path: '/mypath/to/share',
+      createdAt: 1700000000000
+    });
+    const server = await api({
+      title: 'my awesome service',
+      smbServerBaseUrl: 'http://localhost',
+      endpointIdleTimeout: '60',
+      publicHost: 'https://example.com',
+      dbManager: mockDbManager,
+      productionManager: mockProductionManager,
+      ingestManager: mockIngestManager,
+      coreFunctions: new CoreFunctions(
+        mockProductionManager,
+        new ConnectionQueue()
+      )
+    });
+    const response = await server.inject({
+      method: 'GET',
+      url: '/api/v1/share/sharelink_abc'
+    });
+    expect(response.statusCode).toBe(302);
+    expect(response.headers.location).toBe(
+      'https://example.com/mypath/to/share'
+    );
+  });
+
+  test('redeeming a reusable link mints a fresh OSC token per access (#316)', async () => {
+    const originalToken = process.env.OSC_ACCESS_TOKEN;
+    const originalFetch = global.fetch;
+    process.env.OSC_ACCESS_TOKEN = 'aaa.bbb.ccc';
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ shareUrl: 'https://example.com/signed-each-time' })
+    });
+    global.fetch = fetchMock as unknown as typeof global.fetch;
+    mockDbManager.getShareLink.mockResolvedValue({
+      _id: 'sharelink_abc',
+      path: '/mypath/to/share',
+      createdAt: 1700000000000
+    });
+    try {
+      const server = await api({
+        title: 'my awesome service',
+        smbServerBaseUrl: 'http://localhost',
+        endpointIdleTimeout: '60',
+        publicHost: 'https://example.com',
+        dbManager: mockDbManager,
+        productionManager: mockProductionManager,
+        ingestManager: mockIngestManager,
+        coreFunctions: new CoreFunctions(
+          mockProductionManager,
+          new ConnectionQueue()
+        )
+      });
+      const first = await server.inject({
+        method: 'GET',
+        url: '/api/v1/share/sharelink_abc'
+      });
+      const second = await server.inject({
+        method: 'GET',
+        url: '/api/v1/share/sharelink_abc'
+      });
+      expect(first.statusCode).toBe(302);
+      expect(second.statusCode).toBe(302);
+      expect(first.headers.location).toBe(
+        'https://example.com/signed-each-time'
+      );
+      // A fresh delegate token is minted on every access, not reused.
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      process.env.OSC_ACCESS_TOKEN = originalToken;
+      global.fetch = originalFetch;
+      mockDbManager.getShareLink.mockResolvedValue(undefined);
+    }
   });
 });

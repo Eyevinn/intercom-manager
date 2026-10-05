@@ -4,6 +4,7 @@ import {
   Line,
   NewIngest,
   Production,
+  ShareLink,
   UserSession
 } from '../models';
 
@@ -47,4 +48,6 @@ export interface DbManager {
       companionUrl?: string | null;
     }
   ): Promise<Preset | undefined>;
+  addShareLink(shareLink: Omit<ShareLink, '_id'>): Promise<ShareLink>;
+  getShareLink(id: string): Promise<ShareLink | undefined>;
 }

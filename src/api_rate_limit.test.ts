@@ -75,7 +75,8 @@ const createShareServer = async () => {
   await fastify.register(rateLimit, { global: false });
   fastify.register(apiShare, {
     prefix: 'api/v1',
-    publicHost: 'https://example.com'
+    publicHost: 'https://example.com',
+    dbManager: mockDbManager
   });
   await fastify.ready();
   return fastify;

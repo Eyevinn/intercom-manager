@@ -5,6 +5,7 @@ import {
   Line,
   NewIngest,
   Production,
+  ShareLink,
   UserSession
 } from '../models';
 import { assert } from '../utils';
@@ -167,7 +168,8 @@ export class DbManagerCouchDb implements DbManager {
       if (
         row.doc._id.toLowerCase().indexOf('counter') === -1 &&
         row.doc._id.toLowerCase().indexOf('session_') === -1 &&
-        row.doc._id.toLowerCase().indexOf('preset_') === -1
+        row.doc._id.toLowerCase().indexOf('preset_') === -1 &&
+        row.doc._id.toLowerCase().indexOf('sharelink_') === -1
       )
         productions.push(row.doc);
     });
@@ -185,12 +187,13 @@ export class DbManagerCouchDb implements DbManager {
     const productions = await this.withRetry(() =>
       this.nanoDb!.list({ include_docs: false })
     );
-    // Filter out counter, session, and preset documents
+    // Filter out counter, session, preset, and share-link documents
     const filteredRows = productions.rows.filter(
       (row: any) =>
         row.id.toLowerCase().indexOf('counter') === -1 &&
         row.id.toLowerCase().indexOf('session_') === -1 &&
-        row.id.toLowerCase().indexOf('preset_') === -1
+        row.id.toLowerCase().indexOf('preset_') === -1 &&
+        row.id.toLowerCase().indexOf('sharelink_') === -1
     );
     return filteredRows.length;
   }
@@ -641,6 +644,26 @@ export class DbManagerCouchDb implements DbManager {
       }
       await this.withRetry(() => this.nanoDb!.insert(updated));
       return updated as Preset;
+    } catch (e: any) {
+      if (e.statusCode === 404) return undefined;
+      throw e;
+    }
+  }
+
+  async addShareLink(shareLink: Omit<ShareLink, '_id'>): Promise<ShareLink> {
+    await this.connect();
+    const _id = `sharelink_${uuidv4()}`;
+    const doc = { ...shareLink, _id };
+    await this.withRetry(() => this.nanoDb!.insert(doc as nano.MaybeDocument));
+    return { ...shareLink, _id };
+  }
+
+  async getShareLink(id: string): Promise<ShareLink | undefined> {
+    await this.connect();
+    try {
+      return (await this.withRetry(() =>
+        this.nanoDb!.get(id)
+      )) as unknown as ShareLink;
     } catch (e: any) {
       if (e.statusCode === 404) return undefined;
       throw e;
