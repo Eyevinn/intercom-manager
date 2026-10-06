@@ -18,6 +18,7 @@ import { DbManager } from './db/interface';
 import { IngestManager } from './ingest_manager';
 import { ProductionManager } from './production_manager';
 import { resolveCorsOrigin } from './config/cors-origin';
+import { createCsrfOriginHook } from './csrf';
 
 const HelloWorld = Type.String({
   description: 'The magical words!'
@@ -120,6 +121,13 @@ export default async (opts: ApiOptions) => {
   await api.register(fastifyRateLimit, {
     global: false // Only apply to specific routes
   });
+
+  // CSRF protection: verify the Origin/Referer header of state-mutating
+  // requests against the CSRF_TRUSTED_ORIGINS allowlist (see src/csrf.ts).
+  // Non-breaking: a no-op when CSRF_TRUSTED_ORIGINS is unset, and requests with
+  // no Origin/Referer header are always allowed through. Registered on the root
+  // instance so it applies to all API routes.
+  api.addHook('onRequest', createCsrfOriginHook());
 
   // Gate the Swagger/OpenAPI docs so the full API surface is not exposed
   // unauthenticated in production. The docs are registered when NOT running in
