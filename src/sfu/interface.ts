@@ -66,6 +66,14 @@ export interface SfuVideoStream {
   content: string;
 }
 
+export interface VideoSmbPayloadType {
+  id: number;
+  name: string;
+  clockrate: number;
+  parameters: Record<string, string>;
+  'rtcp-fbs': { type: string; subtype?: string }[];
+}
+
 export interface SfuEndpointDescription {
   'bundle-transport'?: SfuTransport;
   audio: {
@@ -73,7 +81,14 @@ export interface SfuEndpointDescription {
     'payload-type': AudioSmbPayloadType;
     'rtp-hdrexts': SfuRtpHeaderExtension[];
   };
-
+  video?: {
+    'payload-type'?: VideoSmbPayloadType;
+    'payload-types'?: VideoSmbPayloadType[];
+    'rtp-hdrexts'?: SfuRtpHeaderExtension[];
+    ssrcs?: number[];
+    streams?: SfuVideoStream[];
+    'ssrc-whitelist'?: number[];
+  };
   data?: {
     port: number;
   };

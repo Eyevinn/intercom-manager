@@ -102,6 +102,8 @@ const mockProductionManager = {
     return found;
   }),
   updateUserLastSeen: jest.fn().mockReturnValue(true),
+  updateUserEndpoint: jest.fn().mockResolvedValue(undefined),
+  updateSessionHasVideo: jest.fn().mockResolvedValue(undefined),
   deleteProductionLine: jest.fn().mockResolvedValue(undefined),
   deleteProduction: jest.fn().mockResolvedValue(true),
   hasActiveSessions: jest.fn().mockResolvedValue(false),
@@ -578,9 +580,10 @@ describe('Input Validation', () => {
         url: `/api/v1/production/${'1'.repeat(129)}`
       });
       // Rejected before the handler: Fastify caps params at maxParamLength
-      // (default 100) → 414, and the schema maxLength (128) would otherwise
-      // yield 400. Either way the oversized value never reaches the handler.
-      expect([400, 414]).toContain(response.statusCode);
+      // (default 100), so the route does not match at all → 404, and the
+      // schema maxLength (128) would otherwise yield 400. Either way the
+      // oversized value never reaches the handler.
+      expect([400, 404, 414]).toContain(response.statusCode);
     });
 
     test('POST /session rejects productionId exceeding 128 chars', async () => {
