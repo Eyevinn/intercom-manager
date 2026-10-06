@@ -56,7 +56,10 @@ const mockDbManager = {
   getPreset: jest.fn().mockResolvedValue(undefined),
   getPresets: jest.fn().mockResolvedValue([]),
   deletePreset: jest.fn().mockResolvedValue(true),
-  updatePreset: jest.fn().mockResolvedValue(undefined)
+  updatePreset: jest.fn().mockResolvedValue(undefined),
+  addShareLink: jest.fn().mockResolvedValue({}),
+  getShareLink: jest.fn().mockResolvedValue(undefined),
+  deleteShareLink: jest.fn().mockResolvedValue(true)
 };
 
 const mockIngestManager = {
@@ -179,12 +182,16 @@ const mockProductionManager = {
     .mockImplementation((sessionId: string) => sessionId === 'alive-session'),
   deleteProductionLine: jest.fn().mockResolvedValue(undefined),
   deleteProduction: jest.fn().mockResolvedValue(true),
+  hasActiveSessions: jest.fn().mockResolvedValue(false),
   removeUserSession: jest
     .fn()
     .mockImplementation((sessionId: string) => sessionId),
   emit: jest.fn(),
   createUserSession: jest.fn().mockResolvedValue(undefined),
-  getActiveUsers: jest.fn().mockResolvedValue([])
+  getActiveUsers: jest.fn().mockResolvedValue([]),
+  once: jest.fn(),
+  on: jest.fn(),
+  off: jest.fn()
 } as any;
 
 describe('Production API', () => {
@@ -467,6 +474,30 @@ describe('Production API', () => {
       });
       expect(response.statusCode).toBe(500);
     });
+    test('returns 409 and does not delete when production has active sessions', async () => {
+      mockProductionManager.hasActiveSessions.mockResolvedValueOnce(true);
+      const callsBefore =
+        mockProductionManager.deleteProduction.mock.calls.length;
+      const response = await server.inject({
+        method: 'DELETE',
+        url: '/api/v1/production/1'
+      });
+      expect(response.statusCode).toBe(409);
+      expect(mockProductionManager.deleteProduction.mock.calls.length).toBe(
+        callsBefore
+      );
+    });
+    test('deletes the production when it has no active sessions', async () => {
+      mockProductionManager.hasActiveSessions.mockResolvedValueOnce(false);
+      const response = await server.inject({
+        method: 'DELETE',
+        url: '/api/v1/production/1'
+      });
+      expect(response.statusCode).toBe(200);
+      expect(mockProductionManager.deleteProduction).toHaveBeenLastCalledWith(
+        1
+      );
+    });
   });
 
   describe('DELETE /session/:id', () => {
@@ -540,6 +571,7 @@ describe('Production API', () => {
             callback();
           }
         });
+      mockProductionManager.off = jest.fn();
       const response = await server.inject({
         method: 'POST',
         url: '/api/v1/production/1/line/1/participants'
@@ -547,6 +579,11 @@ describe('Production API', () => {
       expect(response.statusCode).toBe(200);
       const body = response.body ? JSON.parse(response.body) : [];
       expect(Array.isArray(body)).toBe(true);
+      // Cleanup must remove the 'users:change' listener on every exit path.
+      expect(mockProductionManager.off).toHaveBeenCalledWith(
+        'users:change',
+        expect.any(Function)
+      );
     });
     test('returns 500 when long poll fails due to internal error', async () => {
       const sessionsSpy = jest

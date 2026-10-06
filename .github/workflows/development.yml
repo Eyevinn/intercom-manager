@@ -25,7 +25,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
@@ -72,7 +72,7 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Checkout source code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
 
       - name: Fill in the new image ID in the Amazon ECS task definition
         id: task-def
@@ -87,7 +87,7 @@ jobs:
             MONGODB_CONNECTION_STRING=${{ secrets.DEV_MONGODB_CONNECTION_STRING }}
 
       - name: Deploy Amazon ECS task definition
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
           task-definition: ${{ steps.task-def.outputs.task-definition }}
           service: ${{ env.ECS_SERVICE }}

@@ -9,10 +9,8 @@ import {
   NewIngest
 } from './models';
 import { IngestManager } from './ingest_manager';
-import dotenv from 'dotenv';
 import { Log } from './log';
 import { DbManager } from './db/interface';
-dotenv.config();
 
 export interface ApiIngestsOptions {
   dbManager: DbManager;
@@ -135,6 +133,13 @@ const apiIngests: FastifyPluginCallback<ApiIngestsOptions> = (
     {
       schema: {
         description: 'Retrieves an ingest.',
+        params: Type.Object({
+          ingestId: Type.String({
+            minLength: 1,
+            maxLength: 128,
+            pattern: '^[0-9]+$'
+          })
+        }),
         response: {
           200: Ingest,
           500: Type.String()
@@ -175,6 +180,13 @@ const apiIngests: FastifyPluginCallback<ApiIngestsOptions> = (
       schema: {
         description:
           'Modify an existing Ingest. By changing the label, the deviceOutput or the deviceInput, the ingest is updated and the new ingest is returned.',
+        params: Type.Object({
+          ingestId: Type.String({
+            minLength: 1,
+            maxLength: 128,
+            pattern: '^[0-9]+$'
+          })
+        }),
         body: PatchIngest,
         response: {
           200: PatchIngestResponse,
@@ -247,6 +259,13 @@ const apiIngests: FastifyPluginCallback<ApiIngestsOptions> = (
     {
       schema: {
         description: 'Deletes a Ingest.',
+        params: Type.Object({
+          ingestId: Type.String({
+            minLength: 1,
+            maxLength: 128,
+            pattern: '^[0-9]+$'
+          })
+        }),
         response: {
           200: Type.String(),
           500: Type.String()

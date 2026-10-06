@@ -72,15 +72,33 @@ function sortParticipants(participants: UserResponse[]): UserResponse[] {
 // ── Param schemas for route validation ──────────────────────────────────
 
 const ProductionIdParams = Type.Object({
-  productionId: Type.String({ minLength: 1, pattern: '^[0-9]+$' })
+  productionId: Type.String({
+    minLength: 1,
+    maxLength: 128,
+    pattern: '^[0-9]+$'
+  })
 });
 
 const ProductionLineParams = Type.Object({
-  productionId: Type.String({ minLength: 1, pattern: '^[0-9]+$' }),
+  productionId: Type.String({
+    minLength: 1,
+    maxLength: 128,
+    pattern: '^[0-9]+$'
+  }),
   lineId: Type.String({ minLength: 1, maxLength: 200 })
 });
 
 const SessionIdParams = Type.Object({
+  sessionId: Type.String({ minLength: 1, maxLength: 200 })
+});
+
+const ParticipantParams = Type.Object({
+  productionId: Type.String({
+    minLength: 1,
+    maxLength: 128,
+    pattern: '^[0-9]+$'
+  }),
+  lineId: Type.String({ minLength: 1, maxLength: 200 }),
   sessionId: Type.String({ minLength: 1, maxLength: 200 })
 });
 
@@ -123,7 +141,23 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         body: NewProduction,
         response: {
           200: ProductionResponse,
-          400: ErrorResponse
+          400: ErrorResponse,
+          429: Type.Object({ error: Type.String() })
+        }
+      },
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: '1 minute',
+          hook: 'onRequest',
+          errorResponseBuilder: (_req, context) => {
+            return {
+              statusCode: 429,
+              error: 'Too Many Requests',
+              message: 'Too many requests, please try again later',
+              expiresIn: context.after
+            };
+          }
         }
       }
     },
@@ -492,7 +526,23 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
           200: LineResponse,
           400: Type.String(),
           404: ErrorResponse,
+          429: Type.Object({ error: Type.String() }),
           500: Type.String()
+        }
+      },
+      config: {
+        rateLimit: {
+          max: 90,
+          timeWindow: '1 minute',
+          hook: 'onRequest',
+          errorResponseBuilder: (_req, context) => {
+            return {
+              statusCode: 429,
+              error: 'Too Many Requests',
+              message: 'Too many requests, please try again later',
+              expiresIn: context.after
+            };
+          }
         }
       }
     },
@@ -883,7 +933,23 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         response: {
           201: SessionResponse,
           400: ErrorResponse,
+          429: Type.Object({ error: Type.String() }),
           500: Type.String()
+        }
+      },
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: '1 minute',
+          hook: 'onRequest',
+          errorResponseBuilder: (_req, context) => {
+            return {
+              statusCode: 429,
+              error: 'Too Many Requests',
+              message: 'Too many requests, please try again later',
+              expiresIn: context.after
+            };
+          }
         }
       }
     },
@@ -964,8 +1030,8 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
             .send({ sessionId, sdp: sdpOffer });
         } else {
           reply.code(400).send({
-            message: 'Could not establish a media connection',
-            stackTrace: 'Failed to generate sdp offer for endpoint'
+            message:
+              'Could not establish a media connection: failed to generate sdp offer for endpoint'
           });
           return;
         }
@@ -986,6 +1052,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         description:
           'Provide client local SDP description as request body to finalize connection protocol.',
         params: SessionIdParams,
+        body: SdpAnswer,
         response: {
           204: Type.Null(),
           400: Type.String(),
@@ -1144,6 +1211,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         response: {
           200: Type.String(),
           400: Type.String(),
+          409: Type.String(),
           500: Type.String()
         }
       }
@@ -1151,6 +1219,14 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     async (request, reply) => {
       const { productionId } = request.params;
       try {
+        if (await productionManager.hasActiveSessions(productionId)) {
+          reply
+            .code(409)
+            .send(
+              `Cannot delete production ${productionId} with active sessions`
+            );
+          return;
+        }
         if (
           !(await productionManager.deleteProduction(
             parseInt(productionId, 10)
@@ -1259,7 +1335,23 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         response: {
           200: Type.Array(UserResponse),
           400: Type.String(),
+          429: Type.Object({ error: Type.String() }),
           500: Type.String()
+        }
+      },
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: '1 minute',
+          hook: 'onRequest',
+          errorResponseBuilder: (_req, context) => {
+            return {
+              statusCode: 429,
+              error: 'Too Many Requests',
+              message: 'Too many requests, please try again later',
+              expiresIn: context.after
+            };
+          }
         }
       }
     },
@@ -1267,19 +1359,29 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       try {
         const timeoutMs = 25_000;
 
-        // Wait until either users:change fires or timeout expires
+        // Wait until users:change fires, the timeout expires, or the client
+        // disconnects. Cleanup runs once in every exit path so the listener and
+        // timer are always released and resolve is never called twice.
         await new Promise<void>((resolve) => {
-          const onChange = () => {
+          let settled = false;
+
+          const cleanup = () => {
+            if (settled) {
+              return;
+            }
+            settled = true;
             clearTimeout(timer);
+            productionManager.off('users:change', onChange);
+            request.raw.off('close', cleanup);
             resolve();
           };
 
-          const timer = setTimeout(() => {
-            productionManager.off('users:change', onChange);
-            resolve();
-          }, timeoutMs);
+          const onChange = () => cleanup();
+
+          const timer = setTimeout(cleanup, timeoutMs);
 
           productionManager.once('users:change', onChange);
+          request.raw.on('close', cleanup);
         });
 
         const { productionId, lineId } = request.params;
@@ -1308,6 +1410,108 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
     }
   );
 
+  fastify.post<{
+    Params: { productionId: string; lineId: string; sessionId: string };
+    Reply: string | ErrorResponse;
+  }>(
+    '/production/:productionId/line/:lineId/participants/:sessionId/disconnect',
+    {
+      schema: {
+        description:
+          'Force-disconnect a participant from a line by backend session id. ' +
+          'Expires the participant SMB endpoint, removes the session and emits ' +
+          'a users:change so the participant leaves the line for everyone.',
+        params: ParticipantParams,
+        response: {
+          200: Type.String(),
+          404: ErrorResponse,
+          500: Type.String()
+        }
+      }
+    },
+    async (request, reply) => {
+      try {
+        const { productionId, lineId, sessionId } = request.params;
+
+        let production;
+        try {
+          production = await productionManager.requireProduction(
+            parseInt(productionId, 10)
+          );
+        } catch (err) {
+          Log().warn(
+            'Trying to disconnect a participant from a production that does not exist'
+          );
+        }
+        if (!production) {
+          reply.code(404).send({
+            message: `Production with id ${productionId} not found`
+          });
+          return;
+        }
+
+        const line = productionManager.getLine(production.lines, lineId);
+        if (!line) {
+          reply.code(404).send({ message: `Line with id ${lineId} not found` });
+          return;
+        }
+
+        const session = await dbManager.getSession(sessionId);
+        if (
+          !session ||
+          session.lineId !== lineId ||
+          session.productionId !== productionId
+        ) {
+          reply.code(404).send({
+            message: `Session with id ${sessionId} not found on line ${lineId}`
+          });
+          return;
+        }
+
+        // Forcibly expire the participant's SMB endpoint. SMB exposes no REST
+        // API to inject a data-channel EndpointMessage addressed to a single
+        // endpoint, so expiring the endpoint (DELETE) is the server-authoritative
+        // teardown signal: it drops the target's ICE/DTLS transport and data
+        // channel, which closes the client's RTCPeerConnection. Best-effort, so a
+        // failure to reach SMB does not block removing the session from the line.
+        if (session.endpointId && session.smbConferenceId) {
+          try {
+            await smb.deleteEndpoint(
+              smbServerUrl,
+              session.smbConferenceId,
+              session.endpointId,
+              smbServerApiKey
+            );
+          } catch (err) {
+            Log().warn(
+              `Failed to expire SMB endpoint for session ${sessionId}`,
+              err
+            );
+          }
+        }
+
+        const removed = await productionManager.disconnectUserSession(
+          sessionId
+        );
+        if (!removed) {
+          // The session existed when we looked it up above but was already
+          // gone by the time we tried to remove it (idempotent no-op / race).
+          // The participant is no longer on the line, so report 404 rather
+          // than a 500 that would suggest the operation failed server-side.
+          reply.code(404).send({
+            message: `Session with id ${sessionId} not found on line ${lineId}`
+          });
+          return;
+        }
+
+        reply.code(200).send(`Disconnected participant ${sessionId}`);
+      } catch (err) {
+        Log().error(err);
+        reply.code(500).send('Failed to disconnect participant');
+      }
+    }
+  );
+
   fastify.get<{
     Params: { sessionId: string };
     Reply: string;
@@ -1320,7 +1524,23 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         response: {
           200: Type.String(),
           400: Type.String(),
-          410: Type.String()
+          410: Type.String(),
+          429: Type.Object({ error: Type.String() })
+        }
+      },
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: '1 minute',
+          hook: 'onRequest',
+          errorResponseBuilder: (_req, context) => {
+            return {
+              statusCode: 429,
+              error: 'Too Many Requests',
+              message: 'Too many requests, please try again later',
+              expiresIn: context.after
+            };
+          }
         }
       }
     },

@@ -43,6 +43,10 @@ export class ProductionManager extends EventEmitter {
 
   constructor(dbManager: DbManager) {
     super();
+    // Long-poll endpoints register a transient 'users:change' listener per
+    // request, so concurrent pollers can exceed the default maxListeners (10)
+    // and emit spurious MaxListenersExceededWarning. Disable the limit.
+    this.setMaxListeners(0);
     this.dbManager = dbManager;
     this.userSessions = {};
   }
@@ -390,6 +394,24 @@ export class ProductionManager extends EventEmitter {
   }
 
   /**
+   * Returns true if the production has any non-expired session (regular
+   * participants or WHIP endpoints). "In use" is keyed on `isExpired: false`
+   * to match `getUsersForLine`/`checkUserStatus`, which drive the participant
+   * list and the frontend's disabled delete button. A session can be flipped
+   * to `isActive: false` after the inactivity threshold while still being
+   * non-expired (a heartbeat would reactivate it); such a session must still
+   * block deletion, so `isActive` is deliberately not part of this query.
+   * Used to guard against deleting a production that is still in use.
+   */
+  async hasActiveSessions(productionId: string): Promise<boolean> {
+    const activeSessions = await this.dbManager.getSessionsByQuery({
+      productionId,
+      isExpired: false
+    });
+    return activeSessions.length > 0;
+  }
+
+  /**
    * Delete the production from the db and local cache
    */
   async deleteProduction(productionId: number): Promise<boolean> {
@@ -566,6 +588,27 @@ export class ProductionManager extends EventEmitter {
       return sessionId;
     }
     return undefined;
+  }
+
+  /**
+   * Force-disconnect a participant: remove the session from the database and
+   * the in-memory cache, then emit `users:change` so `getUsersForLine` no
+   * longer returns the participant and long-poll listeners are notified.
+   *
+   * The session is deleted (not just marked expired) so a late heartbeat from
+   * the kicked client cannot resurrect it: `updateSession` on a missing
+   * document returns false, which makes the heartbeat route respond 410 and
+   * the client tear itself down.
+   */
+  async disconnectUserSession(sessionId: string): Promise<boolean> {
+    const ok = await this.dbManager.deleteUserSession(sessionId);
+    if (sessionId in this.userSessions) {
+      delete this.userSessions[sessionId];
+    }
+    if (ok) {
+      this.emit('users:change');
+    }
+    return ok;
   }
 
   async getUsersForLine(

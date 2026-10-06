@@ -292,7 +292,7 @@ export const Conference = Type.Object({
 });
 
 export const Line = Type.Object({
-  name: Type.String(),
+  name: Type.String({ maxLength: 200 }),
   id: Type.String(),
   smbConferenceId: Type.String(),
   programOutputLine: Type.Optional(Type.Boolean()),
@@ -339,7 +339,7 @@ export const SetSessionVideoSourceResponse = Type.Object({
 
 export const Production = Type.Object({
   _id: Type.Number(),
-  name: Type.String(),
+  name: Type.String({ maxLength: 200 }),
   lines: Type.Array(Line)
 });
 
@@ -366,8 +366,12 @@ export const DetailedProductionResponse = Type.Object({
 });
 
 export const NewSession = Type.Object({
-  productionId: Type.String({ minLength: 1, pattern: '^[0-9]+$' }),
-  lineId: Type.String({ minLength: 1 }),
+  productionId: Type.String({
+    minLength: 1,
+    maxLength: 128,
+    pattern: '^[0-9]+$'
+  }),
+  lineId: Type.String({ minLength: 1, maxLength: 200 }),
   username: Type.String({ minLength: 1, maxLength: 200 })
 });
 
@@ -377,20 +381,29 @@ export const SessionResponse = Type.Object({
 });
 
 export const SdpAnswer = Type.Object({
-  sdpAnswer: Type.String()
+  sdpAnswer: Type.String({ maxLength: 65536 })
 });
 
 export const ErrorResponse = Type.Object({
-  message: Type.String(),
-  stackTrace: Type.Optional(Type.String())
+  message: Type.String()
 });
 
 export const ShareRequest = Type.Object({
   path: Type.String({
     description: 'The application path to share',
     maxLength: 500,
-    pattern: '^/'
-  })
+    pattern: '^/(?![/\\\\]).*'
+  }),
+  reusable: Type.Optional(
+    Type.Boolean({
+      description:
+        'When true, generate a reusable (non-single-use) link that stays ' +
+        'valid for recurring sessions. A fresh single-use OSC delegate token ' +
+        'is minted server-side on each access instead of being embedded once. ' +
+        'Defaults to false (single-use).',
+      default: false
+    })
+  )
 });
 export type ShareRequest = Static<typeof ShareRequest>;
 
@@ -399,14 +412,37 @@ export const ShareResponse = Type.Object({
 });
 export type ShareResponse = Static<typeof ShareResponse>;
 
+// A persisted reusable share link. The resolvable application `path` is stored
+// server-side and addressed by an opaque id; the single-use OSC delegate token
+// is minted fresh on each redemption rather than embedded in the link. See
+// #316.
+export const ShareLink = Type.Object({
+  _id: Type.String(),
+  path: Type.String(),
+  createdAt: Type.Number()
+});
+export type ShareLink = Static<typeof ShareLink>;
+
+// Persisted share-link document ids carry this prefix so they are namespaced
+// away from sequential integer production ids. The redeem/revoke DB reads guard
+// on it to avoid resolving (and minting tokens for) arbitrary production
+// documents via the share endpoints. See #316.
+export const SHARE_LINK_ID_PREFIX = 'sharelink_';
+
 export const ReAuthResponse = Type.Object({
-  token: Type.String({ description: 'The new OSC Service Access Token' })
+  success: Type.Boolean({
+    description:
+      'True when a new OSC Service Access Token was issued. The token itself is only returned as an httpOnly cookie.'
+  })
 });
 export type ReAuthResponse = Static<typeof ReAuthResponse>;
 
 // WHIP/WHEP endpoint request body schema
+// SDP offers are large multi-line blobs; 65536 matches the SdpAnswer bound and
+// leaves ample room for real offers while rejecting abusive oversized payloads.
 export const WhipWhepRequest = Type.String({
-  description: 'WebRTC SDP offer'
+  description: 'WebRTC SDP offer',
+  maxLength: 65536
 });
 
 // WHIP/WHEP endpoint response schema
@@ -414,9 +450,21 @@ export const WhipWhepResponse = Type.String({
   description: 'Created'
 });
 
+// Strict IPv4/IPv6 validation for the ingest device address. This is a security
+// boundary: the value is later used for outbound device communication (see
+// IngestManager.fetchDeviceData) so it must reject URL schemes, paths,
+// credentials, whitespace and other injection vectors that could enable SSRF.
+// `format` is not used because ajv-formats is not registered, so it would not be
+// enforced — `pattern` is a core JSON Schema keyword and is always applied.
+const IPV4_ADDRESS =
+  '(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])';
+const IPV6_ADDRESS =
+  '(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,7}:|(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|(?:[0-9a-fA-F]{1,4}:){1,5}(?::[0-9a-fA-F]{1,4}){1,2}|(?:[0-9a-fA-F]{1,4}:){1,4}(?::[0-9a-fA-F]{1,4}){1,3}|(?:[0-9a-fA-F]{1,4}:){1,3}(?::[0-9a-fA-F]{1,4}){1,4}|(?:[0-9a-fA-F]{1,4}:){1,2}(?::[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:(?::[0-9a-fA-F]{1,4}){1,6}|:(?:(?::[0-9a-fA-F]{1,4}){1,7}|:))';
+const IP_ADDRESS_PATTERN = `^(?:${IPV4_ADDRESS}|${IPV6_ADDRESS})$`;
+
 export const NewIngest = Type.Object({
-  label: Type.String(),
-  ipAddress: Type.String()
+  label: Type.String({ maxLength: 200 }),
+  ipAddress: Type.String({ maxLength: 128, pattern: IP_ADDRESS_PATTERN })
 });
 
 export const Ingest = Type.Object({
@@ -445,17 +493,17 @@ export const IngestListResponse = Type.Object({
 });
 
 export const PatchIngest = Type.Union([
-  Type.Object({ label: Type.String() }),
+  Type.Object({ label: Type.String({ maxLength: 200 }) }),
   Type.Object({
     deviceOutput: Type.Object({
-      name: Type.String(),
-      label: Type.String()
+      name: Type.String({ maxLength: 200 }),
+      label: Type.String({ maxLength: 200 })
     })
   }),
   Type.Object({
     deviceInput: Type.Object({
-      name: Type.String(),
-      label: Type.String()
+      name: Type.String({ maxLength: 200 }),
+      label: Type.String({ maxLength: 200 })
     })
   })
 ]);
@@ -463,17 +511,26 @@ export const PatchIngest = Type.Union([
 export const PatchIngestResponse = Type.Omit(Ingest, ['ipAddress']);
 
 export const PresetCall = Type.Object({
-  productionId: Type.String({ minLength: 1 }),
-  lineId: Type.String({ minLength: 1 }),
+  productionId: Type.String({ minLength: 1, maxLength: 128 }),
+  lineId: Type.String({ minLength: 1, maxLength: 128 }),
   lineUsedForProgramOutput: Type.Optional(Type.Boolean()),
   isProgramUser: Type.Optional(Type.Boolean()),
-  lineName: Type.Optional(Type.String())
+  lineName: Type.Optional(Type.String({ maxLength: 200 }))
 });
 
 export const NewPreset = Type.Object({
   name: Type.String({ minLength: 1, maxLength: 200 }),
   calls: Type.Array(PresetCall, { minItems: 1, maxItems: 20 }),
-  companionUrl: Type.Optional(Type.String())
+  // companionUrl points at the Companion module's WebSocket endpoint (ws://
+  // or wss://); http(s) is also accepted. The pattern blocks dangerous schemes
+  // like javascript:/data:/file: while the length cap bounds stored input.
+  companionUrl: Type.Optional(
+    Type.String({
+      format: 'uri',
+      pattern: '^(wss?|https?)://',
+      maxLength: 2048
+    })
+  )
 });
 
 export const Preset = Type.Object({
@@ -491,7 +548,18 @@ export const PresetListResponse = Type.Object({
 export const UpdatePreset = Type.Object({
   name: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
   calls: Type.Optional(Type.Array(PresetCall, { minItems: 0, maxItems: 20 })),
-  companionUrl: Type.Optional(Type.Union([Type.String(), Type.Null()]))
+  // Empty string is allowed and treated as removal by the PATCH handler; a
+  // non-empty value must be a ws(s)/http(s) URL (pattern) within a sane length.
+  companionUrl: Type.Optional(
+    Type.Union([
+      Type.String({
+        format: 'uri',
+        pattern: '^((wss?|https?)://.*)?$',
+        maxLength: 2048
+      }),
+      Type.Null()
+    ])
+  )
 });
 
 export type PresetCall = Static<typeof PresetCall>;

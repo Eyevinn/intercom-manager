@@ -1,18 +1,8 @@
-jest.mock('./log', () => ({
-  Log: () => ({
-    error: jest.fn(),
-    warn: jest.fn(),
-    info: jest.fn(),
-    debug: jest.fn()
-  })
-}));
-
 import rateLimit from '@fastify/rate-limit';
 import Fastify from 'fastify';
 import { CoreFunctions } from './api_productions_core_functions';
-import apiWhip from './api_whip';
+import apiWhep from './api_whep';
 import { ConnectionQueue } from './connection_queue';
-import { UserSession } from './models';
 import { Log } from './log';
 
 // A valid UUID v4 used as the generated session id in tests. Session ids are
@@ -90,10 +80,6 @@ const mockProductionManager = {
   getUser: jest.fn().mockResolvedValue(undefined),
   requireLine: jest.fn().mockResolvedValue({}),
   clearWhepSourceIfPinned: jest.fn().mockResolvedValue(undefined),
-  getReceiversPinnedToSession: jest.fn().mockResolvedValue([]),
-  updateSessionVideoPin: jest.fn().mockResolvedValue(true),
-  updateSessionHasVideo: jest.fn().mockResolvedValue(undefined),
-  setLineWhepSource: jest.fn().mockResolvedValue(undefined),
   once: jest.fn(),
   emit: jest.fn()
 } as any;
@@ -184,7 +170,7 @@ const createTestServer = async () => {
     global: false
   });
 
-  fastify.register(apiWhip, defaultOptions);
+  fastify.register(apiWhep, defaultOptions);
   await fastify.ready();
   return fastify;
 };
@@ -196,45 +182,23 @@ const createAuthServer = async () => {
     _id: MOCK_SESSION_ID
   } as any);
 
-  fastify.register(apiWhip, { ...defaultOptions, whipAuthKey: 'secret-123' });
+  fastify.register(apiWhep, { ...defaultOptions, whipAuthKey: 'secret-123' });
   await fastify.ready();
   return fastify;
 };
 
-describe('apiWhip', () => {
+describe('apiWhep', () => {
   afterEach(() => {
     jest.clearAllMocks();
   });
 
-  /**
-   * WHIP ingest uses 'ssrc-rewrite' for video, like every other endpoint in the
-   * system. It used 'forwarder' historically, on a rationale measured for WHEP
-   * consumers that never applied to a publisher.
-   */
-  describe('video relay type', () => {
-    const videoRelayArg = () =>
-      (coreFunctions.createEndpoint as jest.Mock).mock.calls[0][11];
-
-    it("requests 'ssrc-rewrite' video relay for a WHIP publisher", async () => {
-      const fastify = await createTestServer();
-      await fastify.inject({
-        method: 'POST',
-        url: '/whip/123/456/testuser',
-        headers: { 'content-type': 'application/sdp' },
-        payload:
-          'v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\nm=audio 0 RTP/AVP 0\r\na=mid:0\r\n'
-      });
-      expect(videoRelayArg()).toBe('ssrc-rewrite');
-    });
-  });
-
-  describe('POST /whip/:productionId/:lineId/:username', () => {
+  describe('POST /whep/:productionId/:lineId/:username', () => {
     it('should return 201 with SDP answer and proper headers', async () => {
       const fastify = await createTestServer();
 
       const response = await fastify.inject({
         method: 'POST',
-        url: '/whip/123/456/testuser',
+        url: '/whep/123/456/testuser',
         headers: {
           'content-type': 'application/sdp'
         },
@@ -245,7 +209,7 @@ describe('apiWhip', () => {
       expect(response.statusCode).toBe(201);
       expect(response.headers['content-type']).toBe('application/sdp');
       expect(response.headers['location']).toContain(
-        `/whip/123/456/${MOCK_SESSION_ID}`
+        `/whep/123/456/${MOCK_SESSION_ID}`
       );
       expect(response.payload).toContain('v=0');
     });
@@ -259,7 +223,7 @@ describe('apiWhip', () => {
 
       const response = await fastify.inject({
         method: 'POST',
-        url: '/whip/123/456/testuser',
+        url: '/whep/123/456/testuser',
         headers: {
           'content-type': 'application/sdp'
         },
@@ -281,7 +245,7 @@ describe('apiWhip', () => {
 
       const response = await fastify.inject({
         method: 'POST',
-        url: '/whip/123/456/testuser',
+        url: '/whep/123/456/testuser',
         headers: {
           'content-type': 'application/json'
         },
@@ -302,7 +266,7 @@ describe('apiWhip', () => {
 
         const response = await fastify.inject({
           method: 'POST',
-          url: '/whip/123/456/' + encodeURIComponent(payload),
+          url: '/whep/123/456/' + encodeURIComponent(payload),
           headers: {
             'content-type': 'application/sdp'
           },
@@ -319,7 +283,7 @@ describe('apiWhip', () => {
 
       const response = await fastify.inject({
         method: 'POST',
-        url: '/whip/123/456/' + encodeURIComponent('Ada B. Lovelace-1_2'),
+        url: '/whep/123/456/' + encodeURIComponent('Ada B. Lovelace-1_2'),
         headers: {
           'content-type': 'application/sdp'
         },
@@ -335,7 +299,7 @@ describe('apiWhip', () => {
 
       const response = await fastify.inject({
         method: 'POST',
-        url: '/whip/abc/456/testuser',
+        url: '/whep/abc/456/testuser',
         headers: {
           'content-type': 'application/sdp'
         },
@@ -353,7 +317,7 @@ describe('apiWhip', () => {
 
       const response = await fastify.inject({
         method: 'POST',
-        url: `/whip/${'1'.repeat(201)}/456/testuser`,
+        url: `/whep/${'1'.repeat(201)}/456/testuser`,
         headers: {
           'content-type': 'application/sdp'
         },
@@ -370,7 +334,7 @@ describe('apiWhip', () => {
       for (let i = 0; i < 10; i++) {
         await fastify.inject({
           method: 'POST',
-          url: '/whip/123/456/testuser',
+          url: '/whep/123/456/testuser',
           headers: {
             'content-type': 'application/sdp'
           },
@@ -381,7 +345,7 @@ describe('apiWhip', () => {
       // The 11th request should exceed the rate limit
       const response = await fastify.inject({
         method: 'POST',
-        url: '/whip/123/456/testuser',
+        url: '/whep/123/456/testuser',
         headers: {
           'content-type': 'application/sdp'
         },
@@ -397,24 +361,24 @@ describe('apiWhip', () => {
     });
   });
 
-  describe('POST /whip/:productionId/:lineId/:username (WHIP authentication)', () => {
+  describe('POST /whep/:productionId/:lineId/:username (WHEP authentication)', () => {
     it('should return 401 when auth enabled and authorization header missing', async () => {
       const fastify = await createAuthServer();
       const res = await fastify.inject({
         method: 'POST',
-        url: '/whip/123/456/testuser',
+        url: '/whep/123/456/testuser',
         headers: { 'content-type': 'application/sdp' },
         payload: 'v=0\r\n'
       });
       expect(res.statusCode).toBe(401);
-      expect(res.headers['www-authenticate']).toMatch(/Bearer.*realm="whip"/i);
+      expect(res.headers['www-authenticate']).toMatch(/Bearer.*realm="whep"/i);
     });
 
     it('should log a warning (without the token) on auth failure for abuse detection', async () => {
       const fastify = await createAuthServer();
       const res = await fastify.inject({
         method: 'POST',
-        url: '/whip/123/456/testuser',
+        url: '/whep/123/456/testuser',
         headers: {
           'content-type': 'application/sdp',
           authorization: 'Bearer super-secret-token'
@@ -424,7 +388,7 @@ describe('apiWhip', () => {
       });
       expect(res.statusCode).toBe(401);
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringMatching(/WHIP authentication failed/i)
+        expect.stringMatching(/WHEP authentication failed/i)
       );
       // The token value must never be logged.
       for (const call of mockLogger.warn.mock.calls) {
@@ -440,7 +404,7 @@ describe('apiWhip', () => {
       const fastify = await createAuthServer();
       const res = await fastify.inject({
         method: 'POST',
-        url: '/whip/123/456/testuser',
+        url: '/whep/123/456/testuser',
         headers: {
           'content-type': 'application/sdp',
           authorization: 'Bearer wrong'
@@ -455,7 +419,7 @@ describe('apiWhip', () => {
       const fastify = await createAuthServer();
       const res = await fastify.inject({
         method: 'POST',
-        url: '/whip/123/456/testuser',
+        url: '/whep/123/456/testuser',
         headers: {
           'content-type': 'application/sdp',
           authorization: 'Bearer secret-123'
@@ -467,12 +431,12 @@ describe('apiWhip', () => {
     });
   });
 
-  describe('DELETE /whip/:productionId/:lineId/:sessionId', () => {
-    it('should return 401 when trying to delete WHIP session when it is not active', async () => {
+  describe('DELETE /whep/:productionId/:lineId/:sessionId', () => {
+    it('should return 401 when trying to delete WHEP session when it is not active', async () => {
       const fastify = await createAuthServer();
       const res = await fastify.inject({
         method: 'DELETE',
-        url: `/whip/123/456/${MOCK_SESSION_ID}`
+        url: `/whep/123/456/${MOCK_SESSION_ID}`
       });
       expect(res.statusCode).toBe(401);
     });
@@ -481,7 +445,7 @@ describe('apiWhip', () => {
       const fastify = await createAuthServer();
       const res = await fastify.inject({
         method: 'DELETE',
-        url: `/whip/123/456/${MOCK_SESSION_ID}`,
+        url: `/whep/123/456/${MOCK_SESSION_ID}`,
         headers: { authorization: 'Bearer secret-123' }
       });
       expect(res.statusCode).toBe(200);
@@ -496,7 +460,7 @@ describe('apiWhip', () => {
 
       const response = await fastify.inject({
         method: 'DELETE',
-        url: `/whip/123/456/${MOCK_SESSION_ID}`
+        url: `/whep/123/456/${MOCK_SESSION_ID}`
       });
 
       expect(response.statusCode).toBe(200);
@@ -509,11 +473,11 @@ describe('apiWhip', () => {
 
       const response = await fastify.inject({
         method: 'DELETE',
-        url: '/whip/123/456/00000000-0000-4000-8000-000000000000'
+        url: '/whep/123/456/00000000-0000-4000-8000-000000000000'
       });
 
       expect(response.statusCode).toBe(404);
-      expect(response.json()).toEqual({ error: 'WHIP session not found' });
+      expect(response.json()).toEqual({ error: 'WHEP session not found' });
     });
 
     it.each([
@@ -530,7 +494,7 @@ describe('apiWhip', () => {
 
         const response = await fastify.inject({
           method: 'DELETE',
-          url: '/whip/123/456/' + encodeURIComponent(sessionId)
+          url: '/whep/123/456/' + encodeURIComponent(sessionId)
         });
 
         expect(response.statusCode).toBe(400);
@@ -539,13 +503,13 @@ describe('apiWhip', () => {
     );
   });
 
-  describe('OPTIONS /whip/:productionId/:lineId', () => {
+  describe('OPTIONS /whep/:productionId/:lineId', () => {
     it('should return 200 for valid line and production', async () => {
       const fastify = await createTestServer();
 
       const response = await fastify.inject({
         method: 'OPTIONS',
-        url: '/whip/123/line1'
+        url: '/whep/123/line1'
       });
 
       expect(response.statusCode).toBe(200);
@@ -561,7 +525,7 @@ describe('apiWhip', () => {
 
       const response = await fastify.inject({
         method: 'OPTIONS',
-        url: '/whip/123/line1'
+        url: '/whep/123/line1'
       });
 
       expect(response.statusCode).toBe(404);
@@ -573,7 +537,7 @@ describe('apiWhip', () => {
 
       const response = await fastify.inject({
         method: 'OPTIONS',
-        url: '/whip/invalid/line1'
+        url: '/whep/invalid/line1'
       });
 
       expect(response.statusCode).toBe(400);
@@ -581,13 +545,13 @@ describe('apiWhip', () => {
     });
   });
 
-  describe('PATCH /whip/:productionId/:lineId/:sessionId', () => {
+  describe('PATCH /whep/:productionId/:lineId/:sessionId', () => {
     it('should return 405 method not allowed for valid params', async () => {
       const fastify = await createTestServer();
 
       const response = await fastify.inject({
         method: 'PATCH',
-        url: `/whip/123/456/${MOCK_SESSION_ID}`,
+        url: `/whep/123/456/${MOCK_SESSION_ID}`,
         headers: { 'content-type': 'application/trickle-ice-sdpfrag' },
         payload: 'a=candidate:1 1 UDP 12345 192.168.1.2 54321 typ host'
       });
@@ -596,32 +560,29 @@ describe('apiWhip', () => {
       expect(response.payload).toBe('Method not allowed');
     });
 
-    it('should return 400 when productionId param is empty string', async () => {
+    it('should return 405 for single-char params (minLength:1 boundary)', async () => {
       const fastify = await createTestServer();
 
-      // Route will not match an empty segment — use a single-char string to stay
-      // at minimum length boundary and verify schema rejects a zero-length value
-      // by patching the URL with an explicitly empty segment (Fastify resolves to
-      // a 404 for empty path segments, so instead test a one-char boundary check
-      // by verifying valid one-char params still reach the handler).
       const response = await fastify.inject({
         method: 'PATCH',
-        url: '/whip/p/l/s',
+        url: '/whep/p/l/s',
         headers: { 'content-type': 'application/trickle-ice-sdpfrag' },
         payload: 'a=candidate:1 1 UDP 12345 192.168.1.2 54321 typ host'
       });
 
-      // Single-char params satisfy minLength:1 — handler returns 405
+      // The PATCH stub keeps the permissive minLength:1/maxLength:200 schema —
+      // it is not constrained to numeric ids or a UUID sessionId like the live
+      // POST/DELETE routes, so single-char params validate and reach the 405.
       expect(response.statusCode).toBe(405);
     });
 
-    it('should return 400 when a param exceeds maxLength of 200', async () => {
+    it('should return 400 when productionId param exceeds maxLength of 200', async () => {
       const fastify = await createTestServer();
       const longParam = 'a'.repeat(201);
 
       const response = await fastify.inject({
         method: 'PATCH',
-        url: `/whip/${longParam}/456/${MOCK_SESSION_ID}`,
+        url: `/whep/${longParam}/456/${MOCK_SESSION_ID}`,
         headers: { 'content-type': 'application/trickle-ice-sdpfrag' },
         payload: 'a=candidate:1 1 UDP 12345 192.168.1.2 54321 typ host'
       });
@@ -635,7 +596,7 @@ describe('apiWhip', () => {
 
       const response = await fastify.inject({
         method: 'PATCH',
-        url: `/whip/123/${longParam}/${MOCK_SESSION_ID}`,
+        url: `/whep/123/${longParam}/${MOCK_SESSION_ID}`,
         headers: { 'content-type': 'application/trickle-ice-sdpfrag' },
         payload: 'a=candidate:1 1 UDP 12345 192.168.1.2 54321 typ host'
       });
@@ -649,252 +610,12 @@ describe('apiWhip', () => {
 
       const response = await fastify.inject({
         method: 'PATCH',
-        url: `/whip/123/456/${longParam}`,
+        url: `/whep/123/456/${longParam}`,
         headers: { 'content-type': 'application/trickle-ice-sdpfrag' },
         payload: 'a=candidate:1 1 UDP 12345 192.168.1.2 54321 typ host'
       });
 
       expect(response.statusCode).toBe(400);
     });
-  });
-});
-
-/**
- * hasVideo advertises a session as a pin source, so it must mean "has sending
- * video SSRCs persisted", not "the offer had a video m-line".
- */
-describe('apiWhip hasVideo', () => {
-  const sdp = (lines: string[]) =>
-    ['v=0', 'o=- 0 0 IN IP4 127.0.0.1', ...lines].join('\r\n') + '\r\n';
-
-  const AUDIO = ['m=audio 9 RTP/AVP 111', 'a=mid:0'];
-
-  const post = async (payload: string) => {
-    const fastify = await createTestServer();
-    return fastify.inject({
-      method: 'POST',
-      url: '/whip/123/456/testuser',
-      headers: { 'content-type': 'application/sdp' },
-      payload
-    });
-  };
-
-  const hasVideoCalls = () =>
-    (mockProductionManager.updateSessionHasVideo as jest.Mock).mock.calls;
-  const storedEndpoint = () =>
-    (mockProductionManager.updateUserEndpoint as jest.Mock).mock.calls[0]?.[2];
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-    // A fresh endpoint per call: the shared mock otherwise hands every test
-    // the same object, so SSRCs stamped by one test leak into the next.
-    (coreFunctions.createEndpoint as jest.Mock).mockImplementation(
-      async () => ({
-        'bundle-transport': {
-          'rtcp-mux': true,
-          ice: { ufrag: 'test-ufrag', pwd: 'test-pwd', candidates: [] },
-          dtls: { fingerprint: 'sha-256 FAKEFINGERPRINT', setup: 'actpass' }
-        }
-      })
-    );
-    // Echo the offer's mids: the route 406s when a mid is missing from the
-    // answer, and the shared mock answers audio-only.
-    (coreFunctions.createWhipWhepAnswer as jest.Mock).mockImplementation(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      async (offer: any) =>
-        [
-          'v=0',
-          'o=- 0 0 IN IP4 127.0.0.1',
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ...offer.media.map(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (m: any) => `m=${m.type} 9 RTP/AVP 96\r\na=mid:${m.mid}`
-          )
-        ].join('\r\n') + '\r\n'
-    );
-  });
-
-  it('advertises a publisher whose offer carries an FID group', async () => {
-    await post(
-      sdp([
-        ...AUDIO,
-        'm=video 9 RTP/AVP 96',
-        'a=mid:1',
-        'a=ssrc-group:FID 111111 222222',
-        'a=ssrc:111111 cname:probe',
-        'a=ssrc:222222 cname:probe'
-      ])
-    );
-
-    expect(hasVideoCalls()).toEqual([[MOCK_SESSION_ID, true]]);
-    // Both main and RTX: without the RTX SSRC SMB drops retransmissions.
-    expect(storedEndpoint()?.video?.ssrcs).toEqual([111111, 222222]);
-  });
-
-  it('advertises a publisher offering a bare a=ssrc with no FID group', async () => {
-    await post(
-      sdp([
-        ...AUDIO,
-        'm=video 9 RTP/AVP 96',
-        'a=mid:1',
-        'a=ssrc:333333 cname:probe'
-      ])
-    );
-
-    expect(hasVideoCalls()).toEqual([[MOCK_SESSION_ID, true]]);
-    expect(storedEndpoint()?.video?.ssrcs).toEqual([333333]);
-  });
-
-  it('does NOT advertise a video m-line whose SSRCs cannot be parsed', async () => {
-    await post(sdp([...AUDIO, 'm=video 9 RTP/AVP 96', 'a=mid:1']));
-
-    expect(hasVideoCalls()).toEqual([]);
-    expect(storedEndpoint()?.video?.ssrcs).toBeUndefined();
-  });
-
-  it('does NOT advertise an audio-only publisher', async () => {
-    await post(sdp(AUDIO));
-
-    expect(hasVideoCalls()).toEqual([]);
-  });
-});
-
-/**
- * A WHIP publisher leaving is a publisher-removal path exactly like the app
- * session DELETE. Receivers pinned to it carry its SSRCs in their endpoint
- * `ssrc-whitelist`; if that whitelist survives the publisher, SMB forwards
- * nothing and the receiver's tile freezes on the last decoded frame.
- *
- * The WHIP path is reconciled as of #341; these are the regression tests
- * for it, which that change did not carry.
- */
-describe('DELETE /whip/:productionId/:lineId/:sessionId — pin reconciliation', () => {
-  const RECEIVER_ENDPOINT = 'receiver-endpoint-1';
-  const PUBLISHER_SSRCS = [111111, 222222];
-
-  type Reconfigure = {
-    conferenceId: string;
-    endpointId: string;
-    ssrcWhitelist: number[] | undefined;
-  };
-  let reconfigures: Reconfigure[];
-  let mockSmb: any;
-
-  const makeReceiver = (pinnedTo: string) => ({
-    _id: 'receiver-1',
-    productionId: '1',
-    lineId: 'line1',
-    endpointId: RECEIVER_ENDPOINT,
-    pinnedVideoSessionId: pinnedTo,
-    sessionDescription: {
-      'bundle-transport': {},
-      video: {
-        ssrcs: [999999],
-        'ssrc-whitelist': PUBLISHER_SSRCS,
-        'payload-type': {},
-        'rtp-hdrexts': []
-      }
-    }
-  });
-
-  const createServer = async () => {
-    const fastify = Fastify();
-    fastify.register(apiWhip, { ...defaultOptions, smb: mockSmb });
-    await fastify.ready();
-    return fastify;
-  };
-
-  beforeEach(() => {
-    // This describe sits outside `describe('apiWhip')`, so it does not inherit
-    // that block's afterEach(clearAllMocks) — clear here or call counts leak
-    // between these tests.
-    jest.clearAllMocks();
-    reconfigures = [];
-    mockSmb = {
-      reconfigureEndpoint: jest
-        .fn()
-        .mockImplementation(
-          async (
-            _url: string,
-            conferenceId: string,
-            endpointId: string,
-            desc: any
-          ) => {
-            reconfigures.push({
-              conferenceId,
-              endpointId,
-              ssrcWhitelist: desc?.video?.['ssrc-whitelist']
-            });
-          }
-        )
-    };
-    mockProductionManager.getProduction.mockResolvedValue({
-      _id: 1,
-      lines: [{ id: 'line1', smbConferenceId: 'smb-conf-1' }]
-    });
-  });
-
-  it('strips the ssrc-whitelist from receivers pinned to the leaving publisher', async () => {
-    mockProductionManager.getReceiversPinnedToSession.mockResolvedValueOnce([
-      makeReceiver(MOCK_SESSION_ID)
-    ]);
-    mockDbManager.getSession.mockResolvedValueOnce({ _id: MOCK_SESSION_ID });
-
-    const fastify = await createServer();
-    const res = await fastify.inject({
-      method: 'DELETE',
-      url: `/whip/123/456/${MOCK_SESSION_ID}`
-    });
-
-    expect(res.statusCode).toBe(200);
-
-    // The key must be deleted, not emptied: an empty-but-present whitelist
-    // tells SMB to forward nothing at all.
-    expect(reconfigures).toHaveLength(1);
-    expect(reconfigures[0].endpointId).toBe(RECEIVER_ENDPOINT);
-    expect(reconfigures[0].conferenceId).toBe('smb-conf-1');
-    expect(reconfigures[0].ssrcWhitelist).toBeUndefined();
-
-    expect(mockProductionManager.updateSessionVideoPin).toHaveBeenCalledWith(
-      'receiver-1',
-      expect.anything(),
-      null
-    );
-  });
-
-  it('does not reconfigure anything when nobody is pinned to the publisher', async () => {
-    mockProductionManager.getReceiversPinnedToSession.mockResolvedValueOnce([]);
-    mockDbManager.getSession.mockResolvedValueOnce({ _id: MOCK_SESSION_ID });
-
-    const fastify = await createServer();
-    const res = await fastify.inject({
-      method: 'DELETE',
-      url: `/whip/123/456/${MOCK_SESSION_ID}`
-    });
-
-    expect(res.statusCode).toBe(200);
-    expect(reconfigures).toHaveLength(0);
-    expect(mockProductionManager.updateSessionVideoPin).not.toHaveBeenCalled();
-  });
-
-  it('still deletes the session when the bridge rejects the reconfigure', async () => {
-    // Reconciliation is best-effort: a wedged bridge must not leave the
-    // publisher's session undeletable.
-    mockProductionManager.getReceiversPinnedToSession.mockResolvedValueOnce([
-      makeReceiver(MOCK_SESSION_ID)
-    ]);
-    mockSmb.reconfigureEndpoint.mockRejectedValueOnce(new Error('smb down'));
-    mockDbManager.getSession.mockResolvedValueOnce({ _id: MOCK_SESSION_ID });
-
-    const fastify = await createServer();
-    const res = await fastify.inject({
-      method: 'DELETE',
-      url: `/whip/123/456/${MOCK_SESSION_ID}`
-    });
-
-    expect(res.statusCode).toBe(200);
-    expect(mockDbManager.deleteUserSession).toHaveBeenCalledWith(
-      MOCK_SESSION_ID
-    );
   });
 });

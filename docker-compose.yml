@@ -1,0 +1,85 @@
+# Example docker-compose for running Open Intercom on a single host:
+#
+#   - manager   Open Intercom backend (this repo)
+#   - frontend  Open Intercom web UI (Eyevinn/intercom-frontend)
+#   - sfu       Symphony Media Bridge WebRTC SFU (Eyevinn/docker-wrtc-sfu)
+#   - mongo     MongoDB used by the manager for persistence
+#
+# Quick start:
+#   docker compose up -d
+#   open http://localhost:3000
+#
+# This is a self-contained example for local evaluation. For production, put a
+# TLS-terminating reverse proxy in front of the manager/frontend and read the
+# per-service notes below (media ports, SFU networking, secrets).
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  sfu:
+    # Symphony Media Bridge SFU. See https://github.com/Eyevinn/docker-wrtc-sfu
+    image: eyevinntechnology/wrtc-sfu:latest
+    restart: unless-stopped
+    cap_add:
+      - SYS_NICE
+    ulimits:
+      rtprio: 99
+    environment:
+      HTTP_PORT: "8180"
+      UDP_PORT: "10000"
+      # Must match the manager's SMB_APIKEY below.
+      API_KEY: "${SMB_APIKEY:-eyevinn}"
+    ports:
+      - "8180:8180"       # SMB REST API (the manager talks to this)
+      - "10000:10000/udp" # RTP media
+    # NOTE: For real deployments the SFU usually needs the host network so RTP
+    # can reach clients without NAT translation. To do that, drop the `ports`
+    # block above and set `network_mode: "host"`, then point the manager at
+    # SMB_ADDRESS=http://<host-ip>:8180.
+
+  manager:
+    image: eyevinntechnology/intercom-manager:latest
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+      sfu:
+        condition: service_started
+    environment:
+      PORT: "8000"
+      SMB_ADDRESS: "http://sfu:8180"
+      SMB_APIKEY: "${SMB_APIKEY:-eyevinn}"
+      DB_CONNECTION_STRING: "mongodb://mongo:27017/intercom-manager"
+      # Public base URL the browser uses to reach the manager.
+      PUBLIC_HOST: "http://localhost:8000"
+      # Allowed browser origins for the REST API (comma-separated). Must include
+      # the URL the frontend is served from.
+      CORS_ORIGIN: "http://localhost:3000"
+    ports:
+      - "8000:8000"
+
+  frontend:
+    image: eyevinntechnology/intercom-frontend:latest
+    restart: unless-stopped
+    depends_on:
+      - manager
+    environment:
+      # Port nginx listens on inside the container (and published below).
+      PORT: "3000"
+      # Backend URL baked into the web build at container start. Must be the URL
+      # the browser can reach the manager on, not the compose service name.
+      MANAGER_URL: "http://localhost:8000/"
+    ports:
+      - "3000:3000"
+
+volumes:
+  mongo-data:

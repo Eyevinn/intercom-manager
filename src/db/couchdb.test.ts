@@ -581,6 +581,62 @@ describe('DbManagerCouchDb session id / document id separation', () => {
   });
 });
 
+describe('DbManagerCouchDb share links', () => {
+  it('getShareLink returns undefined for a non-prefixed (bare integer) id', async () => {
+    const { manager, nanoDb } = createTestManager();
+    // A bare production id must never resolve a document via the share path.
+    const result = await manager.getShareLink('1');
+    expect(result).toBeUndefined();
+    expect(nanoDb.get).not.toHaveBeenCalled();
+  });
+
+  it('getShareLink fetches the doc for a prefixed id', async () => {
+    const { manager, nanoDb } = createTestManager();
+    nanoDb.get.mockResolvedValueOnce({
+      _id: 'sharelink_abc',
+      path: '/x',
+      createdAt: 123
+    });
+    const result = await manager.getShareLink('sharelink_abc');
+    expect(result).toEqual({
+      _id: 'sharelink_abc',
+      path: '/x',
+      createdAt: 123
+    });
+    expect(nanoDb.get).toHaveBeenCalledWith('sharelink_abc');
+  });
+
+  it('deleteShareLink returns false for a non-prefixed id without touching the db', async () => {
+    const { manager, nanoDb } = createTestManager();
+    const result = await manager.deleteShareLink('1');
+    expect(result).toBe(false);
+    expect(nanoDb.get).not.toHaveBeenCalled();
+    expect(nanoDb.destroy).not.toHaveBeenCalled();
+  });
+
+  it('deleteShareLink destroys a prefixed doc', async () => {
+    const { manager, nanoDb } = createTestManager();
+    nanoDb.get.mockResolvedValueOnce({ _id: 'sharelink_abc', _rev: '1-abc' });
+    nanoDb.destroy.mockResolvedValueOnce({ ok: true });
+    const result = await manager.deleteShareLink('sharelink_abc');
+    expect(result).toBe(true);
+    expect(nanoDb.destroy).toHaveBeenCalledWith('sharelink_abc', '1-abc');
+  });
+
+  it('addShareLink stores a prefixed id', async () => {
+    const { manager, nanoDb } = createTestManager();
+    nanoDb.insert.mockResolvedValueOnce({ ok: true });
+    const result = await manager.addShareLink({
+      path: '/x',
+      createdAt: 123
+    });
+    expect(result._id.startsWith('sharelink_')).toBe(true);
+    expect(nanoDb.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ path: '/x', createdAt: 123 })
+    );
+  });
+});
+
 describe('DbManagerCouchDb.connect', () => {
   beforeEach(() => {
     jest.useFakeTimers();

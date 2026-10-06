@@ -98,6 +98,12 @@ export interface ISmbProtocol {
     endpointDescription: SmbEndpointDescription,
     smbKey: string
   ): Promise<void>;
+  deleteEndpoint(
+    smbUrl: string,
+    conferenceId: string,
+    endpointId: string,
+    smbKey: string
+  ): Promise<void>;
   getConferences(smbUrl: string, smbKey: string): Promise<string[]>;
   getConferencesWithUsers(
     smbUrl: string,
@@ -355,6 +361,35 @@ export class SmbProtocol implements ISmbProtocol {
       endpointDescription,
       smbKey
     );
+  }
+
+  async deleteEndpoint(
+    smbUrl: string,
+    conferenceId: string,
+    endpointId: string,
+    smbKey: string
+  ): Promise<void> {
+    const url = smbUrl + conferenceId + '/' + endpointId;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10_000);
+    try {
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers: {
+          ...(smbKey !== '' && { Authorization: `Bearer ${smbKey}` })
+        },
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to delete endpoint ${endpointId} in conference ${conferenceId}: ${response.statusText}`
+        );
+      }
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 
   async getConferences(smbUrl: string, smbKey: string): Promise<string[]> {

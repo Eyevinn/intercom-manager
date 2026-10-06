@@ -218,6 +218,21 @@ export class MockSmbProtocol implements ISmbProtocol {
     }
   }
 
+  async deleteEndpoint(
+    _smbUrl: string,
+    conferenceId: string,
+    endpointId: string,
+    _smbKey: string
+  ): Promise<void> {
+    const conf = this.conferences.get(conferenceId);
+    if (!conf) {
+      throw new Error(
+        `Conference ${conferenceId} not found in MockSmbProtocol`
+      );
+    }
+    conf.delete(endpointId);
+  }
+
   async getConferences(_smbUrl: string, _smbKey: string): Promise<string[]> {
     return Array.from(this.conferences.keys());
   }
