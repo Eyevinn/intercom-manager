@@ -470,6 +470,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   }>(
     '/production/:productionId/line',
     {
+      preHandler: requireApiKey,
       schema: {
         description: 'Add a new Line to a Production.',
         params: ProductionIdParams,
@@ -588,6 +589,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   }>(
     '/production/:productionId/line/:lineId',
     {
+      preHandler: requireApiKey,
       schema: {
         description: 'Modify an existing Production line.',
         params: ProductionLineParams,
@@ -656,6 +658,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   }>(
     '/production/:productionId/line/:lineId',
     {
+      preHandler: requireApiKey,
       schema: {
         description: 'Removes a line from a production.',
         params: ProductionLineParams,
@@ -819,6 +822,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   }>(
     '/session/:sessionId',
     {
+      preHandler: requireApiKey,
       schema: {
         description:
           'Provide client local SDP description as request body to finalize connection protocol.',
@@ -1069,6 +1073,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   }>(
     '/production/:productionId/line/:lineId/participants/:sessionId/disconnect',
     {
+      preHandler: requireApiKey,
       schema: {
         description:
           'Force-disconnect a participant from a line by backend session id. ' +

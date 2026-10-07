@@ -36,6 +36,10 @@ const apiIngests: FastifyPluginCallback<ApiIngestsOptions> = (
   }>(
     '/ingest',
     {
+      // NOTE: this route-level guard is currently unreachable — the global
+      // preHandler hook above 501-gates every ingest route before it runs. It
+      // is kept (rather than removed) so the guard is already in place if the
+      // Ingest API is ever enabled.
       preHandler: requireApiKey,
       schema: {
         description:
