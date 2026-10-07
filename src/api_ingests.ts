@@ -11,6 +11,7 @@ import {
 import { IngestManager } from './ingest_manager';
 import { Log } from './log';
 import { DbManager } from './db/interface';
+import { requireApiKey } from './auth';
 
 export interface ApiIngestsOptions {
   dbManager: DbManager;
@@ -35,6 +36,11 @@ const apiIngests: FastifyPluginCallback<ApiIngestsOptions> = (
   }>(
     '/ingest',
     {
+      // NOTE: this route-level guard is currently unreachable — the global
+      // preHandler hook above 501-gates every ingest route before it runs. It
+      // is kept (rather than removed) so the guard is already in place if the
+      // Ingest API is ever enabled.
+      preHandler: requireApiKey,
       schema: {
         description:
           'Create a new Ingest. The device data will be fetched from the specified IP address.',
