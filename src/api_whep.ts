@@ -194,6 +194,11 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
           parseInt(opts.endpointIdleTimeout, 10)
         );
 
+        // WHIP and WHEP endpoints with the same username are the same party
+        // (e.g. a site gateway). Neighbours in SMB never forward audio between
+        // each other, so the party does not hear its own audio back.
+        endpoint.neighbours = { groups: [`whipwhep:${username}`] };
+
         await coreFunctions.configureEndpointForWhipWhep(
           sdpOffer,
           endpoint,
