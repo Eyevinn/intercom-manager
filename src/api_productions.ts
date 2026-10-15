@@ -15,6 +15,8 @@ import {
   PatchLineResponse,
   PatchProduction,
   PatchProductionResponse,
+  PermissionsRequest,
+  PermissionsResponse,
   ProductionListResponse,
   ProductionResponse,
   SdpAnswer,
@@ -26,6 +28,7 @@ import {
 import { ProductionManager } from './production_manager';
 import { ISmbProtocol, SmbProtocol } from './smb';
 import { requireApiKey } from './auth';
+import { getRoleFeatures, resolveRoleFromPassword } from './roles';
 
 export interface ApiProductionsOptions {
   smbServerBaseUrl: string;
@@ -1210,6 +1213,54 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
       } else {
         reply.code(410).send(`User session id "${sessionId}" not found.`);
       }
+    }
+  );
+
+  // Exchange a role password for the granted role and the set of frontend
+  // feature flags for that role (admin / editor / participant). Role passwords
+  // are read from env vars (ROLE_ADMIN_PASSWORD, ROLE_EDITOR_PASSWORD,
+  // ROLE_PARTICIPANT_PASSWORD); a role whose env var is unset is unavailable.
+  // See src/roles.ts and #123.
+  fastify.post<{
+    Body: PermissionsRequest;
+    Reply: PermissionsResponse | ErrorResponse | string;
+  }>(
+    '/permissions',
+    {
+      schema: {
+        description:
+          'Resolve a role password to the granted role and the pages/features ' +
+          'enabled for that role in the frontend.',
+        body: PermissionsRequest,
+        response: {
+          200: PermissionsResponse,
+          401: ErrorResponse,
+          429: Type.Object({ error: Type.String() })
+        }
+      },
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: '1 minute',
+          hook: 'onRequest',
+          errorResponseBuilder: (_req, context) => {
+            return {
+              statusCode: 429,
+              error: 'Too Many Requests',
+              message: 'Too many requests, please try again later',
+              expiresIn: context.after
+            };
+          }
+        }
+      }
+    },
+    async (request, reply) => {
+      const role = resolveRoleFromPassword(request.body.password);
+      if (!role) {
+        reply.code(401).send({ message: 'Invalid or unknown role password' });
+        return;
+      }
+      reply.code(200).send({ role, features: getRoleFeatures(role) });
     }
   );
 

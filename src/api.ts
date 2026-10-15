@@ -19,6 +19,7 @@ import { IngestManager } from './ingest_manager';
 import { ProductionManager } from './production_manager';
 import { resolveCorsOrigin } from './config/cors-origin';
 import { createCsrfOriginHook } from './csrf';
+import { createAuthHook } from './roles';
 
 const HelloWorld = Type.String({
   description: 'The magical words!'
@@ -128,6 +129,14 @@ export default async (opts: ApiOptions) => {
   // no Origin/Referer header are always allowed through. Registered on the root
   // instance so it applies to all API routes.
   api.addHook('onRequest', createCsrfOriginHook());
+
+  // Opt-in authentication of ALL incoming requests (#123). Only enforced when
+  // REQUIRE_AUTH=true is set; a no-op otherwise, so existing unauthenticated
+  // clients keep working. When enabled, requests must carry
+  // `Authorization: Bearer <role-password>` (see src/roles.ts). The health
+  // check, Swagger docs and the /permissions endpoint stay reachable so a
+  // client can still obtain a role.
+  api.addHook('onRequest', createAuthHook());
 
   // Gate the Swagger/OpenAPI docs so the full API surface is not exposed
   // unauthenticated in production. The docs are registered when NOT running in
