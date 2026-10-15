@@ -45,9 +45,11 @@ about urgency is invented by the script.
 | Dependabot author (npm)                     | npm dependency bump                  | LOW — fast-track candidate   |
 | Everything else                             | Code change — needs full review      | REVIEW REQUIRED              |
 
-Why dependency bumps are treated as low risk: `.github/dependabot.yml` ignores
-`version-update:semver-major` updates, so dependency PRs opened here are
-minor/patch bumps. A dependency PR that also carries the `security` label is
+Why dependency bumps are treated as low risk: for the npm ecosystem,
+`.github/dependabot.yml` ignores `version-update:semver-major` updates, so npm
+dependency PRs opened here are minor/patch bumps. The `github-actions`
+ecosystem has no such ignore, so GitHub Actions PRs can include major bumps;
+these are still typically low-risk. A dependency PR that also carries the `security` label is
 escalated to the Security bucket.
 
 "Fast-track candidate" is a mechanical classification, **not** an approval. A
