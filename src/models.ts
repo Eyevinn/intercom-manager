@@ -506,3 +506,38 @@ export type NewPreset = Static<typeof NewPreset>;
 export type Preset = Static<typeof Preset>;
 export type PresetListResponse = Static<typeof PresetListResponse>;
 export type TUpdatePreset = Static<typeof UpdatePreset>;
+
+// ── Roles & permissions (#123) ──────────────────────────────────────────
+// The set of user roles the manager understands. Each role maps to a fixed
+// set of frontend feature flags (see src/roles.ts).
+export const Role = Type.Union([
+  Type.Literal('admin'),
+  Type.Literal('editor'),
+  Type.Literal('participant')
+]);
+
+// Which pages/features the frontend should enable for a given role. These are
+// advisory flags for the UI; the backend still enforces its own API guards.
+export const RoleFeatures = Type.Object({
+  canCreateProduction: Type.Boolean(),
+  canEditProduction: Type.Boolean(),
+  canDeleteProduction: Type.Boolean(),
+  canManageLines: Type.Boolean(),
+  canRemoveParticipants: Type.Boolean(),
+  canManageIngests: Type.Boolean(),
+  canJoinLine: Type.Boolean()
+});
+
+export const PermissionsRequest = Type.Object({
+  password: Type.String({ minLength: 1, maxLength: 512 })
+});
+
+export const PermissionsResponse = Type.Object({
+  role: Role,
+  features: RoleFeatures
+});
+
+export type Role = Static<typeof Role>;
+export type RoleFeatures = Static<typeof RoleFeatures>;
+export type PermissionsRequest = Static<typeof PermissionsRequest>;
+export type PermissionsResponse = Static<typeof PermissionsResponse>;
