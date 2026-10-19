@@ -57,6 +57,12 @@ if (
   );
 }
 
+if (!process.env.API_KEY?.trim()) {
+  Log().warn(
+    'SECURITY: API_KEY not set - management endpoints (production/line/session mutations) are UNAUTHENTICATED. Anyone who can reach this server can create, modify and delete productions, lines and sessions. Set API_KEY to a non-empty secret to require a Bearer token.'
+  );
+}
+
 const ENDPOINT_IDLE_TIMEOUT_S: string =
   process.env.ENDPOINT_IDLE_TIMEOUT_S ?? '60';
 

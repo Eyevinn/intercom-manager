@@ -2,6 +2,7 @@ import { Type } from '@sinclair/typebox';
 import { FastifyPluginCallback } from 'fastify';
 import { ErrorResponse, ShareRequest, ShareResponse } from './models';
 import { DbManager } from './db/interface';
+import { requireApiKey } from './auth';
 import { isValidJwt, oscTokenServiceBaseUrl } from './utils';
 
 export interface ApiShareOptions {
@@ -89,6 +90,7 @@ const apiShare: FastifyPluginCallback<ApiShareOptions> = (
   }>(
     '/share',
     {
+      preHandler: requireApiKey,
       schema: {
         description: 'Generate a share link for a given application path',
         body: ShareRequest,
@@ -261,6 +263,7 @@ const apiShare: FastifyPluginCallback<ApiShareOptions> = (
   }>(
     '/share/:id',
     {
+      preHandler: requireApiKey,
       schema: {
         description: 'Revoke a reusable share link',
         params: Type.Object({

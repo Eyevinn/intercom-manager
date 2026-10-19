@@ -2,6 +2,7 @@ import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import { Type } from '@sinclair/typebox';
 import { FastifyPluginCallback } from 'fastify';
 import { DbManager } from './db/interface';
+import { requireApiKey } from './auth';
 import {
   ErrorResponse,
   NewPreset,
@@ -36,6 +37,7 @@ const apiGroups: FastifyPluginCallback<ApiGroupsOptions> = (
   instance.get(
     '/preset',
     {
+      preHandler: requireApiKey,
       schema: {
         response: {
           200: PresetListResponse
@@ -51,6 +53,7 @@ const apiGroups: FastifyPluginCallback<ApiGroupsOptions> = (
   instance.post(
     '/preset',
     {
+      preHandler: requireApiKey,
       schema: {
         body: NewPreset,
         response: {
@@ -79,6 +82,7 @@ const apiGroups: FastifyPluginCallback<ApiGroupsOptions> = (
   instance.get(
     '/preset/:id',
     {
+      preHandler: requireApiKey,
       schema: {
         params: Type.Object({ id: Type.String({ maxLength: 128 }) }),
         response: {
@@ -98,6 +102,7 @@ const apiGroups: FastifyPluginCallback<ApiGroupsOptions> = (
   instance.patch(
     '/preset/:id',
     {
+      preHandler: requireApiKey,
       schema: {
         params: Type.Object({ id: Type.String({ maxLength: 128 }) }),
         body: UpdatePreset,
@@ -142,6 +147,7 @@ const apiGroups: FastifyPluginCallback<ApiGroupsOptions> = (
   instance.delete(
     '/preset/:id',
     {
+      preHandler: requireApiKey,
       schema: {
         params: Type.Object({ id: Type.String({ maxLength: 128 }) }),
         response: {

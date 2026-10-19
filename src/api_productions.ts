@@ -15,6 +15,8 @@ import {
   PatchLineResponse,
   PatchProduction,
   PatchProductionResponse,
+  PermissionsRequest,
+  PermissionsResponse,
   ProductionListResponse,
   ProductionResponse,
   SdpAnswer,
@@ -29,6 +31,8 @@ import {
 } from './models';
 import { ProductionManager } from './production_manager';
 import { ISmbProtocol, SmbEndpointActionError, SmbProtocol } from './smb';
+import { requireApiKey } from './auth';
+import { getRoleFeatures, resolveRoleFromPassword } from './roles';
 
 export interface ApiProductionsOptions {
   smbServerBaseUrl: string;
@@ -136,6 +140,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   }>(
     '/production',
     {
+      preHandler: requireApiKey,
       schema: {
         description: 'Create a new Production.',
         body: NewProduction,
@@ -362,6 +367,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   }>(
     '/production/:productionId',
     {
+      preHandler: requireApiKey,
       schema: {
         description: 'Modify an existing Production line.',
         params: ProductionIdParams,
@@ -475,6 +481,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   }>(
     '/production/:productionId/line',
     {
+      preHandler: requireApiKey,
       schema: {
         description: 'Add a new Line to a Production.',
         params: ProductionIdParams,
@@ -598,6 +605,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   }>(
     '/production/:productionId/line/:lineId',
     {
+      preHandler: requireApiKey,
       schema: {
         description: 'Modify an existing Production line.',
         params: ProductionLineParams,
@@ -668,6 +676,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   }>(
     '/production/:productionId/line/:lineId/whep-source',
     {
+      preHandler: requireApiKey,
       schema: {
         description:
           'Pin a single participant as the WHEP egress source for this line. Pass `null` to clear and restore forward-all behaviour.',
@@ -734,6 +743,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   }>(
     '/session/:sessionId/video-source',
     {
+      preHandler: requireApiKey,
       schema: {
         description:
           'Pin a single publisher as this session’s video source. SMB egress filter updates in place via the `reconfigure` action. Pass `null` to clear.',
@@ -876,6 +886,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   }>(
     '/production/:productionId/line/:lineId',
     {
+      preHandler: requireApiKey,
       schema: {
         description: 'Removes a line from a production.',
         params: ProductionLineParams,
@@ -926,6 +937,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   }>(
     '/session',
     {
+      preHandler: requireApiKey,
       schema: {
         description:
           'Initiate connection protocol. Generates sdp offer describing remote SMB instance.',
@@ -1048,6 +1060,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   }>(
     '/session/:sessionId',
     {
+      preHandler: requireApiKey,
       schema: {
         description:
           'Provide client local SDP description as request body to finalize connection protocol.',
@@ -1205,6 +1218,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   }>(
     '/production/:productionId',
     {
+      preHandler: requireApiKey,
       schema: {
         description: 'Deletes a Production.',
         params: ProductionIdParams,
@@ -1248,6 +1262,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   }>(
     '/session/:sessionId',
     {
+      preHandler: requireApiKey,
       schema: {
         description: 'Deletes a Connection from ProductionManager.',
         params: SessionIdParams,
@@ -1416,6 +1431,7 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
   }>(
     '/production/:productionId/line/:lineId/participants/:sessionId/disconnect',
     {
+      preHandler: requireApiKey,
       schema: {
         description:
           'Force-disconnect a participant from a line by backend session id. ' +
@@ -1579,6 +1595,54 @@ const apiProductions: FastifyPluginCallback<ApiProductionsOptions> = (
         return;
       }
       reply.code(200).send({ sessionId: request.params.sessionId, name });
+    }
+  );
+
+  // Exchange a role password for the granted role and the set of frontend
+  // feature flags for that role (admin / editor / participant). Role passwords
+  // are read from env vars (ROLE_ADMIN_PASSWORD, ROLE_EDITOR_PASSWORD,
+  // ROLE_PARTICIPANT_PASSWORD); a role whose env var is unset is unavailable.
+  // See src/roles.ts and #123.
+  fastify.post<{
+    Body: PermissionsRequest;
+    Reply: PermissionsResponse | ErrorResponse | string;
+  }>(
+    '/permissions',
+    {
+      schema: {
+        description:
+          'Resolve a role password to the granted role and the pages/features ' +
+          'enabled for that role in the frontend.',
+        body: PermissionsRequest,
+        response: {
+          200: PermissionsResponse,
+          401: ErrorResponse,
+          429: Type.Object({ error: Type.String() })
+        }
+      },
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: '1 minute',
+          hook: 'onRequest',
+          errorResponseBuilder: (_req, context) => {
+            return {
+              statusCode: 429,
+              error: 'Too Many Requests',
+              message: 'Too many requests, please try again later',
+              expiresIn: context.after
+            };
+          }
+        }
+      }
+    },
+    async (request, reply) => {
+      const role = resolveRoleFromPassword(request.body.password);
+      if (!role) {
+        reply.code(401).send({ message: 'Invalid or unknown role password' });
+        return;
+      }
+      reply.code(200).send({ role, features: getRoleFeatures(role) });
     }
   );
 
