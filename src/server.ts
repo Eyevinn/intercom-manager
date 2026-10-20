@@ -97,7 +97,7 @@ export function validateRequiredEnv(): void {
   // A database connection string is required; no hardcoded localhost fallback is
   // provided so that a missing value fails fast at startup rather than silently
   // connecting to a local MongoDB. Local development supplies the localhost
-  // default via .env/.env.example/docker-compose, not in production code.
+  // default via .env/.env.sample/docker-compose, not in production code.
   if (
     !process.env.DB_CONNECTION_STRING &&
     !process.env.MONGODB_CONNECTION_STRING
