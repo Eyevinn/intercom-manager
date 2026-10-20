@@ -79,6 +79,7 @@ const mockProductionManager = {
   deleteProduction: jest.fn().mockResolvedValue(true),
   getUser: jest.fn().mockResolvedValue(undefined),
   requireLine: jest.fn().mockResolvedValue({}),
+  clearWhepSourceIfPinned: jest.fn().mockResolvedValue(undefined),
   once: jest.fn(),
   emit: jest.fn()
 } as any;

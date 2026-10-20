@@ -73,6 +73,16 @@ const guardedRoutes: { method: string; url: string; payload?: unknown }[] = [
     method: 'PATCH',
     url: '/api/v1/session/sess-1',
     payload: { sdpAnswer: 'v=0' }
+  },
+  {
+    method: 'PATCH',
+    url: '/api/v1/production/1/line/line-a/whep-source',
+    payload: { pinnedSessionId: null }
+  },
+  {
+    method: 'PATCH',
+    url: '/api/v1/session/sess-1/video-source',
+    payload: { pinnedSessionId: null }
   }
 ];
 

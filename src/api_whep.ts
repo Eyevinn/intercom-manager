@@ -5,7 +5,12 @@ import sdpTransform, { parse } from 'sdp-transform';
 import { v4 as uuidv4 } from 'uuid';
 import { CoreFunctions } from './api_productions_core_functions';
 import { Log } from './log';
-import { Line, WhipWhepRequest, WhipWhepResponse } from './models';
+import {
+  Line,
+  SmbVideoStream,
+  WhipWhepRequest,
+  WhipWhepResponse
+} from './models';
 import { ProductionManager } from './production_manager';
 import { ISmbProtocol, SmbProtocol } from './smb';
 import { getIceServers, sanitizeForLog } from './utils';
@@ -171,6 +176,55 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
         const sessionId = uuidv4();
         const endpointId = uuidv4();
 
+        const offerHasVideo = sdpOffer.media.some((m) => m.type === 'video');
+
+        let subscribeToVideo:
+          | { streams: SmbVideoStream[]; ssrcs: number[]; endpointId: string }
+          | undefined;
+        try {
+          const productionIdNum = parseInt(productionId, 10);
+          if (!Number.isNaN(productionIdNum)) {
+            const production = await productionManager.getProduction(
+              productionIdNum
+            );
+            const line = production?.lines.find((l) => l.id === lineId);
+            const pinnedSessionId = line?.whepSourceSessionId ?? null;
+            if (pinnedSessionId) {
+              const sourceSession = await opts.dbManager.getSession(
+                pinnedSessionId
+              );
+              const sourceVideo = sourceSession?.sessionDescription?.video;
+              const sourceEndpointId = sourceSession?.endpointId;
+              const streams: SmbVideoStream[] = Array.isArray(
+                sourceVideo?.streams
+              )
+                ? sourceVideo.streams
+                : [];
+              const ssrcs: number[] = Array.isArray(sourceVideo?.ssrcs)
+                ? sourceVideo.ssrcs
+                : [];
+              if (
+                sourceEndpointId &&
+                (streams.length > 0 || ssrcs.length > 0)
+              ) {
+                subscribeToVideo = {
+                  streams,
+                  ssrcs,
+                  endpointId: sourceEndpointId
+                };
+              } else {
+                Log().warn(
+                  `[whep-pin] line=${lineId} pinned sessionId=${pinnedSessionId} has no usable sessionDescription.video — falling back to forward-all`
+                );
+              }
+            }
+          }
+        } catch (pinErr) {
+          Log().warn(
+            `[whep-pin] failed to resolve pinned source, falling back to forward-all: ${pinErr}`
+          );
+        }
+
         // Create conference and endpoint in SMB
         const smbConferenceId = await coreFunctions.createConferenceForLine(
           smb,
@@ -180,7 +234,6 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
           lineId
         );
 
-        // Allocate endpoint with audio support
         const endpoint = await coreFunctions.createEndpoint(
           smb,
           smbServerUrl,
@@ -188,10 +241,16 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
           smbConferenceId,
           endpointId,
           true, // audio
+          offerHasVideo, // video
           false, // no data channel needed for WHEP
           true, // iceControlling
-          'ssrc-rewrite', // relayType
-          parseInt(opts.endpointIdleTimeout, 10)
+          'ssrc-rewrite', // audio relay type
+          parseInt(opts.endpointIdleTimeout, 10),
+          'ssrc-rewrite'
+        );
+
+        Log().debug(
+          `[whep-alloc] video.ssrcs=${JSON.stringify(endpoint.video?.ssrcs)}`
         );
 
         await coreFunctions.configureEndpointForWhipWhep(
@@ -201,7 +260,9 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
           smbServerUrl,
           smbServerApiKey,
           smbConferenceId,
-          endpointId
+          endpointId,
+          true, // receiveOnly: WHEP is receive-only
+          subscribeToVideo
         );
 
         const sdpAnswer = await coreFunctions.createWhipWhepAnswer(
@@ -245,7 +306,9 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
           lineId,
           sessionId,
           username,
-          true
+          true, // isWhip — kept for backwards compat with consumers
+          true, // isWhepReceiver — distinguishes egress recipients from WHIP publishers
+          false // hasVideo — WHEP is receive-only by spec, never publishes
         );
 
         // Update user endpoint info and store a stable smbPresenceKey
@@ -321,6 +384,8 @@ export const apiWhep: FastifyPluginCallback<ApiWhepOptions> = (
           reply.code(404).send({ error: 'WHEP session not found' });
           return;
         }
+
+        await productionManager.clearWhepSourceIfPinned(sessionId);
 
         await opts.dbManager.deleteUserSession(sessionId);
         productionManager.removeUserSession(sessionId);

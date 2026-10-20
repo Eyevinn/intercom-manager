@@ -1,0 +1,2 @@
+export const NORMALIZED_VIDEO_PT_MAIN = 96;
+export const NORMALIZED_VIDEO_PT_RTX = 97;

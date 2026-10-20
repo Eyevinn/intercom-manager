@@ -260,11 +260,11 @@ describe('CoreFunctions SDP Tests', () => {
 
       const configured = mockSmb.getEndpoint(confId, 'ep-8');
       expect(configured?.video).toBeDefined();
-      expect(configured?.video?.['payload-type'].name).toBe('VP8');
-      expect(configured?.video?.['payload-type'].clockrate).toBe(90000);
+      expect(configured?.video?.['payload-type']?.name).toBe('H264');
+      expect(configured?.video?.['payload-type']?.clockrate).toBe(90000);
     });
 
-    test('filters video codecs to supported only (VP8/H264/VP9)', async () => {
+    test('filters video codecs to supported only (VP8/H264)', async () => {
       const confId = await mockSmb.allocateConference(smbUrl, smbKey);
       const endpoint = createMockEndpointDescription();
       const offer = audioVideoOffer();
@@ -280,8 +280,9 @@ describe('CoreFunctions SDP Tests', () => {
       );
 
       const configured = mockSmb.getEndpoint(confId, 'ep-9');
-      // rtx (97) is not VP8/H264/VP9, but VP8 (96) and H264 (98) are
-      expect(configured?.video?.['payload-type'].id).toBe(96);
+      // H264 (98) is preferred over VP8 (96); rtx (97/99) and VP9 are
+      // filtered out of the supported set.
+      expect(configured?.video?.['payload-type']?.id).toBe(98);
     });
 
     test('filters video rtp-hdrexts to abs-send-time and rtp-stream-id', async () => {
@@ -431,6 +432,51 @@ describe('CoreFunctions SDP Tests', () => {
       // Original should be unchanged
       expect(endpoint['bundle-transport']!.ice!.ufrag).toBe(originalUfrag);
     });
+
+    test('blocks video egress to a WHIP publisher with an empty ssrc-whitelist', async () => {
+      const confId = await mockSmb.allocateConference(smbUrl, smbKey);
+      const endpoint = createMockEndpointDescription();
+      const offer = audioVideoOffer();
+
+      // receiveOnly omitted — this is the WHIP publisher path.
+      await coreFunctions.configureEndpointForWhipWhep(
+        offer,
+        endpoint,
+        mockSmb,
+        smbUrl,
+        smbKey,
+        confId,
+        'ep-whip-egress'
+      );
+
+      const configured = mockSmb.getEndpoint(confId, 'ep-whip-egress');
+      // Present, and empty — not absent, which would mean forward-everything.
+      expect(configured?.video?.['ssrc-whitelist']).toEqual([]);
+      // Ingress must be untouched: SMB still needs this publisher's own video.
+      expect(configured?.video?.streams?.length).toBeGreaterThan(0);
+      expect(configured?.video?.ssrcs?.length).toBeGreaterThan(0);
+    });
+
+    test('does not block video egress for a receive-only WHEP endpoint', async () => {
+      const confId = await mockSmb.allocateConference(smbUrl, smbKey);
+      const endpoint = createMockEndpointDescription();
+      const offer = audioVideoOffer();
+
+      await coreFunctions.configureEndpointForWhipWhep(
+        offer,
+        endpoint,
+        mockSmb,
+        smbUrl,
+        smbKey,
+        confId,
+        'ep-whep-egress',
+        true // receiveOnly
+      );
+
+      const configured = mockSmb.getEndpoint(confId, 'ep-whep-egress');
+      // Unpinned WHEP must fall back to last-N, so the key must stay absent.
+      expect(configured?.video?.['ssrc-whitelist']).toBeUndefined();
+    });
   });
 
   // ══════════════════════════════════════════════════════════════════
@@ -552,7 +598,7 @@ describe('CoreFunctions SDP Tests', () => {
       expect(audioMedia?.direction).toBe('recvonly');
     });
 
-    test('filters video to VP8 + RTX only', async () => {
+    test('filters video to H264 + RTX only', async () => {
       const offer = audioVideoOffer();
       const endpoint = createMockEndpointDescription();
 
@@ -563,12 +609,12 @@ describe('CoreFunctions SDP Tests', () => {
       const parsed = parse(sdpAnswer);
       const videoMedia = parsed.media.find((m) => m.type === 'video');
 
-      // VP8 (96) and RTX (97), not H264 (98)
+      // H264 (98) is preferred over VP8 (96); its RTX (99, apt=98) is kept.
       expect(videoMedia?.rtp.length).toBe(2);
       const codecs = videoMedia?.rtp.map((r) => r.codec);
-      expect(codecs).toContain('VP8');
+      expect(codecs).toContain('H264');
       expect(codecs).toContain('rtx');
-      expect(codecs).not.toContain('H264');
+      expect(codecs).not.toContain('VP8');
     });
 
     test('sets BUNDLE group with all media mids', async () => {
@@ -873,6 +919,7 @@ describe('CoreFunctions SDP Tests', () => {
         'ep-1',
         true,
         false,
+        false,
         true,
         'ssrc-rewrite',
         60
@@ -892,6 +939,7 @@ describe('CoreFunctions SDP Tests', () => {
           'nonexistent',
           'ep-1',
           true,
+          false,
           false,
           true,
           'ssrc-rewrite',
