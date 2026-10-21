@@ -219,7 +219,8 @@ export const SmbEndpointDescription = Type.Object({
     })
   ),
   data: Type.Optional(Type.Object({ port: Type.Number() })),
-  idleTimeout: Type.Optional(Type.Number())
+  idleTimeout: Type.Optional(Type.Number()),
+  neighbours: Type.Optional(Type.Object({ groups: Type.Array(Type.String()) }))
 });
 
 export type SmbVideoStream = NonNullable<
