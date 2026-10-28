@@ -687,3 +687,71 @@ describe('checkUserStatus resilience', () => {
     expect(emitSpy).not.toHaveBeenCalledWith('users:change');
   });
 });
+
+describe('checkUserStatus WHIP users:change scoping (#419)', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+  });
+
+  const runWith = async (whipSession: any, conferenceUsers: string[]) => {
+    const dbManager = jest.requireMock('./db/interface');
+    dbManager.getSessionsByQuery
+      .mockResolvedValueOnce([]) // toInactivate
+      .mockResolvedValueOnce([]) // toReactivate
+      .mockResolvedValueOnce([]) // toExpire
+      .mockResolvedValueOnce([whipSession]); // WHIP sessions
+    dbManager.updateSession.mockResolvedValue(true);
+    const smb = {
+      getConferencesWithUsers: jest
+        .fn()
+        .mockResolvedValue([{ id: 'conf1', users: conferenceUsers }])
+    };
+    const pm = new ProductionManager(dbManager);
+    const emitSpy = jest.spyOn(pm, 'emit');
+    await pm.checkUserStatus(smb as any, 'http://smb', '');
+    return { dbManager, emitSpy };
+  };
+
+  const baseWhip = {
+    _id: 'whip1',
+    isWhip: true,
+    isActive: true,
+    isExpired: false,
+    smbConferenceId: 'conf1',
+    endpointId: 'ep1',
+    createdAt: new Date(Date.now() - 60_000).toISOString(),
+    lastSeenAt: new Date(Date.now() - 2_000).toISOString()
+  };
+
+  it('does not emit users:change on lastSeen refresh of an active, present WHIP session', async () => {
+    const { dbManager, emitSpy } = await runWith(baseWhip, ['ep1']);
+    expect(dbManager.updateSession).toHaveBeenCalledWith(
+      'whip1',
+      expect.objectContaining({ isActive: true, isExpired: false })
+    );
+    expect(emitSpy).not.toHaveBeenCalledWith('users:change');
+  });
+
+  it('does not emit users:change on lastSeen refresh during WHIP warmup', async () => {
+    const { emitSpy } = await runWith(
+      { ...baseWhip, createdAt: new Date(Date.now() - 1_000).toISOString() },
+      []
+    );
+    expect(emitSpy).not.toHaveBeenCalledWith('users:change');
+  });
+
+  it('emits users:change when a WHIP session becomes active again', async () => {
+    const { emitSpy } = await runWith({ ...baseWhip, isActive: false }, [
+      'ep1'
+    ]);
+    expect(emitSpy).toHaveBeenCalledWith('users:change');
+  });
+
+  it('emits users:change when a WHIP session goes inactive', async () => {
+    const { emitSpy } = await runWith(
+      { ...baseWhip, lastSeenAt: new Date(Date.now() - 20_000).toISOString() },
+      []
+    );
+    expect(emitSpy).toHaveBeenCalledWith('users:change');
+  });
+});
