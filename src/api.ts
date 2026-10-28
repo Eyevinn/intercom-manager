@@ -7,6 +7,7 @@ import swaggerUI from '@fastify/swagger-ui';
 import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import { Static, Type } from '@sinclair/typebox';
 import fastify, { FastifyPluginCallback } from 'fastify';
+import { getApiDevices } from './api_devices';
 import { getApiIngests } from './api_ingests';
 import { ApiProductionsOptions, getApiProductions } from './api_productions';
 import apiGroups from './api_groups';
@@ -226,6 +227,10 @@ export default async (opts: ApiOptions) => {
   api.register(getApiIngests(), {
     prefix: 'api/v1',
     dbManager: opts.dbManager,
+    ingestManager: opts.ingestManager
+  });
+  api.register(getApiDevices(), {
+    prefix: 'api/v1',
     ingestManager: opts.ingestManager
   });
 

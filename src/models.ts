@@ -510,6 +510,27 @@ export const PatchIngest = Type.Union([
 
 export const PatchIngestResponse = Type.Omit(Ingest, ['ipAddress']);
 
+// A single input/output device surfaced from an ingest. The frontend consumes
+// the aggregated /devices list (see api_devices.ts) so each device carries the
+// id and label of the ingest it belongs to alongside the device's own
+// name/label that is already stored on the ingest model. No new device data is
+// introduced here — this only flattens what deviceInput/deviceOutput already
+// hold across all ingests into one list.
+export const Device = Type.Object({
+  ingestId: Type.Number(),
+  ingestLabel: Type.String(),
+  type: Type.Union([Type.Literal('input'), Type.Literal('output')]),
+  name: Type.String(),
+  label: Type.String()
+});
+
+export const DeviceListResponse = Type.Object({
+  devices: Type.Array(Device)
+});
+
+export type Device = Static<typeof Device>;
+export type DeviceListResponse = Static<typeof DeviceListResponse>;
+
 export const PresetCall = Type.Object({
   productionId: Type.String({ minLength: 1, maxLength: 128 }),
   lineId: Type.String({ minLength: 1, maxLength: 128 }),
