@@ -174,7 +174,11 @@ export class ProductionManager extends EventEmitter {
             isExpired: false
           });
           if (ok) {
-            hasChanged = true;
+            // Only a state transition is visible to clients; a routine
+            // lastSeen refresh must not wake the participants long-polls.
+            if (!whipSession.isActive || whipSession.isExpired) {
+              hasChanged = true;
+            }
             if (this.userSessions[wid]) {
               this.userSessions[wid].lastSeen = now + 10_000;
               this.userSessions[wid].isActive = true;
@@ -205,7 +209,9 @@ export class ProductionManager extends EventEmitter {
             isExpired: false
           });
           if (ok) {
-            hasChanged = true;
+            if (!whipSession.isActive || whipSession.isExpired) {
+              hasChanged = true;
+            }
             if (this.userSessions[wid]) {
               this.userSessions[wid].lastSeen = now + 10_000;
               this.userSessions[wid].isActive = true;
