@@ -506,6 +506,11 @@ export class ProductionManager extends EventEmitter {
     includeBuffer = false
   ): Promise<boolean> {
     const lastSeen = includeBuffer ? Date.now() + 10_000 : Date.now();
+    // Only a transition from inactive/expired to active is observable by
+    // clients; a plain heartbeat on an active session must not wake every
+    // participants long-poll (#425). Unknown prior state counts as a change.
+    const previous = await this.dbManager.getSession(sessionId);
+    const hasChanged = !previous || !previous.isActive || !!previous.isExpired;
     const ok = await this.dbManager.updateSession(sessionId, {
       lastSeen,
       isActive: true,
@@ -517,7 +522,9 @@ export class ProductionManager extends EventEmitter {
         this.userSessions[sessionId].isActive = true;
         this.userSessions[sessionId].isExpired = false;
       }
-      this.emit('users:change');
+      if (hasChanged) {
+        this.emit('users:change');
+      }
     }
     return ok;
   }

@@ -755,3 +755,51 @@ describe('checkUserStatus WHIP users:change scoping (#419)', () => {
     expect(emitSpy).toHaveBeenCalledWith('users:change');
   });
 });
+
+describe('updateUserLastSeen users:change scoping (#425)', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+  });
+
+  const runWith = async (existing: any) => {
+    const dbManager = jest.requireMock('./db/interface');
+    dbManager.getSession.mockResolvedValue(existing);
+    dbManager.updateSession.mockResolvedValue(true);
+    const pm = new ProductionManager(dbManager);
+    const emitSpy = jest.spyOn(pm, 'emit');
+    const ok = await pm.updateUserLastSeen('s1');
+    return { dbManager, emitSpy, ok };
+  };
+
+  it('does not emit users:change on heartbeat of an already-active session', async () => {
+    const { dbManager, emitSpy, ok } = await runWith({
+      _id: 's1',
+      isActive: true,
+      isExpired: false
+    });
+    expect(ok).toBe(true);
+    expect(dbManager.updateSession).toHaveBeenCalledWith(
+      's1',
+      expect.objectContaining({ isActive: true, isExpired: false })
+    );
+    expect(emitSpy).not.toHaveBeenCalledWith('users:change');
+  });
+
+  it('emits users:change when an inactive session becomes active', async () => {
+    const { emitSpy } = await runWith({
+      _id: 's1',
+      isActive: false,
+      isExpired: false
+    });
+    expect(emitSpy).toHaveBeenCalledWith('users:change');
+  });
+
+  it('emits users:change when an expired session becomes active', async () => {
+    const { emitSpy } = await runWith({
+      _id: 's1',
+      isActive: true,
+      isExpired: true
+    });
+    expect(emitSpy).toHaveBeenCalledWith('users:change');
+  });
+});
