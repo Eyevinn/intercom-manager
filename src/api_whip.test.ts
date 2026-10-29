@@ -250,6 +250,26 @@ describe('apiWhip', () => {
       expect(response.payload).toContain('v=0');
     });
 
+    it('should put the endpoint in a neighbour group named after the username', async () => {
+      const fastify = await createTestServer();
+      (coreFunctions.configureEndpointForWhipWhep as jest.Mock).mockClear();
+
+      const response = await fastify.inject({
+        method: 'POST',
+        url: '/whip/123/456/site-a',
+        headers: {
+          'content-type': 'application/sdp'
+        },
+        payload:
+          'v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\nm=audio 0 RTP/AVP 0\r\na=mid:0\r\n'
+      });
+
+      expect(response.statusCode).toBe(201);
+      const endpoint = (coreFunctions.configureEndpointForWhipWhep as jest.Mock)
+        .mock.calls[0][1];
+      expect(endpoint.neighbours).toEqual({ groups: ['whipwhep:site-a'] });
+    });
+
     it('should return 406 if SDP answer misses m= sections', async () => {
       (coreFunctions.createWhipWhepAnswer as jest.Mock).mockResolvedValueOnce(
         'v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\nc=IN IP4 0.0.0.0\r\nt=0 0\r\n'
