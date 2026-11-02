@@ -21,6 +21,9 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: read
+
 jobs:
   sync-fork:
     name: Sync fork (${{ inputs.environment || 'prod' }})

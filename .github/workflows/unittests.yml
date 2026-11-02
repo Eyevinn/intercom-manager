@@ -1,6 +1,9 @@
 name: Unit Tests
 on: [push]
 
+permissions:
+  contents: read
+
 jobs:
   unittests:
     runs-on: ubuntu-latest
