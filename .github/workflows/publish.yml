@@ -4,6 +4,9 @@ on:
   release:
     types: [released]
 
+permissions:
+  contents: read
+
 jobs:
   push_to_registry:
     name: Push Docker Image to Docker Hub

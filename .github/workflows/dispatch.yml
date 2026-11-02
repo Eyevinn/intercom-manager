@@ -2,6 +2,9 @@ name: Manually triggered deploy to Open Source Cloud Development Environment
 
 on: workflow_dispatch
 
+permissions:
+  contents: read
+
 jobs:
   dispatch-osaas-dev-fork:
     runs-on: ubuntu-latest

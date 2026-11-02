@@ -5,6 +5,9 @@ on:
     types: [closed]
     branches: [main]
 
+permissions:
+  contents: read
+
 concurrency:
   group: sync-fork-on-merge-prod
   cancel-in-progress: false

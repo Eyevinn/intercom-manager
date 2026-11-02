@@ -6,6 +6,9 @@ on:
       - 'v*'
       - '*'
 
+permissions:
+  contents: write
+
 jobs:
   generate-release-notes:
     runs-on: ubuntu-latest

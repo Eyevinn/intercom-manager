@@ -1,6 +1,9 @@
 name: Prettier
 on: [pull_request]
 
+permissions:
+  contents: read
+
 jobs:
   pretty:
     if: "!contains(github.event.pull_request.title, 'WIP!')"
