@@ -8,7 +8,7 @@ jobs:
 
     steps:
       - name: Dispatch development fork deploy workflow
-        uses: peter-evans/repository-dispatch@v3
+        uses: peter-evans/repository-dispatch@ff45666b9427631e3450c54a1bcbee4d9ff4d7c0 # v3
         with:
           token: ${{ secrets.REPO_DISPATCH_TOKEN }}
           repository: eyevinn-osaas-dev/intercom-manager
