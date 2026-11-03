@@ -638,6 +638,23 @@ describe('DbManagerCouchDb share links', () => {
 });
 
 describe('DbManagerCouchDb ingest IO', () => {
+  it('getIngest returns undefined for a missing ingest (404)', async () => {
+    const { manager, nanoDb } = createTestManager();
+    const notFound: any = new Error('not_found');
+    notFound.statusCode = 404;
+    nanoDb.get.mockRejectedValueOnce(notFound);
+    expect(await manager.getIngest(99)).toBeUndefined();
+    expect(nanoDb.get).toHaveBeenCalledWith('99');
+  });
+
+  it('getIngest re-throws non-404 errors', async () => {
+    const { manager, nanoDb } = createTestManager();
+    const serverError: any = new Error('internal_server_error');
+    serverError.statusCode = 500;
+    nanoDb.get.mockRejectedValueOnce(serverError);
+    await expect(manager.getIngest(1)).rejects.toThrow('internal_server_error');
+  });
+
   it('addIngestIo stores a prefixed doc referencing the ingest', async () => {
     const { manager, nanoDb } = createTestManager();
     nanoDb.insert.mockResolvedValueOnce({ ok: true });

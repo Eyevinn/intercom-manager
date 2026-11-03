@@ -396,9 +396,17 @@ export class DbManagerCouchDb implements DbManager {
       throw new Error('Database not connected');
     }
 
-    const ingest = await this.withRetry(() => this.nanoDb!.get(id.toString()));
-    // eslint-disable-next-line
-    return ingest as any | undefined;
+    try {
+      const ingest = await this.withRetry(() =>
+        this.nanoDb!.get(id.toString())
+      );
+      // eslint-disable-next-line
+      return ingest as any | undefined;
+    } catch (e: any) {
+      // A missing document is "not found", not a failure (matches MongoDB)
+      if (e.statusCode === 404) return undefined;
+      throw e;
+    }
   }
 
   async updateIngest(ingest: Ingest): Promise<Ingest | undefined> {

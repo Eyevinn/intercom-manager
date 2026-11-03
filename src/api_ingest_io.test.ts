@@ -195,6 +195,52 @@ describe('Ingest IO routes', () => {
     expect(ok.statusCode).toBe(201);
     delete process.env.API_KEY;
   });
+
+  it('requires the API key for PATCH and DELETE when API_KEY is set', async () => {
+    const created = await server.inject({
+      method: 'POST',
+      url: '/ingest/1/io',
+      payload: body
+    });
+    const io = created.json();
+    process.env.API_KEY = 'secret';
+    try {
+      for (const headers of [undefined, { authorization: 'Bearer wrong' }]) {
+        const patch = await server.inject({
+          method: 'PATCH',
+          url: `/ingest/1/io/${io._id}`,
+          payload: { label: 'New' },
+          headers
+        });
+        expect(patch.statusCode).toBe(401);
+        const del = await server.inject({
+          method: 'DELETE',
+          url: `/ingest/1/io/${io._id}`,
+          headers
+        });
+        expect(del.statusCode).toBe(401);
+      }
+      // Rejected requests must not have mutated anything
+      expect(db.ios.get(io._id)).toMatchObject({ label: 'Mic 1' });
+
+      const authed = { authorization: 'Bearer secret' };
+      const patchOk = await server.inject({
+        method: 'PATCH',
+        url: `/ingest/1/io/${io._id}`,
+        payload: { label: 'New' },
+        headers: authed
+      });
+      expect(patchOk.statusCode).toBe(200);
+      const delOk = await server.inject({
+        method: 'DELETE',
+        url: `/ingest/1/io/${io._id}`,
+        headers: authed
+      });
+      expect(delOk.statusCode).toBe(200);
+    } finally {
+      delete process.env.API_KEY;
+    }
+  });
 });
 
 describe('Ingest IO routes inside the ingest plugin', () => {
