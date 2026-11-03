@@ -25,6 +25,9 @@ jobs:
   build:
     name: Build image and register in ECR
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write # request GitHub OIDC token for AWS
+      contents: read
 
     steps:
       - name: Checkout
@@ -37,10 +40,9 @@ jobs:
         uses: docker/setup-buildx-action@885d1462b80bc1c1c7f0b00334ad271f09369c55 # v2
 
       - name: Configure AWS ECR credentials
-        uses: aws-actions/configure-aws-credentials@67fbcbb121271f7775d2e7715933280b06314838 # v1
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
         with:
-          aws-access-key-id: ${{ secrets.ECR_AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.ECR_AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to Amazon ECR
@@ -65,13 +67,15 @@ jobs:
     name: Deploy tag to Dev cluster on ECS
     needs: ['build']
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write # request GitHub OIDC token for AWS
+      contents: read
 
     steps:
       - name: Configure AWS ECS credentials
-        uses: aws-actions/configure-aws-credentials@67fbcbb121271f7775d2e7715933280b06314838 # v1
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
         with:
-          aws-access-key-id: ${{ secrets.ECS_AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.ECS_AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Checkout source code
