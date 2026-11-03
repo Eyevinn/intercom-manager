@@ -43,11 +43,11 @@ jobs:
           esac
 
       - name: Install OSC CLI
-        run: npm install -g @osaas/cli
+        run: npm install -g @osaas/cli@4.35.0
 
       - name: Trigger sync fork
         env:
           OSC_ACCESS_TOKEN: unused
           OSC_API_KEY: ${{ secrets.OSC_API_KEY }}
           ENV: ${{ inputs.environment || 'prod' }}
-        run: osc --env "$ENV" admin sync-fork eyevinn-intercom-manager --wait
+        run: osc --env "$ENV" admin sync-fork --repository-url https://github.com/Eyevinn/intercom-manager --wait
