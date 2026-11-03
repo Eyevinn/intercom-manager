@@ -637,6 +637,115 @@ describe('DbManagerCouchDb share links', () => {
   });
 });
 
+describe('DbManagerCouchDb ingest IO', () => {
+  it('getIngest returns undefined for a missing ingest (404)', async () => {
+    const { manager, nanoDb } = createTestManager();
+    const notFound: any = new Error('not_found');
+    notFound.statusCode = 404;
+    nanoDb.get.mockRejectedValueOnce(notFound);
+    expect(await manager.getIngest(99)).toBeUndefined();
+    expect(nanoDb.get).toHaveBeenCalledWith('99');
+  });
+
+  it('getIngest re-throws non-404 errors', async () => {
+    const { manager, nanoDb } = createTestManager();
+    const serverError: any = new Error('internal_server_error');
+    serverError.statusCode = 500;
+    nanoDb.get.mockRejectedValueOnce(serverError);
+    await expect(manager.getIngest(1)).rejects.toThrow('internal_server_error');
+  });
+
+  it('addIngestIo stores a prefixed doc referencing the ingest', async () => {
+    const { manager, nanoDb } = createTestManager();
+    nanoDb.insert.mockResolvedValueOnce({ ok: true });
+    const io = await manager.addIngestIo(3, {
+      name: 'in-1',
+      label: 'Mic',
+      direction: 'input'
+    });
+    expect(io._id.startsWith('ingestio_')).toBe(true);
+    expect(io.ingestId).toBe(3);
+    expect(nanoDb.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: io._id, ingestId: 3, name: 'in-1' })
+    );
+  });
+
+  it('getIngestIo ignores non-prefixed ids and IOs of other ingests', async () => {
+    const { manager, nanoDb } = createTestManager();
+    expect(await manager.getIngestIo(1, '1')).toBeUndefined();
+    expect(nanoDb.get).not.toHaveBeenCalled();
+    nanoDb.get.mockResolvedValueOnce({ _id: 'ingestio_a', ingestId: 2 });
+    expect(await manager.getIngestIo(1, 'ingestio_a')).toBeUndefined();
+  });
+
+  it('getIngestIo returns undefined on 404', async () => {
+    const { manager, nanoDb } = createTestManager();
+    const err: any = new Error('not_found');
+    err.statusCode = 404;
+    nanoDb.get.mockRejectedValueOnce(err);
+    expect(await manager.getIngestIo(1, 'ingestio_a')).toBeUndefined();
+  });
+
+  it('getIngestIos lists by prefix range and filters by ingest', async () => {
+    const { manager, nanoDb } = createTestManager();
+    nanoDb.list.mockResolvedValueOnce({
+      rows: [
+        { doc: { _id: 'ingestio_a', ingestId: 1 } },
+        { doc: { _id: 'ingestio_b', ingestId: 2 } }
+      ]
+    });
+    const ios = await manager.getIngestIos(1);
+    expect(ios.map((i) => i._id)).toEqual(['ingestio_a']);
+    expect(nanoDb.list).toHaveBeenCalledWith(
+      expect.objectContaining({ include_docs: true, startkey: 'ingestio_' })
+    );
+  });
+
+  it('updateIngestIo merges onto the stored doc keeping _rev', async () => {
+    const { manager, nanoDb } = createTestManager();
+    const stored = {
+      _id: 'ingestio_a',
+      _rev: '1-x',
+      ingestId: 1,
+      label: 'Old'
+    };
+    nanoDb.get.mockResolvedValue(stored);
+    nanoDb.insert.mockResolvedValueOnce({ ok: true });
+    const updated = { ...stored, label: 'New' } as any;
+    expect(await manager.updateIngestIo(updated)).toEqual(updated);
+    expect(nanoDb.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ _rev: '1-x', label: 'New' })
+    );
+  });
+
+  it('deleteIngestIo destroys the doc only for the owning ingest', async () => {
+    const { manager, nanoDb } = createTestManager();
+    nanoDb.get.mockResolvedValue({
+      _id: 'ingestio_a',
+      _rev: '1-x',
+      ingestId: 1
+    });
+    nanoDb.destroy.mockResolvedValueOnce({ ok: true });
+    expect(await manager.deleteIngestIo(2, 'ingestio_a')).toBe(false);
+    expect(nanoDb.destroy).not.toHaveBeenCalled();
+    expect(await manager.deleteIngestIo(1, 'ingestio_a')).toBe(true);
+    expect(nanoDb.destroy).toHaveBeenCalledWith('ingestio_a', '1-x');
+  });
+
+  it('productions and ingests listings exclude ingest IO docs', async () => {
+    const { manager, nanoDb } = createTestManager();
+    const rows = [
+      { id: '1', doc: { _id: '1' } },
+      { id: 'ingestio_a', doc: { _id: 'ingestio_a' } }
+    ];
+    nanoDb.list.mockResolvedValue({ rows });
+    expect(await manager.getProductions(10, 0)).toHaveLength(1);
+    expect(await manager.getProductionsLength()).toBe(1);
+    expect(await manager.getIngests(10, 0)).toHaveLength(1);
+    expect(await manager.getIngestsLength()).toBe(1);
+  });
+});
+
 describe('DbManagerCouchDb.connect', () => {
   beforeEach(() => {
     jest.useFakeTimers();

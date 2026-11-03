@@ -2,6 +2,9 @@ import { Log } from '../log';
 import {
   Preset,
   Ingest,
+  IngestIo,
+  NewIngestIo,
+  INGEST_IO_ID_PREFIX,
   Line,
   NewIngest,
   Production,
@@ -187,6 +190,7 @@ export class DbManagerCouchDb implements DbManager {
       if (
         row.doc._id.toLowerCase().indexOf('counter') === -1 &&
         row.doc._id.toLowerCase().indexOf('session_') === -1 &&
+        row.doc._id.toLowerCase().indexOf('ingestio_') === -1 &&
         row.doc._id.toLowerCase().indexOf('preset_') === -1 &&
         row.doc._id.toLowerCase().indexOf('sharelink_') === -1
       )
@@ -211,6 +215,7 @@ export class DbManagerCouchDb implements DbManager {
       (row: any) =>
         row.id.toLowerCase().indexOf('counter') === -1 &&
         row.id.toLowerCase().indexOf('session_') === -1 &&
+        row.id.toLowerCase().indexOf('ingestio_') === -1 &&
         row.id.toLowerCase().indexOf('preset_') === -1 &&
         row.id.toLowerCase().indexOf('sharelink_') === -1
     );
@@ -355,7 +360,8 @@ export class DbManagerCouchDb implements DbManager {
     response.rows.forEach((row: any) => {
       if (
         row.doc._id.toLowerCase().indexOf('counter') === -1 &&
-        row.doc._id.toLowerCase().indexOf('session_') === -1
+        row.doc._id.toLowerCase().indexOf('session_') === -1 &&
+        row.doc._id.toLowerCase().indexOf('ingestio_') === -1
       )
         ingests.push(row.doc);
     });
@@ -378,7 +384,8 @@ export class DbManagerCouchDb implements DbManager {
     const filteredRows = ingests.rows.filter(
       (row: any) =>
         row.id.toLowerCase().indexOf('counter') === -1 &&
-        row.id.toLowerCase().indexOf('session_') === -1
+        row.id.toLowerCase().indexOf('session_') === -1 &&
+        row.id.toLowerCase().indexOf('ingestio_') === -1
     );
     return filteredRows.length;
   }
@@ -389,9 +396,17 @@ export class DbManagerCouchDb implements DbManager {
       throw new Error('Database not connected');
     }
 
-    const ingest = await this.withRetry(() => this.nanoDb!.get(id.toString()));
-    // eslint-disable-next-line
-    return ingest as any | undefined;
+    try {
+      const ingest = await this.withRetry(() =>
+        this.nanoDb!.get(id.toString())
+      );
+      // eslint-disable-next-line
+      return ingest as any | undefined;
+    } catch (e: any) {
+      // A missing document is "not found", not a failure (matches MongoDB)
+      if (e.statusCode === 404) return undefined;
+      throw e;
+    }
   }
 
   async updateIngest(ingest: Ingest): Promise<Ingest | undefined> {
@@ -427,6 +442,91 @@ export class DbManagerCouchDb implements DbManager {
       this.nanoDb!.destroy(ingest._id, ingest._rev)
     );
     return response.ok;
+  }
+
+  // Ingest-IO methods. Documents are stored as `ingestio_<uuid>` with the
+  // owning ingest referenced by `ingestId`.
+
+  async addIngestIo(ingestId: number, newIo: NewIngestIo): Promise<IngestIo> {
+    await this.connect();
+    const io: IngestIo = {
+      ...newIo,
+      _id: `${INGEST_IO_ID_PREFIX}${uuidv4()}`,
+      ingestId
+    };
+    const response = await this.withRetry(() =>
+      this.nanoDb!.insert(io as unknown as nano.MaybeDocument)
+    );
+    if (!response.ok) throw new Error('Failed to insert ingest io');
+    return io;
+  }
+
+  async getIngestIo(
+    ingestId: number,
+    ioId: string
+  ): Promise<IngestIo | undefined> {
+    await this.connect();
+    // Only prefixed ids address Ingest-IO documents (see getShareLink).
+    if (!ioId.startsWith(INGEST_IO_ID_PREFIX)) return undefined;
+    try {
+      const doc = (await this.withRetry(() =>
+        this.nanoDb!.get(ioId)
+      )) as unknown as IngestIo;
+      return doc.ingestId === ingestId ? doc : undefined;
+    } catch (e: any) {
+      if (e.statusCode === 404) return undefined;
+      throw e;
+    }
+  }
+
+  async getIngestIos(ingestId: number): Promise<IngestIo[]> {
+    await this.connect();
+    const response = await this.withRetry(() =>
+      this.nanoDb!.list({
+        include_docs: true,
+        startkey: INGEST_IO_ID_PREFIX,
+        endkey: `${INGEST_IO_ID_PREFIX}\ufff0`
+      })
+    );
+    return response.rows
+      .map((row: any) => row.doc as IngestIo)
+      .filter((doc: IngestIo) => doc && doc.ingestId === ingestId);
+  }
+
+  async updateIngestIo(io: IngestIo): Promise<IngestIo | undefined> {
+    await this.connect();
+    const existing = await this.getIngestIo(io.ingestId, io._id);
+    if (!existing) return undefined;
+    const current = (await this.withRetry(() =>
+      this.nanoDb!.get(io._id)
+    )) as any;
+    const response = await this.withRetry(() =>
+      this.nanoDb!.insert({ ...current, ...io } as nano.MaybeDocument)
+    );
+    return response.ok ? io : undefined;
+  }
+
+  async deleteIngestIo(ingestId: number, ioId: string): Promise<boolean> {
+    await this.connect();
+    if (!(await this.getIngestIo(ingestId, ioId))) return false;
+    try {
+      const doc = (await this.withRetry(() => this.nanoDb!.get(ioId))) as any;
+      const res = await this.withRetry(() =>
+        this.nanoDb!.destroy(doc._id, doc._rev)
+      );
+      return !!res.ok;
+    } catch (e: any) {
+      if (e.statusCode === 404) return false;
+      throw e;
+    }
+  }
+
+  async deleteIngestIos(ingestId: number): Promise<void> {
+    await this.connect();
+    const ios = await this.getIngestIos(ingestId);
+    for (const io of ios) {
+      await this.deleteIngestIo(ingestId, io._id);
+    }
   }
 
   // Session management methods

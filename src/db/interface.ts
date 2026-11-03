@@ -1,6 +1,8 @@
 import {
   Preset,
   Ingest,
+  IngestIo,
+  NewIngestIo,
   Line,
   NewIngest,
   Production,
@@ -28,6 +30,12 @@ export interface DbManager {
   getIngests(limit: number, offset: number): Promise<Ingest[]>;
   updateIngest(ingest: Ingest): Promise<Ingest | undefined>;
   deleteIngest(ingestId: number): Promise<boolean>;
+  addIngestIo(ingestId: number, newIo: NewIngestIo): Promise<IngestIo>;
+  getIngestIo(ingestId: number, ioId: string): Promise<IngestIo | undefined>;
+  getIngestIos(ingestId: number): Promise<IngestIo[]>;
+  updateIngestIo(io: IngestIo): Promise<IngestIo | undefined>;
+  deleteIngestIo(ingestId: number, ioId: string): Promise<boolean>;
+  deleteIngestIos(ingestId: number): Promise<void>;
   saveUserSession(sessionId: string, userSession: UserSession): Promise<void>;
   getSession(sessionId: string): Promise<UserSession | null>;
   deleteUserSession(sessionId: string): Promise<boolean>;

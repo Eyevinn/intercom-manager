@@ -60,6 +60,12 @@ const mockDbManager = {
     createdAt: 1700000000000
   }),
   getShareLink: jest.fn().mockResolvedValue(undefined),
+  addIngestIo: jest.fn().mockResolvedValue({}),
+  getIngestIo: jest.fn().mockResolvedValue(undefined),
+  getIngestIos: jest.fn().mockResolvedValue([]),
+  updateIngestIo: jest.fn().mockResolvedValue(undefined),
+  deleteIngestIo: jest.fn().mockResolvedValue(true),
+  deleteIngestIos: jest.fn().mockResolvedValue(undefined),
   deleteShareLink: jest.fn().mockResolvedValue(true)
 };
 
