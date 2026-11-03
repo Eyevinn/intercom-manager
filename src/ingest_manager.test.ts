@@ -27,6 +27,7 @@ const existingIngest: Ingest = {
 jest.mock('./db/interface', () => ({
   addIngest: jest.fn(),
   deleteIngest: jest.fn(),
+  deleteIngestIos: jest.fn(),
   getIngest: jest.fn(),
   getIngests: jest.fn(),
   updateIngest: jest.fn(),
@@ -287,5 +288,18 @@ describe('ingest_manager', () => {
         });
       }
     });
+  });
+});
+
+describe('ingest_manager ingest IO', () => {
+  it('deleting an ingest also deletes its IOs', async () => {
+    const dbManager = {
+      deleteIngestIos: jest.fn().mockResolvedValue(undefined),
+      deleteIngest: jest.fn().mockResolvedValue(true)
+    } as any;
+    const manager = new IngestManager(dbManager);
+    expect(await manager.deleteIngest(5)).toBe(true);
+    expect(dbManager.deleteIngestIos).toHaveBeenCalledWith(5);
+    expect(dbManager.deleteIngest).toHaveBeenCalledWith(5);
   });
 });

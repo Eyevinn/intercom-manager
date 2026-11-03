@@ -3,6 +3,9 @@ import { MongoClient } from 'mongodb';
 import {
   Preset,
   Ingest,
+  IngestIo,
+  NewIngestIo,
+  INGEST_IO_ID_PREFIX,
   Line,
   NewIngest,
   Production,
@@ -227,6 +230,58 @@ export class DbManagerMongoDb implements DbManager {
       .collection<Ingest>('ingests')
       .deleteOne({ _id: ingestId as any });
     return result.deletedCount === 1;
+  }
+
+  async addIngestIo(ingestId: number, newIo: NewIngestIo): Promise<IngestIo> {
+    const db = this.client.db();
+    const io: IngestIo = {
+      ...newIo,
+      _id: `${INGEST_IO_ID_PREFIX}${uuidv4()}`,
+      ingestId
+    };
+    await db.collection('ingestIos').insertOne({ ...io } as any);
+    return io;
+  }
+
+  async getIngestIo(
+    ingestId: number,
+    ioId: string
+  ): Promise<IngestIo | undefined> {
+    if (!ioId.startsWith(INGEST_IO_ID_PREFIX)) return undefined;
+    const db = this.client.db();
+    const result = await db
+      .collection('ingestIos')
+      .findOne({ _id: ioId as any, ingestId });
+    return result ? (result as unknown as IngestIo) : undefined;
+  }
+
+  async getIngestIos(ingestId: number): Promise<IngestIo[]> {
+    const db = this.client.db();
+    const ios = await db.collection('ingestIos').find({ ingestId }).toArray();
+    return ios as unknown as IngestIo[];
+  }
+
+  async updateIngestIo(io: IngestIo): Promise<IngestIo | undefined> {
+    const db = this.client.db();
+    const { _id, ...fields } = io;
+    const result = await db
+      .collection('ingestIos')
+      .updateOne({ _id: _id as any, ingestId: io.ingestId }, { $set: fields });
+    return result.matchedCount === 1 ? io : undefined;
+  }
+
+  async deleteIngestIo(ingestId: number, ioId: string): Promise<boolean> {
+    if (!ioId.startsWith(INGEST_IO_ID_PREFIX)) return false;
+    const db = this.client.db();
+    const result = await db
+      .collection('ingestIos')
+      .deleteOne({ _id: ioId as any, ingestId });
+    return result.deletedCount === 1;
+  }
+
+  async deleteIngestIos(ingestId: number): Promise<void> {
+    const db = this.client.db();
+    await db.collection('ingestIos').deleteMany({ ingestId });
   }
 
   async saveUserSession(

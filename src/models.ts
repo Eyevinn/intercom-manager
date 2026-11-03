@@ -34,6 +34,10 @@ export type Ingest = Static<typeof Ingest>;
 export type IngestListResponse = Static<typeof IngestListResponse>;
 export type PatchIngest = Static<typeof PatchIngest>;
 export type PatchIngestResponse = Static<typeof PatchIngestResponse>;
+export type IngestIo = Static<typeof IngestIo>;
+export type NewIngestIo = Static<typeof NewIngestIo>;
+export type PatchIngestIo = Static<typeof PatchIngestIo>;
+export type IngestIoListResponse = Static<typeof IngestIoListResponse>;
 
 export const Audio = Type.Object({
   'relay-type': Type.Array(
@@ -428,6 +432,7 @@ export type ShareLink = Static<typeof ShareLink>;
 // on it to avoid resolving (and minting tokens for) arbitrary production
 // documents via the share endpoints. See #316.
 export const SHARE_LINK_ID_PREFIX = 'sharelink_';
+export const INGEST_IO_ID_PREFIX = 'ingestio_';
 
 export const ReAuthResponse = Type.Object({
   success: Type.Boolean({
@@ -509,6 +514,40 @@ export const PatchIngest = Type.Union([
 ]);
 
 export const PatchIngestResponse = Type.Omit(Ingest, ['ipAddress']);
+
+// Ingest-IO: an input or output belonging to an ingest, stored as a
+// sub-resource of that ingest (/ingest/:ingestId/io).
+export const IngestIoDirection = Type.Union([
+  Type.Literal('input'),
+  Type.Literal('output')
+]);
+
+export const IngestIo = Type.Object({
+  _id: Type.String(),
+  ingestId: Type.Number(),
+  name: Type.String(),
+  label: Type.String(),
+  direction: IngestIoDirection
+});
+
+export const NewIngestIo = Type.Object({
+  name: Type.String({ minLength: 1, maxLength: 200 }),
+  label: Type.String({ maxLength: 200 }),
+  direction: IngestIoDirection
+});
+
+export const PatchIngestIo = Type.Object(
+  {
+    name: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+    label: Type.Optional(Type.String({ maxLength: 200 })),
+    direction: Type.Optional(IngestIoDirection)
+  },
+  { minProperties: 1, additionalProperties: false }
+);
+
+export const IngestIoListResponse = Type.Object({
+  ios: Type.Array(IngestIo)
+});
 
 // A single input/output device surfaced from an ingest. The frontend consumes
 // the aggregated /devices list (see api_devices.ts) so each device carries the

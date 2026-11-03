@@ -12,6 +12,7 @@ import { IngestManager } from './ingest_manager';
 import { Log } from './log';
 import { DbManager } from './db/interface';
 import { requireApiKey } from './auth';
+import { registerIngestIoRoutes } from './api_ingest_io';
 
 export interface ApiIngestsOptions {
   dbManager: DbManager;
@@ -291,6 +292,8 @@ const apiIngests: FastifyPluginCallback<ApiIngestsOptions> = (
       }
     }
   );
+
+  registerIngestIoRoutes(fastify, ingestManager);
 
   next();
 };

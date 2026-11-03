@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events';
 
 import { DbManager } from './db/interface';
-import { Ingest, NewIngest } from './models';
+import { Ingest, IngestIo, NewIngest, NewIngestIo } from './models';
 import { Log } from './log';
 
 interface IngestUpdate {
@@ -160,6 +160,37 @@ export class IngestManager extends EventEmitter {
    * Delete the Ingest from the db and local cache
    */
   async deleteIngest(ingestId: number): Promise<boolean> {
+    // Remove the ingest's IO sub-resources so none are orphaned
+    await this.dbManager.deleteIngestIos(ingestId);
     return this.dbManager.deleteIngest(ingestId);
+  }
+
+  async createIngestIo(
+    ingestId: number,
+    newIo: NewIngestIo
+  ): Promise<IngestIo> {
+    return this.dbManager.addIngestIo(ingestId, newIo);
+  }
+
+  async getIngestIos(ingestId: number): Promise<IngestIo[]> {
+    return this.dbManager.getIngestIos(ingestId);
+  }
+
+  async getIngestIo(
+    ingestId: number,
+    ioId: string
+  ): Promise<IngestIo | undefined> {
+    return this.dbManager.getIngestIo(ingestId, ioId);
+  }
+
+  async updateIngestIo(
+    io: IngestIo,
+    updates: Partial<Pick<IngestIo, 'name' | 'label' | 'direction'>>
+  ): Promise<IngestIo | undefined> {
+    return this.dbManager.updateIngestIo({ ...io, ...updates });
+  }
+
+  async deleteIngestIo(ingestId: number, ioId: string): Promise<boolean> {
+    return this.dbManager.deleteIngestIo(ingestId, ioId);
   }
 }

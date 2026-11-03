@@ -14,6 +14,12 @@ const mockDbManager = {
     .fn()
     .mockResolvedValue({ _id: 'share-1', path: '/foo', createdAt: 0 }),
   getShareLink: jest.fn().mockResolvedValue(null),
+  addIngestIo: jest.fn().mockResolvedValue({}),
+  getIngestIo: jest.fn().mockResolvedValue(undefined),
+  getIngestIos: jest.fn().mockResolvedValue([]),
+  updateIngestIo: jest.fn().mockResolvedValue(undefined),
+  deleteIngestIo: jest.fn().mockResolvedValue(true),
+  deleteIngestIos: jest.fn().mockResolvedValue(undefined),
   deleteShareLink: jest.fn().mockResolvedValue(false)
 } as any;
 
